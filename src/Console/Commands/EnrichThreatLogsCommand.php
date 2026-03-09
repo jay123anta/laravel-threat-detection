@@ -15,10 +15,7 @@ class EnrichThreatLogsCommand extends Command
 
     protected $description = 'Enrich threat logs with geo-location and cloud provider data';
 
-    /**
-     * ISP/org keywords that indicate cloud hosting providers.
-     * Matched against the 'isp' and 'org' fields from ip-api.com.
-     */
+    /** Cloud provider keywords keyed by ISP/org substrings. */
     protected array $cloudIspKeywords = [
         'Amazon'          => 'AWS',
         'AWS'             => 'AWS',
@@ -40,10 +37,7 @@ class EnrichThreatLogsCommand extends Command
         'Tencent Cloud'   => 'Tencent',
     ];
 
-    /**
-     * Fallback IP prefix detection — only well-known, unambiguous ranges.
-     * Used when the API doesn't return ISP data.
-     */
+    /** Known cloud provider IP prefixes. */
     protected array $cloudPrefixes = [
         'AWS'          => ['18.', '54.'],
         'DigitalOcean' => ['139.59.', '167.99.', '167.172.', '157.230.', '159.65.', '134.209.', '164.90.'],
@@ -132,18 +126,14 @@ class EnrichThreatLogsCommand extends Command
                 ];
             }
         } catch (\Throwable $e) {
-            // Silent fail
+            // Geo lookup is best-effort
         }
 
         return [];
     }
 
-    /**
-     * Detect cloud provider using ISP/org data first, IP prefix as fallback.
-     */
     protected function detectCloudProvider(string $ip, ?string $isp = null, ?string $org = null): ?string
     {
-        // Primary: match against ISP/org keywords from the API
         $searchText = strtolower(($isp ?? '') . ' ' . ($org ?? ''));
         foreach ($this->cloudIspKeywords as $keyword => $provider) {
             if (str_contains($searchText, strtolower($keyword))) {
@@ -151,7 +141,6 @@ class EnrichThreatLogsCommand extends Command
             }
         }
 
-        // Fallback: IP prefix matching for when API data is unavailable
         foreach ($this->cloudPrefixes as $provider => $prefixes) {
             foreach ($prefixes as $prefix) {
                 if (str_starts_with($ip, $prefix)) {

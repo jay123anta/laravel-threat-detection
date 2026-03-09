@@ -37,20 +37,16 @@ class ThreatDetectionService
         $isContentPath = $request->attributes->get('threat-detection:content-path', false);
         $mode = config('threat-detection.detection_mode', 'balanced');
 
-        // Check for suspicious bot/scanner signatures
         $botThreats = $this->detectSuspiciousUserAgent($userAgent);
         $isAttackTool = $this->confidenceScorer->isAttackToolUserAgent($userAgent);
 
-        // Check for DDoS patterns
         if ($this->isDdosSuspected($ip)) {
             $this->logDdosThreat($ip, $url, $userAgent);
         }
 
-        // Context-aware detection: run patterns per segment
         $segments = $this->buildPayloadSegments($request);
         $contextMatches = $this->detectThreatPatternsWithContext($segments, 'middleware', $isAuthPath);
 
-        // Convert context matches to tuples + collect context weights
         $patternThreats = [];
         $contextWeights = [];
         foreach ($contextMatches as $match) {
@@ -59,10 +55,8 @@ class ThreatDetectionService
             $contextWeights[$match['label']] = $weight;
         }
 
-        // Merge bot threats with pattern threats
         $allThreats = array_merge($botThreats, $patternThreats);
 
-        // Calculate confidence for the entire request
         $confidence = $this->confidenceScorer->calculate(
             $allThreats,
             $contextWeights,
@@ -70,7 +64,6 @@ class ThreatDetectionService
             $mode
         );
 
-        // Minimum confidence threshold based on sensitivity mode
         $minConfidence = match ($mode) {
             'strict' => 0,
             'relaxed' => 40,
@@ -82,7 +75,6 @@ class ThreatDetectionService
         }
 
         foreach ($allThreats as [$label, $level, $sourceTag]) {
-            // API route filtering
             if (
                 config('threat-detection.api_route_filtering.enabled', true)
                 && str_contains($url, '/api/')
@@ -91,14 +83,12 @@ class ThreatDetectionService
                 continue;
             }
 
-            // Content path suppression: only high-severity on content paths
             if ($isContentPath && $level !== 'high') {
                 continue;
             }
 
             $type = "[$sourceTag] $label";
 
-            // Exclusion rules check
             if ($this->exclusionRuleService->isExcluded($type, $url)) {
                 continue;
             }
@@ -156,9 +146,6 @@ class ThreatDetectionService
         return implode("\n", $data);
     }
 
-    /**
-     * Build payload segments for context-aware detection.
-     */
     private function buildPayloadSegments(Request $request): array
     {
         $segments = ['query' => '', 'body' => '', 'headers' => ''];
@@ -182,26 +169,16 @@ class ThreatDetectionService
         return $segments;
     }
 
-    /**
-     * Normalize payload to defeat common evasion techniques.
-     * Strips SQL inline comments and collapses whitespace.
-     * Idempotent: clean input passes through unchanged.
-     */
+    /** Strip SQL inline comments and collapse whitespace. */
     private function normalizeForDetection(string $payload): string
     {
-        // Strip SQL inline comments: /* ... */ → space
         $normalized = preg_replace('/\/\*.*?\*\//s', ' ', $payload);
-
-        // Collapse multiple whitespace to single space
         $normalized = preg_replace('/\s+/', ' ', $normalized);
 
         return trim($normalized);
     }
 
-    /**
-     * Evasion-specific patterns that run on RAW (un-normalized) payloads.
-     * Detects deliberate obfuscation attempts — always high severity.
-     */
+    /** Patterns matched before normalization. */
     private function getEvasionPatterns(): array
     {
         return [
@@ -210,9 +187,6 @@ class ThreatDetectionService
         ];
     }
 
-    /**
-     * Detect threats with context metadata for each match.
-     */
     public function detectThreatPatternsWithContext(
         array $segments,
         string $source = 'default',
@@ -232,10 +206,10 @@ class ThreatDetectionService
                 continue;
             }
 
-            // Cap payload size to prevent ReDoS on extremely large inputs
+            // Cap payload to prevent ReDoS on large inputs
             $segmentPayload = substr($segmentPayload, 0, 8000);
 
-            // Step 1: Run evasion patterns on RAW payload (before normalization)
+            // Evasion patterns run on raw payload
             foreach ($this->getEvasionPatterns() as $regex => $label) {
                 if (@preg_match($regex, $segmentPayload)) {
                     $matches[] = [
@@ -247,14 +221,11 @@ class ThreatDetectionService
                 }
             }
 
-            // Step 2: Normalize payload to defeat evasion techniques
             $normalizedPayload = $this->normalizeForDetection($segmentPayload);
 
-            // Step 3: Run default + custom patterns on NORMALIZED payload
             foreach ($this->getDefaultThreatPatterns() as $regex => $label) {
                 $level = $this->getThreatLevelByType($label);
 
-                // Relaxed mode: skip non-high patterns
                 if ($mode === 'relaxed' && $level !== 'high') {
                     continue;
                 }
@@ -402,7 +373,6 @@ class ThreatDetectionService
             }
         }
 
-        // Patterns to exclude on auth paths (legitimate login data)
         $authExcludePatterns = [
             'Password Exposure',
             'Mobile Number Detected',
@@ -434,14 +404,10 @@ class ThreatDetectionService
         return $matches;
     }
 
-    /**
-     * Detect suspicious user agents (bots, scanners, crawlers)
-     */
     private function detectSuspiciousUserAgent(string $userAgent): array
     {
         $threats = [];
 
-        // Security Scanners
         $scanners = [
             'sqlmap' => ['label' => 'SQLMap Scanner', 'level' => 'high'],
             'nikto' => ['label' => 'Nikto Scanner', 'level' => 'high'],
@@ -460,7 +426,6 @@ class ThreatDetectionService
             'gobuster' => ['label' => 'GoBuster', 'level' => 'medium'],
         ];
 
-        // Suspicious bots
         $suspiciousBots = [
             'masscan' => ['label' => 'MassScan Tool', 'level' => 'high'],
             'zgrab' => ['label' => 'ZGrab Scanner', 'level' => 'high'],
@@ -486,7 +451,6 @@ class ThreatDetectionService
             }
         }
 
-        // Check for empty or suspicious user agents
         if (empty($userAgent) || $userAgent === 'N/A' || $userAgent === '-') {
             $threats[] = ['Empty User Agent', 'low', 'user-agent'];
         }
@@ -494,9 +458,6 @@ class ThreatDetectionService
         return $threats;
     }
 
-    /**
-     * Send notifications to multiple channels
-     */
     private function sendNotifications(string $ip, string $url, string $type, string $level, string $userAgent): void
     {
         try {
@@ -514,11 +475,9 @@ class ThreatDetectionService
                 'user_agent' => $userAgent,
             ]);
 
-            // Laravel 10: use built-in Slack notification channel
             if (class_exists(\Illuminate\Notifications\Messages\SlackMessage::class)) {
                 Notification::route('slack', $webhookUrl)->notify($alert);
             } else {
-                // Laravel 11+ or no Slack package: send via HTTP webhook directly
                 \Illuminate\Support\Facades\Http::post($webhookUrl, $alert->toWebhookPayload());
             }
         } catch (\Throwable $e) {
@@ -526,9 +485,6 @@ class ThreatDetectionService
         }
     }
 
-    /**
-     * Get attack statistics for a specific IP
-     */
     public function getIpStatistics(string $ip): array
     {
         $table = config('threat-detection.table_name', 'threat_logs');
@@ -567,9 +523,6 @@ class ThreatDetectionService
         ];
     }
 
-    /**
-     * Detect coordinated attacks - multiple IPs attacking same URLs within time window
-     */
     public function detectCoordinatedAttacks(int $timeWindowMinutes = 15, int $minIpCount = 3): array
     {
         $table = config('threat-detection.table_name', 'threat_logs');
@@ -610,9 +563,6 @@ class ThreatDetectionService
         })->toArray();
     }
 
-    /**
-     * Detect attack campaigns - similar threats from different IPs
-     */
     public function detectAttackCampaigns(int $hoursBack = 24): array
     {
         $table = config('threat-detection.table_name', 'threat_logs');
@@ -654,9 +604,6 @@ class ThreatDetectionService
         })->toArray();
     }
 
-    /**
-     * Detect suspicious patterns - rapid sequential attacks from single IP
-     */
     public function detectRapidAttacks(int $minutesBack = 5, int $minThreshold = 10): array
     {
         $table = config('threat-detection.table_name', 'threat_logs');
@@ -689,9 +636,6 @@ class ThreatDetectionService
         })->toArray();
     }
 
-    /**
-     * Get correlation summary for dashboard
-     */
     public function getCorrelationSummary(): array
     {
         return [

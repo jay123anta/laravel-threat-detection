@@ -6,9 +6,6 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create(config('threat-detection.table_name', 'threat_logs'), function (Blueprint $table) {
@@ -22,7 +19,7 @@ return new class extends Migration
             $table->string('action_taken')->default('logged');
             $table->unsignedBigInteger('user_id')->nullable()->index();
 
-            // Geo-enrichment columns (optional)
+            // Geo-enrichment
             $table->string('country_code', 5)->nullable()->index();
             $table->string('country_name', 100)->nullable();
             $table->string('city', 100)->nullable();
@@ -35,9 +32,6 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists(config('threat-detection.table_name', 'threat_logs'));

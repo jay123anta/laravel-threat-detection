@@ -19,9 +19,6 @@ class ThreatLogController extends Controller
         $this->table = config('threat-detection.table_name', 'threat_logs');
     }
 
-    /**
-     * Safely execute a database operation, returning a JSON error on failure.
-     */
     private function safe(\Closure $callback): JsonResponse
     {
         try {
@@ -31,14 +28,11 @@ class ThreatLogController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Threat detection data is unavailable. Ensure migrations have been run.',
+                'message' => 'Database query failed. Has the threat_logs migration been run?',
             ], 500);
         }
     }
 
-    /**
-     * Get paginated threat logs with optional filters.
-     */
     public function index(Request $request): JsonResponse
     {
         $request->validate([
@@ -52,7 +46,6 @@ class ThreatLogController extends Controller
             $query = DB::table($this->table)
                 ->select('id', 'ip_address', 'url', 'type', 'threat_level', 'confidence_score', 'confidence_label', 'is_false_positive', 'action_taken', 'country_code', 'country_name', 'cloud_provider', 'is_cloud_ip', 'is_foreign', 'created_at');
 
-            // Search keyword
             if ($request->has('keyword')) {
                 $keyword = '%' . $request->input('keyword') . '%';
                 $query->where(function ($q) use ($keyword) {
@@ -62,7 +55,6 @@ class ThreatLogController extends Controller
                 });
             }
 
-            // Filters
             if ($request->filled('ip')) {
                 $query->where('ip_address', $request->input('ip'));
             }
@@ -98,9 +90,6 @@ class ThreatLogController extends Controller
         });
     }
 
-    /**
-     * Get threat summary statistics.
-     */
     public function summary(): JsonResponse
     {
         return $this->safe(function () {
@@ -160,9 +149,6 @@ class ThreatLogController extends Controller
         });
     }
 
-    /**
-     * Get overall statistics.
-     */
     public function stats(): JsonResponse
     {
         return $this->safe(function () {
@@ -185,9 +171,6 @@ class ThreatLogController extends Controller
         });
     }
 
-    /**
-     * Get live threat count (last hour).
-     */
     public function liveCount(): JsonResponse
     {
         return $this->safe(function () {
@@ -202,9 +185,6 @@ class ThreatLogController extends Controller
         });
     }
 
-    /**
-     * Get single threat details.
-     */
     public function show(int $id): JsonResponse
     {
         return $this->safe(function () use ($id) {
@@ -223,9 +203,6 @@ class ThreatLogController extends Controller
         });
     }
 
-    /**
-     * Get IP address statistics.
-     */
     public function ipStats(Request $request, ThreatDetectionService $service): JsonResponse
     {
         $request->validate(['ip' => 'required|ip']);
@@ -265,9 +242,6 @@ class ThreatLogController extends Controller
         });
     }
 
-    /**
-     * Get threat correlation analysis.
-     */
     public function correlation(Request $request, ThreatDetectionService $service): JsonResponse
     {
         $request->validate(['type' => 'sometimes|in:all,coordinated,campaigns,rapid']);
@@ -299,9 +273,6 @@ class ThreatLogController extends Controller
         });
     }
 
-    /**
-     * Export threats to CSV.
-     */
     public function export(Request $request)
     {
         try {
@@ -360,14 +331,11 @@ class ThreatLogController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Threat detection data is unavailable. Ensure migrations have been run.',
+                'message' => 'Database query failed. Has the threat_logs migration been run?',
             ], 500);
         }
     }
 
-    /**
-     * Get threats by country.
-     */
     public function byCountry(): JsonResponse
     {
         return $this->safe(function () {
@@ -386,9 +354,6 @@ class ThreatLogController extends Controller
         });
     }
 
-    /**
-     * Get threats by cloud provider.
-     */
     public function byCloudProvider(): JsonResponse
     {
         return $this->safe(function () {
@@ -406,9 +371,6 @@ class ThreatLogController extends Controller
         });
     }
 
-    /**
-     * Get top offending IPs.
-     */
     public function topIps(Request $request): JsonResponse
     {
         $request->validate(['limit' => 'sometimes|integer|min:1|max:100']);
@@ -430,9 +392,6 @@ class ThreatLogController extends Controller
         });
     }
 
-    /**
-     * Get threat timeline.
-     */
     public function timeline(Request $request): JsonResponse
     {
         $request->validate(['days' => 'sometimes|integer|min:1|max:365']);
@@ -454,9 +413,6 @@ class ThreatLogController extends Controller
         });
     }
 
-    /**
-     * Mark a threat as false positive and create an exclusion rule.
-     */
     public function markFalsePositive(Request $request, int $id, ExclusionRuleService $exclusionService): JsonResponse
     {
         return $this->safe(function () use ($request, $id, $exclusionService) {
@@ -488,9 +444,6 @@ class ThreatLogController extends Controller
         });
     }
 
-    /**
-     * List all exclusion rules.
-     */
     public function exclusionRules(ExclusionRuleService $exclusionService): JsonResponse
     {
         return $this->safe(function () use ($exclusionService) {
@@ -501,9 +454,6 @@ class ThreatLogController extends Controller
         });
     }
 
-    /**
-     * Delete an exclusion rule.
-     */
     public function deleteExclusionRule(int $id, ExclusionRuleService $exclusionService): JsonResponse
     {
         return $this->safe(function () use ($id, $exclusionService) {

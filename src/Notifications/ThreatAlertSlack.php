@@ -15,8 +15,6 @@ class ThreatAlertSlack extends Notification
 
     public function via($notifiable): array
     {
-        // Use the legacy slack channel only when the Laravel 10 class exists.
-        // Otherwise we send via the webhook directly in sendNotifications().
         if (class_exists(\Illuminate\Notifications\Messages\SlackMessage::class)) {
             return ['slack'];
         }
@@ -24,13 +22,10 @@ class ThreatAlertSlack extends Notification
         return [];
     }
 
-    /**
-     * Build the Slack notification (Laravel 10 — built-in SlackMessage).
-     */
+    /** Laravel 10 Slack format. */
     public function toSlack($notifiable)
     {
         $log = $this->log;
-
         $sanitizedUrl = $this->sanitizeUrl($log['url'] ?? 'N/A');
 
         return (new \Illuminate\Notifications\Messages\SlackMessage)
@@ -49,9 +44,7 @@ class ThreatAlertSlack extends Notification
             });
     }
 
-    /**
-     * Build a raw Slack webhook payload (Laravel 11+ or when no Slack package is installed).
-     */
+    /** Raw webhook payload for Laravel 11+. */
     public function toWebhookPayload(): array
     {
         $log = $this->log;
@@ -76,9 +69,7 @@ class ThreatAlertSlack extends Notification
         ];
     }
 
-    /**
-     * Break the URL to prevent Slack auto-linking.
-     */
+    // Defang URL to prevent Slack auto-linking
     private function sanitizeUrl(string $url): string
     {
         $sanitized = preg_replace('/^https?:\/\//i', 'hxxp://', $url);

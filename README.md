@@ -34,7 +34,7 @@ A middleware-based threat detection and logging system for Laravel. Drop it in, 
 4. Optionally, a Slack alert is sent for high-severity threats
 5. The request proceeds normally — **nothing is blocked**
 
-No internet connection is needed for detection. Everything runs locally inside your app.
+No internet connection is needed for detection.
 
 ---
 

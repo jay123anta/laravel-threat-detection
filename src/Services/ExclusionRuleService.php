@@ -10,9 +10,6 @@ class ExclusionRuleService
     private const CACHE_KEY = 'threat_detection:exclusion_rules';
     private const CACHE_TTL_MINUTES = 10;
 
-    /**
-     * Get all active exclusion rules (cached).
-     */
     public function getActiveRules(): array
     {
         return Cache::remember(self::CACHE_KEY, now()->addMinutes(self::CACHE_TTL_MINUTES), function () {
@@ -27,9 +24,6 @@ class ExclusionRuleService
         });
     }
 
-    /**
-     * Check if a specific threat (label + URL) is excluded by any active rule.
-     */
     public function isExcluded(string $type, string $url): bool
     {
         $path = parse_url($url, PHP_URL_PATH) ?? '/';
@@ -46,9 +40,6 @@ class ExclusionRuleService
         return false;
     }
 
-    /**
-     * Create an exclusion rule from a false-positive threat report.
-     */
     public function createFromThreat(int $threatId, ?int $userId = null, ?string $reason = null): ?object
     {
         $tableName = config('threat-detection.table_name', 'threat_logs');
@@ -58,13 +49,11 @@ class ExclusionRuleService
             return null;
         }
 
-        // Extract the pattern label from the type (format: "[source] Label")
         $label = $threat->type;
         if (preg_match('/^\[.*?\]\s*(.+)$/', $label, $m)) {
             $label = $m[1];
         }
 
-        // Extract path from URL
         $path = parse_url($threat->url, PHP_URL_PATH) ?? '/';
         $path = ltrim($path, '/');
 
@@ -84,9 +73,6 @@ class ExclusionRuleService
         return DB::table('threat_exclusion_rules')->where('id', $id)->first();
     }
 
-    /**
-     * Delete an exclusion rule.
-     */
     public function delete(int $ruleId): bool
     {
         $deleted = DB::table('threat_exclusion_rules')->where('id', $ruleId)->delete();
@@ -95,9 +81,6 @@ class ExclusionRuleService
         return $deleted > 0;
     }
 
-    /**
-     * Get all rules (for API listing).
-     */
     public function all(): array
     {
         if (!$this->tableExists()) {
@@ -110,17 +93,11 @@ class ExclusionRuleService
             ->toArray();
     }
 
-    /**
-     * Clear the exclusion rules cache.
-     */
     public function clearCache(): void
     {
         Cache::forget(self::CACHE_KEY);
     }
 
-    /**
-     * Check if the exclusion rules table exists.
-     */
     private function tableExists(): bool
     {
         try {

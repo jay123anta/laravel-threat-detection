@@ -20,20 +20,17 @@ class ThreatDetectionMiddleware
     public function handle(Request $request, Closure $next)
     {
         try {
-            // Skip detection if disabled or environment not enabled
             if (!config('threat-detection.enabled') ||
                 (config('threat-detection.enabled_environments') &&
                 !in_array(app()->environment(), config('threat-detection.enabled_environments')))) {
                 return $next($request);
             }
 
-            // Skip whitelisted IPs
             $ip = $request->ip();
             if (IpUtils::checkIp($ip, config('threat-detection.whitelisted_ips', []))) {
                 return $next($request);
             }
 
-            // Skip path if in skip_paths
             $uri = ltrim($request->path(), '/');
             foreach (config('threat-detection.skip_paths', []) as $skip) {
                 if (fnmatch($skip, $uri)) {
@@ -41,7 +38,7 @@ class ThreatDetectionMiddleware
                 }
             }
 
-            // Check if this is an auth path - mark it for smart detection
+            // Auth paths get relaxed PII detection
             $isAuthPath = false;
             foreach (config('threat-detection.auth_paths', []) as $authPath) {
                 if (fnmatch($authPath, $uri)) {
@@ -54,7 +51,6 @@ class ThreatDetectionMiddleware
                 $request->attributes->set('threat-detection:auth-path', true);
             }
 
-            // Check if this is a content path - suppress non-high threats
             foreach (config('threat-detection.content_paths', []) as $contentPath) {
                 if (fnmatch($contentPath, $uri)) {
                     $request->attributes->set('threat-detection:content-path', true);
@@ -62,7 +58,6 @@ class ThreatDetectionMiddleware
                 }
             }
 
-            // Run detection using a context-aware method
             $this->detector->detectAndLogFromRequest($request);
 
         } catch (\Throwable $e) {

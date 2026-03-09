@@ -4,9 +4,6 @@ namespace JayAnta\ThreatDetection\Services;
 
 class ConfidenceScorer
 {
-    /**
-     * Known attack tool user-agent keywords (high-severity scanners).
-     */
     private array $attackTools = [
         'sqlmap', 'nikto', 'nmap', 'acunetix', 'nessus', 'openvas',
         'nuclei', 'metasploit', 'w3af', 'havij', 'masscan', 'zgrab',
@@ -14,12 +11,8 @@ class ConfidenceScorer
     ];
 
     /**
-     * Calculate confidence score for a set of threat matches on a single request.
-     *
-     * @param array  $matches         Array of [label, threatLevel, sourceTag] tuples
-     * @param array  $contextWeights  Map of label => weight multiplier from context
-     * @param bool   $hasAttackToolUA Whether the user-agent matched a known attack tool
-     * @param string $sensitivityMode 'strict' | 'balanced' | 'relaxed'
+     * @param array  $matches        [label, threatLevel, sourceTag] tuples
+     * @param string $sensitivityMode 'strict'|'balanced'|'relaxed'
      * @return array{score: int, label: string}
      */
     public function calculate(
@@ -34,27 +27,27 @@ class ConfidenceScorer
 
         $score = 0;
 
-        // Base score: first pattern match
+        // Base score
         $score += 20;
 
-        // Additional pattern matches (max 3 extra = +45)
+        // Extra matches (capped at 3)
         $extraMatches = min(count($matches) - 1, 3);
         $score += $extraMatches * 15;
 
-        // High-severity pattern bonus
+        // High-severity bonus
         foreach ($matches as [$label, $level, $source]) {
             if ($level === 'high') {
                 $score += 15;
-                break; // Only count once
+                break;
             }
         }
 
-        // Context weight bonus (patterns found in query/headers score higher)
+        // Context weight bonus
         foreach ($matches as [$label, $level, $source]) {
             $weight = $contextWeights[$label] ?? 1.0;
             if ($weight > 1.0) {
                 $score += 10;
-                break; // Only count once
+                break;
             }
         }
 
@@ -79,9 +72,6 @@ class ConfidenceScorer
         ];
     }
 
-    /**
-     * Check if a user-agent matches a known attack tool.
-     */
     public function isAttackToolUserAgent(string $userAgent): bool
     {
         $ua = strtolower($userAgent);
@@ -95,9 +85,6 @@ class ConfidenceScorer
         return false;
     }
 
-    /**
-     * Map numeric score to categorical label.
-     */
     public function scoreToLabel(int $score): string
     {
         return match (true) {
