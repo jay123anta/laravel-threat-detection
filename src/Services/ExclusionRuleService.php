@@ -4,6 +4,7 @@ namespace JayAnta\ThreatDetection\Services;
 
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class ExclusionRuleService
 {
@@ -75,8 +76,18 @@ class ExclusionRuleService
 
     public function delete(int $ruleId): bool
     {
+        $rule = DB::table('threat_exclusion_rules')->where('id', $ruleId)->first();
+
         $deleted = DB::table('threat_exclusion_rules')->where('id', $ruleId)->delete();
         $this->clearCache();
+
+        if ($deleted > 0 && $rule) {
+            Log::info("Threat exclusion rule deleted", [
+                'rule_id' => $ruleId,
+                'pattern_label' => $rule->pattern_label,
+                'path_pattern' => $rule->path_pattern ?? '*',
+            ]);
+        }
 
         return $deleted > 0;
     }

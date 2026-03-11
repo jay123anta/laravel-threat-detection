@@ -5,12 +5,12 @@
         "laravel",
         "security",
         "threat-detection",
-        "honeypot",
-        "firewall",
+        "intrusion-detection",
         "xss",
         "sql-injection",
         "ddos",
-        "waf"
+        "middleware",
+        "logging"
     ],
     "homepage": "https://github.com/jay123anta/laravel-threat-detection",
     "license": "MIT",

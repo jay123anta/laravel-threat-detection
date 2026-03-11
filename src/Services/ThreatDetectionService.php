@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Notification;
+use JayAnta\ThreatDetection\Events\ThreatDetected;
+use JayAnta\ThreatDetection\Jobs\StoreThreatLog;
 use JayAnta\ThreatDetection\Notifications\ThreatAlertSlack;
 
 class ThreatDetectionService
@@ -64,11 +66,15 @@ class ThreatDetectionService
             $mode
         );
 
-        $minConfidence = match ($mode) {
+        $modeMinConfidence = match ($mode) {
             'strict' => 0,
             'relaxed' => 40,
             default => 10,
         };
+
+        // Apply the higher of: mode-based threshold OR config-based threshold
+        $configMinConfidence = (int) config('threat-detection.min_confidence', 0);
+        $minConfidence = max($modeMinConfidence, $configMinConfidence);
 
         if ($confidence['score'] < $minConfidence) {
             return;
@@ -98,7 +104,7 @@ class ThreatDetectionService
             }
             $this->markAsLogged($ip, $type);
 
-            DB::table(config('threat-detection.table_name', 'threat_logs'))->insert([
+            $logData = [
                 'ip_address' => $ip,
                 'url' => $url,
                 'user_agent' => $userAgent,
@@ -110,16 +116,57 @@ class ThreatDetectionService
                 'user_id' => Auth::id(),
                 'created_at' => now(),
                 'updated_at' => now(),
-            ]);
+            ];
 
-            Log::warning("[$level] Threat Detected: [$type] from $ip ($url) [confidence: {$confidence['score']}%]");
-
+            // Build notification data if needed
+            $notificationData = null;
             if (
                 config('threat-detection.notifications.enabled') &&
                 in_array($level, config('threat-detection.notifications.notify_levels', ['high']))
             ) {
-                $this->sendNotifications($ip, $url, $type, $level, $userAgent);
+                $webhookUrl = config('threat-detection.notifications.slack_webhook');
+                if ($webhookUrl) {
+                    $notificationData = [
+                        'webhook_url' => $webhookUrl,
+                        'alert_data' => [
+                            'ip_address' => $ip,
+                            'url' => $url,
+                            'type' => $type,
+                            'threat_level' => $level,
+                            'action_taken' => 'logged',
+                            'user_agent' => $userAgent,
+                        ],
+                    ];
+                }
             }
+
+            if (config('threat-detection.queue.enabled', false)) {
+                $job = new StoreThreatLog($logData, $notificationData);
+
+                $connection = config('threat-detection.queue.connection');
+                $queue = config('threat-detection.queue.queue', 'default');
+
+                if ($connection) {
+                    $job->onConnection($connection);
+                }
+                $job->onQueue($queue);
+
+                dispatch($job);
+            } else {
+                DB::table(config('threat-detection.table_name', 'threat_logs'))->insert($logData);
+
+                if ($notificationData) {
+                    $this->sendNotifications($ip, $url, $type, $level, $userAgent);
+                }
+            }
+
+            // Sanitize log output to prevent log injection via newlines/control chars
+            $safeType = str_replace(["\n", "\r", "\t"], ' ', $type);
+            $safeUrl = str_replace(["\n", "\r", "\t"], ' ', $url);
+            Log::warning("[{$level}] Threat Detected: [{$safeType}] from {$ip} ({$safeUrl}) [confidence: {$confidence['score']}%]");
+
+            // Dispatch event so users can hook in with custom listeners
+            ThreatDetected::dispatch($logData, $ip, $level);
         }
     }
 
@@ -154,8 +201,16 @@ class ThreatDetectionService
             $segments['query'] = json_encode($request->query(), JSON_UNESCAPED_SLASHES);
         }
 
-        if (!empty($request->post())) {
-            $segments['body'] = json_encode($request->post(), JSON_UNESCAPED_SLASHES);
+        // For multipart file uploads, only scan non-file form fields
+        $postData = $request->post();
+        if (!empty($postData)) {
+            if (str_contains($request->header('Content-Type', ''), 'multipart/form-data')) {
+                $fileKeys = array_keys($request->allFiles());
+                $postData = array_diff_key($postData, array_flip($fileKeys));
+            }
+            if (!empty($postData)) {
+                $segments['body'] = json_encode($postData, JSON_UNESCAPED_SLASHES);
+            }
         }
 
         $headers = collect($request->headers->all())
@@ -240,7 +295,7 @@ class ThreatDetectionService
                 }
             }
 
-            foreach (config('threat-detection.custom_patterns', []) as $regex => $label) {
+            foreach ($this->getValidatedCustomPatterns() as $regex => $label) {
                 if ($isAuthPath && in_array($label, $authExcludePatterns)) {
                     continue;
                 }
@@ -251,12 +306,7 @@ class ThreatDetectionService
                     continue;
                 }
 
-                $result = @preg_match($regex, $normalizedPayload);
-                if ($result === false) {
-                    Log::warning("Threat detection: invalid custom pattern skipped: {$regex}");
-                    continue;
-                }
-                if ($result) {
+                if (@preg_match($regex, $normalizedPayload)) {
                     $matches[] = [
                         'label' => $label,
                         'threat_level' => $level,
@@ -280,12 +330,29 @@ class ThreatDetectionService
         Cache::put('threat_logged:' . md5($ip . $type), true, now()->addMinutes(5));
     }
 
+    private static bool $ddosCacheWarned = false;
+
     private function isDdosSuspected(string $ip): bool
     {
-        $key = "ddos:$ip";
-        Cache::add($key, 0, now()->addSeconds($this->ddosWindowSeconds));
-        $count = Cache::increment($key);
-        return $count > $this->ddosThreshold;
+        // Skip DDoS detection on cache drivers that don't support atomic increment
+        $driver = config('cache.default');
+        if (in_array($driver, ['file', 'database', 'null'])) {
+            if (!self::$ddosCacheWarned) {
+                Log::warning("Threat detection: DDoS detection is disabled because cache driver '{$driver}' does not support atomic increment. Use redis or memcached.");
+                self::$ddosCacheWarned = true;
+            }
+            return false;
+        }
+
+        try {
+            $key = "ddos:$ip";
+            Cache::add($key, 0, now()->addSeconds($this->ddosWindowSeconds));
+            $count = Cache::increment($key);
+            return $count > $this->ddosThreshold;
+        } catch (\Throwable $e) {
+            Log::error('Threat detection DDoS check failed: ' . $e->getMessage());
+            return false;
+        }
     }
 
     private function logDdosThreat(string $ip, string $url, string $userAgent): void
@@ -313,13 +380,25 @@ class ThreatDetectionService
         Log::warning("[$level] DDoS Threat Detected: $ip exceeded threshold.");
     }
 
+    private static array $threatLevelCache = [];
+
     private function getThreatLevelByType(string $label): string
     {
+        if (isset(self::$threatLevelCache[$label])) {
+            return self::$threatLevelCache[$label];
+        }
+
+        $labelLower = strtolower($label);
         foreach (config('threat-detection.threat_levels', []) as $level => $keywords) {
             foreach ($keywords as $keyword) {
-                if (str_contains(strtolower($label), strtolower($keyword))) return $level;
+                if (str_contains($labelLower, strtolower($keyword))) {
+                    self::$threatLevelCache[$label] = $level;
+                    return $level;
+                }
             }
         }
+
+        self::$threatLevelCache[$label] = 'low';
         return 'low';
     }
 
@@ -357,10 +436,34 @@ class ThreatDetectionService
             '/eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/' => 'JWT Token Found',
             '/csrf[_-]?token\s*=\s*["\']?[a-z0-9\-_]{32,}/i' => 'CSRF Token Reference',
 
-            '/O:\d+:"[A-Za-z_][A-Za-z0-9_]+":\d+:\{.{0,500}\}/s' => 'PHP Object Deserialization',
+            '/O:\d+:"[A-Za-z_][A-Za-z0-9_]+":\d+:\{[^}]{0,500}\}/s' => 'PHP Object Deserialization',
 
             '/\b(nmap|sqlmap|nikto|acunetix|wpscan|dirbuster|fimap)\b/i' => 'Scanner Tool Detected',
         ];
+    }
+
+    private static ?array $validatedCustomPatterns = null;
+
+    /**
+     * Returns custom patterns that have been validated once per process lifecycle.
+     * Invalid patterns are logged and skipped permanently.
+     */
+    private function getValidatedCustomPatterns(): array
+    {
+        if (self::$validatedCustomPatterns !== null) {
+            return self::$validatedCustomPatterns;
+        }
+
+        self::$validatedCustomPatterns = [];
+        foreach (config('threat-detection.custom_patterns', []) as $regex => $label) {
+            if (@preg_match($regex, '') === false) {
+                Log::warning("Threat detection: invalid custom pattern skipped: {$regex}");
+                continue;
+            }
+            self::$validatedCustomPatterns[$regex] = $label;
+        }
+
+        return self::$validatedCustomPatterns;
     }
 
     public function detectThreatPatterns(string $payload, string $source = 'default', bool $isAuthPath = false): array
@@ -386,13 +489,8 @@ class ThreatDetectionService
             'API Key Exposure',
         ];
 
-        foreach (config('threat-detection.custom_patterns', []) as $regex => $label) {
-            $result = @preg_match($regex, $payload);
-            if ($result === false) {
-                Log::warning("Threat detection: invalid custom pattern skipped: {$regex}");
-                continue;
-            }
-            if ($result) {
+        foreach ($this->getValidatedCustomPatterns() as $regex => $label) {
+            if (@preg_match($regex, $payload)) {
                 if ($isAuthPath && in_array($label, $authExcludePatterns)) {
                     continue;
                 }
@@ -543,21 +641,30 @@ class ThreatDetectionService
             ->limit(20)
             ->get();
 
-        return $coordinatedAttacks->map(function ($attack) use ($table, $timeThreshold) {
-            $attackingIps = DB::table($table)
-                ->where('url', $attack->url)
+        // Batch-fetch all attacking IPs in a single query to avoid N+1
+        $urls = $coordinatedAttacks->pluck('url')->toArray();
+        $ipsByUrl = [];
+        if (!empty($urls)) {
+            $allIps = DB::table($table)
+                ->select('url', 'ip_address')
+                ->whereIn('url', $urls)
                 ->where('created_at', '>=', $timeThreshold)
                 ->distinct()
-                ->pluck('ip_address')
-                ->toArray();
+                ->get();
 
+            foreach ($allIps as $row) {
+                $ipsByUrl[$row->url][] = $row->ip_address;
+            }
+        }
+
+        return $coordinatedAttacks->map(function ($attack) use ($ipsByUrl) {
             return [
                 'url' => $attack->url,
                 'unique_ips' => $attack->unique_ips,
                 'total_attempts' => $attack->total_attempts,
                 'first_attack' => $attack->first_attack,
                 'last_attack' => $attack->last_attack,
-                'attacking_ips' => $attackingIps,
+                'attacking_ips' => $ipsByUrl[$attack->url] ?? [],
                 'duration_minutes' => round((strtotime($attack->last_attack) - strtotime($attack->first_attack)) / 60, 2),
             ];
         })->toArray();
@@ -583,15 +690,25 @@ class ThreatDetectionService
             ->limit(15)
             ->get();
 
-        return $campaigns->map(function ($campaign) use ($table) {
-            $sampleIps = DB::table($table)
-                ->where('type', $campaign->type)
-                ->where('created_at', '>=', $campaign->campaign_start)
+        // Batch-fetch sample IPs for all campaigns in a single query
+        $types = $campaigns->pluck('type')->toArray();
+        $ipsByType = [];
+        if (!empty($types)) {
+            $allIps = DB::table($table)
+                ->select('type', 'ip_address')
+                ->whereIn('type', $types)
+                ->where('created_at', '>=', $timeThreshold)
                 ->distinct()
-                ->limit(10)
-                ->pluck('ip_address')
-                ->toArray();
+                ->get();
 
+            foreach ($allIps as $row) {
+                if (!isset($ipsByType[$row->type]) || count($ipsByType[$row->type]) < 10) {
+                    $ipsByType[$row->type][] = $row->ip_address;
+                }
+            }
+        }
+
+        return $campaigns->map(function ($campaign) use ($ipsByType) {
             return [
                 'threat_type' => $campaign->type,
                 'unique_ips' => $campaign->unique_ips,
@@ -599,7 +716,7 @@ class ThreatDetectionService
                 'campaign_start' => $campaign->campaign_start,
                 'campaign_end' => $campaign->campaign_end,
                 'duration_hours' => round((strtotime($campaign->campaign_end) - strtotime($campaign->campaign_start)) / 3600, 2),
-                'sample_ips' => $sampleIps,
+                'sample_ips' => $ipsByType[$campaign->type] ?? [],
             ];
         })->toArray();
     }

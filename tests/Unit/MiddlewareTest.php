@@ -103,4 +103,77 @@ class MiddlewareTest extends TestCase
 
         $this->assertNull($request->attributes->get('threat-detection:content-path'));
     }
+
+    /** @test */
+    public function it_only_scans_paths_in_only_paths_whitelist(): void
+    {
+        // Mock should NOT receive detectAndLogFromRequest for non-matching path
+        $mock = $this->createMock(ThreatDetectionService::class);
+        $mock->expects($this->never())->method('detectAndLogFromRequest');
+        $this->app->instance(ThreatDetectionService::class, $mock);
+        $this->app->instance('threat-detection', $mock);
+
+        $request = Request::create('/public/page', 'GET');
+
+        $response = $this->runMiddleware($request, [
+            'threat-detection.only_paths' => ['admin/*', 'api/*'],
+        ]);
+
+        $this->assertEquals(200, $response->getStatusCode());
+    }
+
+    /** @test */
+    public function it_scans_matching_path_in_only_paths_whitelist(): void
+    {
+        // Mock SHOULD receive detectAndLogFromRequest for matching path
+        $mock = $this->createMock(ThreatDetectionService::class);
+        $mock->expects($this->once())->method('detectAndLogFromRequest');
+        $this->app->instance(ThreatDetectionService::class, $mock);
+        $this->app->instance('threat-detection', $mock);
+
+        $request = Request::create('/admin/dashboard', 'GET');
+
+        $response = $this->runMiddleware($request, [
+            'threat-detection.only_paths' => ['admin/*', 'api/*'],
+        ]);
+
+        $this->assertEquals(200, $response->getStatusCode());
+    }
+
+    /** @test */
+    public function it_scans_all_paths_when_only_paths_is_empty(): void
+    {
+        // Mock SHOULD receive detectAndLogFromRequest when only_paths is empty (default)
+        $mock = $this->createMock(ThreatDetectionService::class);
+        $mock->expects($this->once())->method('detectAndLogFromRequest');
+        $this->app->instance(ThreatDetectionService::class, $mock);
+        $this->app->instance('threat-detection', $mock);
+
+        $request = Request::create('/any/random/path', 'GET');
+
+        $response = $this->runMiddleware($request, [
+            'threat-detection.only_paths' => [],
+        ]);
+
+        $this->assertEquals(200, $response->getStatusCode());
+    }
+
+    /** @test */
+    public function skip_paths_still_applies_within_only_paths(): void
+    {
+        // Path matches only_paths BUT also matches skip_paths — should be skipped
+        $mock = $this->createMock(ThreatDetectionService::class);
+        $mock->expects($this->never())->method('detectAndLogFromRequest');
+        $this->app->instance(ThreatDetectionService::class, $mock);
+        $this->app->instance('threat-detection', $mock);
+
+        $request = Request::create('/api/healthcheck', 'GET');
+
+        $response = $this->runMiddleware($request, [
+            'threat-detection.only_paths' => ['api/*'],
+            'threat-detection.skip_paths' => ['api/healthcheck'],
+        ]);
+
+        $this->assertEquals(200, $response->getStatusCode());
+    }
 }

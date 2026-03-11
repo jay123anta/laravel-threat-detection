@@ -113,6 +113,11 @@ class EnrichThreatLogsCommand extends Command
     protected function fetchGeoData(string $ip): array
     {
         try {
+            // Validate IP format to prevent SSRF via crafted values
+            if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+                return [];
+            }
+
             $response = Http::timeout(3)->get("http://ip-api.com/json/{$ip}?fields=countryCode,country,city,isp,org");
 
             if ($response->successful()) {

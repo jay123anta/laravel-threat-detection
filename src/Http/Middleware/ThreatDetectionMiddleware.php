@@ -32,6 +32,23 @@ class ThreatDetectionMiddleware
             }
 
             $uri = ltrim($request->path(), '/');
+
+            // Whitelist mode: if only_paths is configured, skip everything not matching
+            $onlyPaths = config('threat-detection.only_paths', []);
+            if (!empty($onlyPaths)) {
+                $matched = false;
+                foreach ($onlyPaths as $onlyPath) {
+                    if (fnmatch($onlyPath, $uri)) {
+                        $matched = true;
+                        break;
+                    }
+                }
+                if (!$matched) {
+                    return $next($request);
+                }
+            }
+
+            // Blacklist mode: skip paths matching skip_paths
             foreach (config('threat-detection.skip_paths', []) as $skip) {
                 if (fnmatch($skip, $uri)) {
                     return $next($request);

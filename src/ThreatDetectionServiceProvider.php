@@ -43,6 +43,7 @@ class ThreatDetectionServiceProvider extends ServiceProvider
         $this->registerRoutes();
         $this->registerCommands();
         $this->registerViews();
+        $this->registerSchedule();
     }
 
     protected function registerPublishes(): void
@@ -78,9 +79,20 @@ class ThreatDetectionServiceProvider extends ServiceProvider
         if (config('threat-detection.api.enabled', true)) {
             $middleware = config('threat-detection.api.middleware', ['api', 'auth:sanctum']);
 
-            // Fall back to ['api'] when Sanctum is not installed
+            // Fall back to ['api', 'auth'] when Sanctum is not installed (never unauthenticated)
             if (!class_exists(\Laravel\Sanctum\SanctumServiceProvider::class)) {
+                $hadSanctum = in_array('auth:sanctum', $middleware);
                 $middleware = array_values(array_filter($middleware, fn($m) => $m !== 'auth:sanctum'));
+                // Only add 'auth' fallback if we removed 'auth:sanctum' (user intended auth)
+                if ($hadSanctum && !in_array('auth', $middleware)) {
+                    $middleware[] = 'auth';
+                }
+            }
+
+            // Add throttle middleware if configured
+            $throttle = config('threat-detection.api.throttle');
+            if ($throttle) {
+                array_unshift($middleware, "throttle:{$throttle}");
             }
 
             config(['threat-detection.api.middleware' => $middleware]);
@@ -109,5 +121,27 @@ class ThreatDetectionServiceProvider extends ServiceProvider
         if (is_dir(__DIR__ . '/../resources/views')) {
             $this->loadViewsFrom(__DIR__ . '/../resources/views', 'threat-detection');
         }
+    }
+
+    protected function registerSchedule(): void
+    {
+        if (!config('threat-detection.retention.enabled', false)) {
+            return;
+        }
+
+        $this->app->booted(function () {
+            if (!class_exists(\Illuminate\Console\Scheduling\Schedule::class)) {
+                return;
+            }
+
+            $days = (int) config('threat-detection.retention.days', 90);
+
+            $schedule = $this->app->make(\Illuminate\Console\Scheduling\Schedule::class);
+            $schedule->command("threat-detection:purge --days={$days}")
+                ->daily()
+                ->at('02:00')
+                ->withoutOverlapping()
+                ->runInBackground();
+        });
     }
 }

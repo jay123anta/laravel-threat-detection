@@ -126,6 +126,7 @@ class ThreatLogController extends Controller
                 ->whereNotNull('cloud_provider')
                 ->groupBy('cloud_provider')
                 ->orderByDesc('count')
+                ->limit(50)
                 ->get();
 
             $byDate = DB::table($this->table)
@@ -152,16 +153,31 @@ class ThreatLogController extends Controller
     public function stats(): JsonResponse
     {
         return $this->safe(function () {
+            $today = today()->toDateString();
+            $lastHour = now()->subHour();
+
+            $row = DB::table($this->table)
+                ->selectRaw("COUNT(*) as total_threats")
+                ->selectRaw("SUM(CASE WHEN threat_level = 'high' THEN 1 ELSE 0 END) as high_severity")
+                ->selectRaw("SUM(CASE WHEN threat_level = 'medium' THEN 1 ELSE 0 END) as medium_severity")
+                ->selectRaw("SUM(CASE WHEN threat_level = 'low' THEN 1 ELSE 0 END) as low_severity")
+                ->selectRaw("COUNT(DISTINCT ip_address) as unique_ips")
+                ->selectRaw("COUNT(DISTINCT CASE WHEN is_foreign = 1 THEN ip_address END) as foreign_ips")
+                ->selectRaw("SUM(CASE WHEN cloud_provider IS NOT NULL THEN 1 ELSE 0 END) as cloud_attacks")
+                ->selectRaw("SUM(CASE WHEN DATE(created_at) = ? THEN 1 ELSE 0 END) as today", [$today])
+                ->selectRaw("SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as last_hour", [$lastHour])
+                ->first();
+
             $stats = [
-                'total_threats' => DB::table($this->table)->count(),
-                'high_severity' => DB::table($this->table)->where('threat_level', 'high')->count(),
-                'medium_severity' => DB::table($this->table)->where('threat_level', 'medium')->count(),
-                'low_severity' => DB::table($this->table)->where('threat_level', 'low')->count(),
-                'unique_ips' => DB::table($this->table)->distinct('ip_address')->count('ip_address'),
-                'foreign_ips' => DB::table($this->table)->where('is_foreign', true)->distinct('ip_address')->count('ip_address'),
-                'cloud_attacks' => DB::table($this->table)->whereNotNull('cloud_provider')->count(),
-                'today' => DB::table($this->table)->whereDate('created_at', today())->count(),
-                'last_hour' => DB::table($this->table)->where('created_at', '>=', now()->subHour())->count(),
+                'total_threats' => (int) ($row->total_threats ?? 0),
+                'high_severity' => (int) ($row->high_severity ?? 0),
+                'medium_severity' => (int) ($row->medium_severity ?? 0),
+                'low_severity' => (int) ($row->low_severity ?? 0),
+                'unique_ips' => (int) ($row->unique_ips ?? 0),
+                'foreign_ips' => (int) ($row->foreign_ips ?? 0),
+                'cloud_attacks' => (int) ($row->cloud_attacks ?? 0),
+                'today' => (int) ($row->today ?? 0),
+                'last_hour' => (int) ($row->last_hour ?? 0),
             ];
 
             return response()->json([
@@ -299,9 +315,9 @@ class ThreatLogController extends Controller
                 return [
                     $log->id,
                     $log->created_at,
-                    $log->ip_address,
-                    $log->url,
-                    $log->type,
+                    $this->sanitizeCsvCell($log->ip_address),
+                    $this->sanitizeCsvCell($log->url),
+                    $this->sanitizeCsvCell($log->type),
                     $log->threat_level,
                     ($log->confidence_score ?? 0) . '%',
                     ($log->is_false_positive ?? false) ? 'Yes' : 'No',
@@ -468,5 +484,22 @@ class ThreatLogController extends Controller
                 'message' => 'Exclusion rule deleted.',
             ]);
         });
+    }
+
+    /**
+     * Sanitize a CSV cell to prevent formula injection in spreadsheet applications.
+     * Prefixes cells starting with =, +, -, @, \t, \r with a single quote.
+     */
+    private function sanitizeCsvCell(?string $value): string
+    {
+        if ($value === null) {
+            return '';
+        }
+
+        if (preg_match('/^[=+\-@\t\r]/', $value)) {
+            return "'" . $value;
+        }
+
+        return $value;
     }
 }

@@ -244,6 +244,10 @@ THREAT_DETECTION_MODE=balanced
 # THREAT_DETECTION_DDOS_THRESHOLD=300
 # THREAT_DETECTION_DDOS_WINDOW=60
 
+# Minimum confidence score to log a threat (default: 0)
+# Threats below this score are silently ignored.
+# THREAT_DETECTION_MIN_CONFIDENCE=0
+
 # Slack notifications (disabled by default)
 # THREAT_DETECTION_NOTIFICATIONS=true
 # THREAT_DETECTION_SLACK_WEBHOOK=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
@@ -254,6 +258,19 @@ THREAT_DETECTION_MODE=balanced
 
 # API endpoints (enabled by default)
 # THREAT_DETECTION_API=true
+
+# API rate limiting (default: 60 requests per minute)
+# THREAT_DETECTION_API_THROTTLE=60,1
+
+# Queue support — offload DB writes to a queue (disabled by default)
+# THREAT_DETECTION_QUEUE=false
+# THREAT_DETECTION_QUEUE_CONNECTION=redis
+# THREAT_DETECTION_QUEUE_NAME=default
+
+# Auto-purge old logs (disabled by default)
+# Requires Laravel scheduler to be running.
+# THREAT_DETECTION_RETENTION=false
+# THREAT_DETECTION_RETENTION_DAYS=90
 ```
 
 ### Detection Modes
@@ -285,7 +302,63 @@ Publish the config file to see all available options:
 php artisan vendor:publish --tag=threat-detection-config
 ```
 
-Key config sections: `skip_paths` (paths to skip), `auth_paths` (smart detection for login routes), `content_paths` (suppress non-high alerts), `context_weights` (scoring multipliers), `threat_levels` (severity keyword mapping), `api_route_filtering` (suppress low/medium on API routes).
+Key config sections: `skip_paths` (paths to skip), `only_paths` (whitelist mode), `auth_paths` (smart detection for login routes), `content_paths` (suppress non-high alerts), `context_weights` (scoring multipliers), `threat_levels` (severity keyword mapping), `api_route_filtering` (suppress low/medium on API routes), `queue` (async processing), `retention` (auto-purge).
+
+### Route Whitelisting (`only_paths`)
+
+If your app has many routes but you only care about a few, use `only_paths` to scan **only** those routes. All other routes are automatically skipped — no middleware overhead at all.
+
+```php
+// config/threat-detection.php
+'only_paths' => [
+    'admin/*',
+    'api/*',
+    'login',
+    'register',
+],
+```
+
+Leave empty (default) to scan all routes (subject to `skip_paths`). When both are configured, `only_paths` is checked first, then `skip_paths` applies within the matched set.
+
+### Queue Support
+
+By default, threat logging happens synchronously in the request cycle. For high-traffic apps, you can offload DB writes and Slack notifications to a queue:
+
+```env
+THREAT_DETECTION_QUEUE=true
+THREAT_DETECTION_QUEUE_CONNECTION=redis
+THREAT_DETECTION_QUEUE_NAME=threat-logs
+```
+
+This dispatches a `StoreThreatLog` job (3 retries, backoff 10s/30s). Detection still happens in real-time — only the write is deferred.
+
+### Auto-Purge (Retention Policy)
+
+Automatically delete old threat logs on a daily schedule:
+
+```env
+THREAT_DETECTION_RETENTION=true
+THREAT_DETECTION_RETENTION_DAYS=90
+```
+
+Requires Laravel's scheduler to be running (`php artisan schedule:run`). Runs daily at 02:00 via `threat-detection:purge`.
+
+### ThreatDetected Event
+
+Every confirmed threat dispatches a `ThreatDetected` event that you can listen to:
+
+```php
+// app/Providers/EventServiceProvider.php
+use JayAnta\ThreatDetection\Events\ThreatDetected;
+
+protected $listen = [
+    ThreatDetected::class => [
+        YourCustomListener::class,
+    ],
+];
+```
+
+The event carries `$threatLog` (full DB row array), `$ipAddress`, and `$threatLevel`. Use it to trigger custom actions — send Telegram alerts, update a blocklist, feed a SIEM, etc.
 
 ---
 
@@ -508,9 +581,9 @@ The threat level for each pattern is determined automatically by matching keywor
 
 ```php
 'threat_levels' => [
-    'high' => ['XSS', 'SQL Injection', 'RCE', 'Token', 'Password', 'Deserialization', 'Evasion', 'Encoding'],
-    'medium' => ['Directory Traversal', 'LFI', 'SSRF', 'Sensitive', 'Config', 'Recon Tool'],
-    'low' => ['User-Agent', 'Bot', 'Rate'],
+    'high' => ['XSS', 'SQL Injection', 'RCE', 'Aadhaar', 'PAN', 'Bank', 'Token', 'Password', 'JWT', 'Deserialization', 'Metadata Access', 'Evasion', 'Encoding'],
+    'medium' => ['Directory Traversal', 'LFI', 'SSRF', 'Sensitive', 'Config', 'Session', 'Command Chain', 'Recon Tool', 'Raw PHP'],
+    'low' => ['User-Agent', 'JS Redirect', 'SEO Bot', 'Empty', 'Rate', 'Command-line Downloader'],
 ],
 ```
 
@@ -612,7 +685,7 @@ Threats below the confidence threshold for your detection mode are not logged (s
 composer test
 ```
 
-The package includes 66 tests covering detection patterns, middleware behavior, API endpoints, confidence scoring, exclusion rules, DDoS detection, evasion resistance, and input validation.
+The package includes 86 tests covering detection patterns, middleware behavior, API endpoints, confidence scoring, exclusion rules, DDoS detection, evasion resistance (full-cycle), queue support, event dispatch, and input validation.
 
 ---
 

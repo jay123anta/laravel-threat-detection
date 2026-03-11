@@ -53,6 +53,25 @@ return [
     | Supports wildcard patterns.
     |
     */
+    /*
+    |--------------------------------------------------------------------------
+    | Only Paths (Whitelist Mode)
+    |--------------------------------------------------------------------------
+    |
+    | If this array is NOT empty, ONLY these paths will be scanned.
+    | All other paths are automatically skipped. This can dramatically
+    | reduce overhead on high-traffic apps. Supports wildcard patterns.
+    |
+    | Leave empty (default) to scan all routes (subject to skip_paths).
+    |
+    */
+    'only_paths' => [
+        // 'admin/*',
+        // 'api/*',
+        // 'login',
+        // 'register',
+    ],
+
     'skip_paths' => [
         'public/assets/*',
         'public/images/*',
@@ -60,7 +79,23 @@ return [
         'public/js/*',
         'api/healthcheck',
         'favicon.ico',
+        '_debugbar/*',
+        'telescope/*',
+        'horizon/*',
+        'livewire/*',
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Minimum Confidence Threshold
+    |--------------------------------------------------------------------------
+    |
+    | Threats scoring below this confidence threshold are silently
+    | ignored and never written to the database. Set to 0 to log
+    | everything. This is applied AFTER the detection_mode threshold.
+    |
+    */
+    'min_confidence' => env('THREAT_DETECTION_MIN_CONFIDENCE', 0),
 
     /*
     |--------------------------------------------------------------------------
@@ -258,7 +293,7 @@ return [
         // Code Injection
         '/<\?php/i' => 'Raw PHP Code Detected',
         '/\{\{[^}]+\}\}/' => 'Blade/Liquid Template Injection',
-        '/<%(=)?\s*.{1,500}\s*%>/s' => 'JSP/ASP Template Injection',
+        '/<%(=)?\s*[^%]{1,500}%>/s' => 'JSP/ASP Template Injection',
         '/\$\{[^}]+\}/i' => 'Expression Language Injection',
 
         // XXE (XML External Entity)
@@ -303,7 +338,7 @@ return [
         // API Abuse
         '/\b(v1|v2|v3)\/users\/\d+/i' => 'API User Enumeration',
         '/\/api\/.*\?.*limit=\d{3,}/i' => 'API High Limit Request',
-        '/\/graphql.{0,200}\{.{0,1000}\}/is' => 'GraphQL Query Detected',
+        '/\/graphql[^{]{0,200}\{[^}]{0,1000}\}/is' => 'GraphQL Query Detected',
 
         // IDOR (Insecure Direct Object Reference)
         '/\/user(s)?\/\d+\/delete/i' => 'User Deletion Attempt',
@@ -356,6 +391,38 @@ return [
         'enabled' => env('THREAT_DETECTION_API', true),
         'prefix' => env('THREAT_DETECTION_API_PREFIX', 'api/threat-detection'),
         'middleware' => ['api', 'auth:sanctum'],
+        'throttle' => env('THREAT_DETECTION_API_THROTTLE', '60,1'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Retention Policy (Auto-Purge)
+    |--------------------------------------------------------------------------
+    |
+    | Automatically purge old threat logs on a daily schedule.
+    | Requires Laravel's scheduler to be running (cron).
+    | Disabled by default — opt in via .env.
+    |
+    */
+    'retention' => [
+        'enabled' => env('THREAT_DETECTION_RETENTION', false),
+        'days' => env('THREAT_DETECTION_RETENTION_DAYS', 90),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Queue Support
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, threat logging (DB insert + notifications) is dispatched
+    | to a queue instead of running synchronously in the request cycle.
+    | This reduces response latency on scanned routes.
+    |
+    */
+    'queue' => [
+        'enabled' => env('THREAT_DETECTION_QUEUE', false),
+        'connection' => env('THREAT_DETECTION_QUEUE_CONNECTION', null),
+        'queue' => env('THREAT_DETECTION_QUEUE_NAME', 'default'),
     ],
 
 ];
