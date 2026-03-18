@@ -48,12 +48,20 @@ composer require jayanta/laravel-threat-detection
 
 ### 2. Publish migrations and run them
 
+> **This step is required.** Without it, the package will detect threats but cannot store them in the database. If you skip this step, your `threat_logs` table won't exist and all detections will be silently lost (you'll only see errors in `storage/logs/laravel.log`).
+
 ```bash
 php artisan vendor:publish --tag=threat-detection-migrations
 php artisan migrate
 ```
 
 This creates two tables: `threat_logs` (stores detected threats) and `threat_exclusion_rules` (stores false positive rules).
+
+**Verify tables were created:**
+```bash
+php artisan migrate:status
+```
+Look for `create_threat_logs_table`, `add_confidence_to_threat_logs_table`, and `create_threat_exclusion_rules_table` — all should show `Ran`.
 
 ### 3. Register the middleware
 
@@ -164,24 +172,28 @@ Each detected threat is written as a warning to `storage/logs/laravel.log`:
 
 ### Troubleshooting
 
-**"I tested but `threat-detection:stats` shows zero threats"**
+**"I tested but `threat-detection:stats` shows zero threats" / "Threats are not stored in the database"**
+
+This is almost always because migrations were not published. The package detects threats but silently skips the DB write if the table doesn't exist (so your app keeps working). Check `storage/logs/laravel.log` for errors like `SQLSTATE: table threat_logs not found`.
 
 | Check | How to verify |
 |-------|---------------|
-| Migrations were run | Run `php artisan migrate:status` — look for `threat_logs` and `threat_exclusion_rules` tables |
+| Migrations were **published** | Run `php artisan migrate:status` — look for `create_threat_logs_table` and `create_threat_exclusion_rules_table`. If missing, you need to publish first (see below) |
+| Migrations were **run** | Same command — status should show `Ran`, not `Pending` |
 | Middleware is registered | Confirm `ThreatDetectionMiddleware` is in your `web` middleware group (see [Step 3](#3-register-the-middleware) above) |
 | IP is not whitelisted | If you added `THREAT_DETECTION_WHITELISTED_IPS` to `.env`, remove it during testing |
 | Environment is enabled | Default enabled environments: `production`, `staging`, `local`. Check `APP_ENV` in `.env` |
 | Used an existing route | The test URL must match a real route (e.g., `/`). |
 | Dedup cache | Same IP + same attack type is cached for 5 minutes — try a different attack type |
 
-**"`threat-detection:stats` throws a database error"**
+**"`threat-detection:stats` throws a database error" / "`threat_exclusion_rules` table not found"**
 
-The `threat_logs` table doesn't exist yet. Run:
+The tables don't exist yet. You need to **publish** the migrations first, then run them:
 ```bash
 php artisan vendor:publish --tag=threat-detection-migrations
 php artisan migrate
 ```
+> **Note:** Running `php artisan migrate` alone is not enough — the migration files are inside the package and need to be published to your app's `database/migrations/` folder first.
 
 **"API returns 401 Unauthorized"**
 
