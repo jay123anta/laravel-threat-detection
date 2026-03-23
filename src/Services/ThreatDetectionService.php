@@ -46,6 +46,13 @@ class ThreatDetectionService
             $this->logDdosThreat($ip, $url, $userAgent);
         }
 
+        // Probe detection: check for known vulnerable path probes
+        $probeThreats = [];
+        $probeResult = $request->attributes->get('threat-detection:probe');
+        if ($probeResult) {
+            $probeThreats[] = [$probeResult['label'], $probeResult['level'], 'probe'];
+        }
+
         $segments = $this->buildPayloadSegments($request);
         $contextMatches = $this->detectThreatPatternsWithContext($segments, 'middleware', $isAuthPath);
 
@@ -57,7 +64,7 @@ class ThreatDetectionService
             $contextWeights[$match['label']] = $weight;
         }
 
-        $allThreats = array_merge($botThreats, $patternThreats);
+        $allThreats = array_merge($probeThreats, $botThreats, $patternThreats);
 
         $confidence = $this->confidenceScorer->calculate(
             $allThreats,

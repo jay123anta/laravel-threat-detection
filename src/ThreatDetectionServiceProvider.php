@@ -7,6 +7,7 @@ use Illuminate\Routing\Router;
 use JayAnta\ThreatDetection\Services\ThreatDetectionService;
 use JayAnta\ThreatDetection\Services\ConfidenceScorer;
 use JayAnta\ThreatDetection\Services\ExclusionRuleService;
+use JayAnta\ThreatDetection\Services\ProbeDetectorService;
 use JayAnta\ThreatDetection\Http\Middleware\ThreatDetectionMiddleware;
 use JayAnta\ThreatDetection\Console\Commands\EnrichThreatLogsCommand;
 use JayAnta\ThreatDetection\Console\Commands\ThreatStatsCommand;
@@ -23,6 +24,7 @@ class ThreatDetectionServiceProvider extends ServiceProvider
 
         $this->app->singleton(ConfidenceScorer::class, fn() => new ConfidenceScorer());
         $this->app->singleton(ExclusionRuleService::class, fn() => new ExclusionRuleService());
+        $this->app->singleton(ProbeDetectorService::class, fn() => new ProbeDetectorService());
 
         $this->app->singleton('threat-detection', function ($app) {
             return new ThreatDetectionService(

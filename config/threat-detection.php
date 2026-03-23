@@ -111,6 +111,88 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | 404 Probe Tracking
+    |--------------------------------------------------------------------------
+    |
+    | Detect reconnaissance probes hitting known vulnerable paths.
+    | These requests have no malicious payload — just the URL itself
+    | is suspicious (e.g., /wp-admin on a non-WordPress site).
+    | Logs to threat_logs with [probe] type tag.
+    |
+    */
+    'probe_tracking' => [
+        'enabled' => env('THREAT_DETECTION_PROBE_TRACKING', true),
+        'default_level' => 'medium',
+        'paths' => [
+            // WordPress
+            '/wp-admin' => 'WordPress Admin',
+            '/wp-admin/*' => 'WordPress Admin',
+            '/wp-login.php' => 'WordPress Login',
+            '/wp-content/*' => 'WordPress Content',
+            '/wp-includes/*' => 'WordPress Includes',
+            '/xmlrpc.php' => 'WordPress XMLRPC',
+            '/wp-cron.php' => 'WordPress Cron',
+            '/wp-json/*' => 'WordPress REST API',
+
+            // PHP / Config files
+            '/.env' => 'Environment File',
+            '/.env.backup' => 'Environment Backup',
+            '/.env.old' => 'Environment Backup',
+            '/phpinfo.php' => 'PHPInfo',
+            '/info.php' => 'PHPInfo',
+            '/.git/config' => 'Git Config',
+            '/.git/HEAD' => 'Git HEAD',
+            '/.svn/*' => 'SVN Directory',
+            '/.htaccess' => 'Apache Config',
+            '/web.config' => 'IIS Config',
+            '/composer.json' => 'Composer File',
+            '/composer.lock' => 'Composer Lock',
+            '/package.json' => 'NPM Package File',
+
+            // Database management
+            '/phpmyadmin' => 'phpMyAdmin',
+            '/phpmyadmin/*' => 'phpMyAdmin',
+            '/pma' => 'phpMyAdmin',
+            '/pma/*' => 'phpMyAdmin',
+            '/adminer' => 'Adminer',
+            '/adminer.php' => 'Adminer',
+
+            // CMS / Admin panels
+            '/administrator' => 'Joomla Admin',
+            '/administrator/*' => 'Joomla Admin',
+
+            // Server management
+            '/cpanel' => 'cPanel',
+            '/cgi-bin/*' => 'CGI Bin',
+            '/server-status' => 'Apache Status',
+            '/server-info' => 'Apache Info',
+
+            // Backup / sensitive
+            '/backup' => 'Backup Directory',
+            '/backup/*' => 'Backup Directory',
+            '/db.sql' => 'Database Dump',
+            '/dump.sql' => 'Database Dump',
+            '/database.sql' => 'Database Dump',
+
+            // Technology probes (non-matching stack)
+            '/*.asp' => 'ASP Probe',
+            '/*.aspx' => 'ASPX Probe',
+            '/*.jsp' => 'JSP Probe',
+
+            // Spring / Java
+            '/actuator' => 'Spring Actuator',
+            '/actuator/*' => 'Spring Actuator',
+
+            // Swagger / API docs
+            '/swagger' => 'Swagger UI',
+            '/swagger/*' => 'Swagger UI',
+            '/api-docs' => 'API Docs',
+            '/api-docs/*' => 'API Docs',
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Auth Paths
     |--------------------------------------------------------------------------
     |

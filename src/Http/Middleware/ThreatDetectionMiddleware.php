@@ -5,16 +5,19 @@ namespace JayAnta\ThreatDetection\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use JayAnta\ThreatDetection\Services\ThreatDetectionService;
+use JayAnta\ThreatDetection\Services\ProbeDetectorService;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\IpUtils;
 
 class ThreatDetectionMiddleware
 {
     protected ThreatDetectionService $detector;
+    protected ProbeDetectorService $probeDetector;
 
-    public function __construct(ThreatDetectionService $detector)
+    public function __construct(ThreatDetectionService $detector, ProbeDetectorService $probeDetector)
     {
         $this->detector = $detector;
+        $this->probeDetector = $probeDetector;
     }
 
     public function handle(Request $request, Closure $next)
@@ -73,6 +76,12 @@ class ThreatDetectionMiddleware
                     $request->attributes->set('threat-detection:content-path', true);
                     break;
                 }
+            }
+
+            // Probe detection: check if URI matches known vulnerable paths
+            $probeResult = $this->probeDetector->detect($request->path());
+            if ($probeResult) {
+                $request->attributes->set('threat-detection:probe', $probeResult);
             }
 
             $this->detector->detectAndLogFromRequest($request);
