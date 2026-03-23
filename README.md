@@ -354,7 +354,7 @@ Publish the config file to see all available options:
 php artisan vendor:publish --tag=threat-detection-config
 ```
 
-Key config sections: `skip_paths` (paths to skip), `only_paths` (whitelist mode), `auth_paths` (smart detection for login routes), `content_paths` (suppress non-high alerts), `context_weights` (scoring multipliers), `threat_levels` (severity keyword mapping), `api_route_filtering` (suppress low/medium on API routes), `queue` (async processing), `retention` (auto-purge).
+Key config sections: `skip_paths` (paths to skip), `only_paths` (whitelist mode), `auth_paths` (smart detection for login routes), `content_paths` (suppress non-high alerts), `safe_fields` (exclude specific fields from scanning), `probe_tracking` (404 probe detection), `context_weights` (scoring multipliers), `threat_levels` (severity keyword mapping), `api_route_filtering` (suppress low/medium on API routes), `queue` (async processing), `retention` (auto-purge), `max_detections_per_request` (performance cap), `dashboard.guard` / `api.guard` (auth mode).
 
 ### Route Whitelisting (`only_paths`)
 
@@ -474,9 +474,19 @@ Visit: `http://your-app.test/threat-detection`
 
 The dashboard uses `['web', 'auth']` middleware by default — users must be logged in.
 
-**If your app does not have authentication set up yet** (e.g., during local development), temporarily change the middleware in `config/threat-detection.php`:
+**If your app does not have authentication set up yet** (e.g., during local development), you have two options:
 
+**Option 1 — Use the built-in auth guard (recommended):**
+```env
+# In your .env file:
+THREAT_DETECTION_DASHBOARD_GUARD=ip
+THREAT_DETECTION_DASHBOARD_IPS=127.0.0.1
+```
+This restricts the dashboard to your local machine only. Other guard options: `auth` (login required), `role` (role-based), `none` (no auth — for local dev only). See [Dashboard Authentication](#dashboard-authentication) for all options.
+
+**Option 2 — Remove auth middleware:**
 ```php
+// config/threat-detection.php
 'dashboard' => [
     'enabled' => true,
     'path' => 'threat-detection',
@@ -484,7 +494,7 @@ The dashboard uses `['web', 'auth']` middleware by default — users must be log
 ],
 ```
 
-> Restore `['web', 'auth']` before deploying to production.
+> Restore authentication before deploying to production.
 
 **If the dashboard shows empty data**, make sure the API endpoints are accessible. The dashboard fetches data from the API. See [API Authentication](#api-authentication) for details.
 
@@ -501,9 +511,16 @@ API routes use `auth:sanctum` middleware by default. The package handles this gr
 - **Sanctum installed:** API requires authentication via Sanctum tokens or SPA session auth.
 - **Sanctum NOT installed:** The package **automatically detects** that Sanctum is missing and falls back to `['api']` only. The API works without authentication.
 
-**If you don't use Sanctum but want to protect your API**, add your own auth guard in `config/threat-detection.php`:
+**If you don't use Sanctum but want to protect your API**, you have two options:
 
+**Option 1 — Use the built-in auth guard:**
+```env
+THREAT_DETECTION_API_GUARD=auth
+```
+
+**Option 2 — Change the middleware directly:**
 ```php
+// config/threat-detection.php
 'api' => [
     'enabled' => true,
     'prefix' => 'api/threat-detection',
@@ -696,10 +713,12 @@ Add your own detection regex patterns in `config/threat-detection.php`:
 ],
 ```
 
-**Example — detect requests to a WordPress login page:**
+**Example — detect a custom admin endpoint probe:**
 ```php
-'/\/wp-login\.php/i' => 'WordPress Login Probe',
+'/\/my-admin-panel/i' => 'Custom Admin Panel Probe',
 ```
+
+> **Note:** Common probe paths like `/wp-login.php`, `/.env`, `/phpmyadmin` are now handled automatically by the [404 Probe Tracking](#404-probe-tracking) feature. You don't need custom patterns for those.
 
 The threat level for each pattern is determined automatically by matching keywords in the label against the `threat_levels` config:
 
@@ -740,6 +759,19 @@ $summary = ThreatDetection::getCorrelationSummary();
 ---
 
 ## Reducing False Positives
+
+The package provides multiple tools to reduce false positives. Use whichever fits your situation:
+
+### Safe Fields
+
+If specific form fields legitimately contain HTML, SQL keywords, or code, exclude them from scanning entirely:
+
+```php
+// config/threat-detection.php
+'safe_fields' => ['content', 'body', 'html', 'description', 'code'],
+```
+
+This is the simplest approach. The field is completely skipped — no detection runs on it. Use for CMS content editors, code snippet inputs, and rich text fields. See [Safe Fields](#safe-fields-false-positive-reduction) for details.
 
 ### Content Path Suppression
 
@@ -786,20 +818,28 @@ Threats below the confidence threshold for your detection mode are not logged (s
 
 | Category | Examples |
 |----------|---------|
-| **Injection** | SQL injection (UNION, boolean, time-based, CHAR encoding), NoSQL injection, command injection, LDAP injection |
-| **XSS** | Script tags, event handlers, JavaScript URIs, DOM manipulation, encoded XSS |
-| **Code Execution** | RCE, PHP deserialization, template injection (Blade, JSP, ASP), eval(), base64 decode |
-| **File Access** | Directory traversal, LFI/RFI, sensitive file probes (.env, wp-config, composer.json, .git) |
-| **SSRF** | Localhost access, AWS/GCP metadata endpoints, private IP ranges (10.x, 172.16-31.x, 192.168.x) |
+| **SQL Injection** | UNION, boolean, time-based, CHAR encoding, DDL (DROP/ALTER/CREATE), DML (INSERT/UPDATE/DELETE), file ops (INTO OUTFILE, LOAD_FILE), ORDER BY enumeration, hex strings, UNHEX |
+| **NoSQL Injection** | MongoDB $ne, $gt, $regex, $where operators |
+| **XSS** | Script tags, SVG event handlers (`<svg onload=`), HTML event handlers (`<body onload=`, `<img onerror=`), CSS expressions, JavaScript URIs, DOM manipulation |
+| **Code Execution** | RCE shell functions, PHP deserialization, Java deserialization (base64 + hex magic bytes), template injection (Blade, JSP, ASP, Jinja2, Velocity), eval(), base64 decode, PHP assert(), create_function(), preg_replace /e |
+| **SSTI** | Mathematical probes (`{{7*7}}`), Jinja2 import/config, Velocity templates, Expression Language |
+| **Command Injection** | Linux (shell functions, command chains, curl, wget, nc), Windows (cmd.exe, PowerShell, wscript, cscript, net user) |
+| **File Access** | Directory traversal, LFI/RFI protocols, sensitive file probes (.env, .git, composer.json) |
+| **SSRF** | Localhost (127.0.0.1, 0.0.0.0, ::1), AWS/GCP metadata, private IPs, hex/decimal encoded localhost, DNS rebinding (xip.io, nip.io, sslip.io) |
+| **LDAP Injection** | LDAP filter manipulation, OR injection |
+| **XPath Injection** | Attribute selectors, XPath functions (contains, substring) |
+| **CRLF / Header Injection** | URL-encoded CRLF (`%0d%0a`), LF injection, null byte injection |
+| **Protocol Attacks** | HTTP request smuggling (CL+TE), SSI injection |
+| **CVE Exploits** | Shellshock (CVE-2014-6271), Spring4Shell (CVE-2022-22965), PHPUnit RCE (CVE-2017-9841), Drupalgeddon, Log4Shell |
+| **Probe Tracking** | WordPress (`/wp-admin`, `/wp-login.php`), config files (`/.env`, `/.git`), database tools (`/phpmyadmin`), technology probes (`.asp`, `.jsp`), Spring actuator, Swagger/API docs — 50+ paths |
+| **Scanners** | SQLMap, Nikto, Nmap, Burp Suite, FeroxBuster, FFUF, XSStrike, Dalfox, Netsparker, Qualys, Nuclei, and 20+ others (53 total) |
+| **AI Scrapers** | GPTBot, ClaudeBot, ChatGPT, ByteSpider, Cohere, Common Crawl |
+| **Headless Browsers** | HeadlessChrome, PhantomJS, Selenium, Puppeteer, Playwright |
+| **Bots** | Python scripts, Go HTTP clients, cURL, wget, AhrefsBot, SEMRushBot, empty user agents |
 | **Authentication** | Brute force detection, token leaks, password exposure, session ID exposure |
-| **Scanners** | SQLMap, Nikto, Nmap, Burp Suite, Acunetix, WPScan, Nessus, Nuclei, Metasploit |
-| **Bots** | Python scripts, Go HTTP clients, cURL, wget, empty user agents |
 | **DDoS** | Rate-based excessive request detection |
-| **XXE** | XML external entity attacks, DOCTYPE entity declarations |
-| **Log4Shell** | JNDI injection attempts (LDAP, RMI, DNS) |
-| **Evasion** | SQL comment insertion (`UNION/**/SELECT`), double URL encoding (`%2527`), CHAR encoding |
-| **Web Shells** | c99, r57, b374k, WSO, FilesMan, encoded eval execution |
-| **Crypto Mining** | Coinhive, CryptoNight, Monero script detection |
+| **Evasion** | SQL comment insertion, double URL encoding, HTML entity encoding, Unicode escapes, IIS Unicode, hex escapes |
+| **Other** | GraphQL introspection, prototype pollution, open redirect, XXE, web shells, crypto mining, PII detection |
 
 ---
 
