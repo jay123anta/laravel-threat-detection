@@ -80,6 +80,13 @@ class ThreatDetectionService
             return;
         }
 
+        // Collect all log entries for batch insert
+        $batchLogData = [];
+        $notificationQueue = [];
+        $truncatedPayload = substr($payload, 0, 2000);
+        $now = now();
+        $userId = Auth::id();
+
         foreach ($allThreats as [$label, $level, $sourceTag]) {
             if (
                 config('threat-detection.api_route_filtering.enabled', true)
@@ -109,39 +116,48 @@ class ThreatDetectionService
                 'url' => $url,
                 'user_agent' => $userAgent,
                 'type' => $type,
-                'payload' => substr($payload, 0, 2000),
+                'payload' => $truncatedPayload,
                 'threat_level' => $level,
                 'confidence_score' => $confidence['score'],
                 'confidence_label' => $confidence['label'],
-                'user_id' => Auth::id(),
-                'created_at' => now(),
-                'updated_at' => now(),
+                'user_id' => $userId,
+                'created_at' => $now,
+                'updated_at' => $now,
             ];
 
-            // Build notification data if needed
-            $notificationData = null;
+            $batchLogData[] = $logData;
+
+            // Collect notification data
             if (
                 config('threat-detection.notifications.enabled') &&
                 in_array($level, config('threat-detection.notifications.notify_levels', ['high']))
             ) {
-                $webhookUrl = config('threat-detection.notifications.slack_webhook');
-                if ($webhookUrl) {
-                    $notificationData = [
-                        'webhook_url' => $webhookUrl,
-                        'alert_data' => [
-                            'ip_address' => $ip,
-                            'url' => $url,
-                            'type' => $type,
-                            'threat_level' => $level,
-                            'action_taken' => 'logged',
-                            'user_agent' => $userAgent,
-                        ],
-                    ];
-                }
+                $notificationQueue[] = ['type' => $type, 'level' => $level];
             }
 
+            // Sanitize log output to prevent log injection via newlines/control chars
+            $safeType = str_replace(["\n", "\r", "\t"], ' ', $type);
+            $safeUrl = str_replace(["\n", "\r", "\t"], ' ', $url);
+            Log::warning("[{$level}] Threat Detected: [{$safeType}] from {$ip} ({$safeUrl}) [confidence: {$confidence['score']}%]");
+
+            // Dispatch event so users can hook in with custom listeners
+            ThreatDetected::dispatch($logData, $ip, $level);
+        }
+
+        // Batch write: one INSERT or one queue job for all threats in this request
+        if (!empty($batchLogData)) {
             if (config('threat-detection.queue.enabled', false)) {
-                $job = new StoreThreatLog($logData, $notificationData);
+                $job = new StoreThreatLog($batchLogData, !empty($notificationQueue) ? [
+                    'webhook_url' => config('threat-detection.notifications.slack_webhook'),
+                    'alert_data' => [
+                        'ip_address' => $ip,
+                        'url' => $url,
+                        'type' => $batchLogData[0]['type'],
+                        'threat_level' => $batchLogData[0]['threat_level'],
+                        'action_taken' => 'logged',
+                        'user_agent' => $userAgent,
+                    ],
+                ] : null);
 
                 $connection = config('threat-detection.queue.connection');
                 $queue = config('threat-detection.queue.queue', 'default');
@@ -153,20 +169,12 @@ class ThreatDetectionService
 
                 dispatch($job);
             } else {
-                DB::table(config('threat-detection.table_name', 'threat_logs'))->insert($logData);
+                DB::table(config('threat-detection.table_name', 'threat_logs'))->insert($batchLogData);
 
-                if ($notificationData) {
-                    $this->sendNotifications($ip, $url, $type, $level, $userAgent);
+                if (!empty($notificationQueue)) {
+                    $this->sendNotifications($ip, $url, $batchLogData[0]['type'], $batchLogData[0]['threat_level'], $userAgent);
                 }
             }
-
-            // Sanitize log output to prevent log injection via newlines/control chars
-            $safeType = str_replace(["\n", "\r", "\t"], ' ', $type);
-            $safeUrl = str_replace(["\n", "\r", "\t"], ' ', $url);
-            Log::warning("[{$level}] Threat Detected: [{$safeType}] from {$ip} ({$safeUrl}) [confidence: {$confidence['score']}%]");
-
-            // Dispatch event so users can hook in with custom listeners
-            ThreatDetected::dispatch($logData, $ip, $level);
         }
     }
 
@@ -282,6 +290,30 @@ class ThreatDetectionService
         ];
     }
 
+    /**
+     * Quick pre-screen: check if payload contains any suspicious characters
+     * before running 150+ regex patterns. Skips ~90% of legitimate requests.
+     */
+    private function hasSuspiciousCharacters(string $payload): bool
+    {
+        // Characters and substrings that appear in virtually all attacks
+        $suspects = ["'", '"', '<', '>', '(', ')', '{', '}', '[', ']',
+            '..', '%', '0x', '\\', '|', ';', '`', '$', '#',
+            'select', 'union', 'script', 'alert', 'eval', 'exec',
+            'system', 'cmd', 'powershell', 'drop', 'insert', 'delete',
+            'passwd', 'etc/', 'localhost', '127.0', 'proto', 'jndi',
+        ];
+
+        $lower = strtolower($payload);
+        foreach ($suspects as $s) {
+            if (str_contains($lower, $s)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function detectThreatPatternsWithContext(
         array $segments,
         string $source = 'default',
@@ -289,6 +321,7 @@ class ThreatDetectionService
     ): array {
         $matches = [];
         $mode = config('threat-detection.detection_mode', 'balanced');
+        $maxDetections = (int) config('threat-detection.max_detections_per_request', 0);
 
         $authExcludePatterns = [
             'Password Exposure', 'Mobile Number Detected', 'Aadhaar Number Detected',
@@ -304,8 +337,16 @@ class ThreatDetectionService
             // Cap payload to prevent ReDoS on large inputs
             $segmentPayload = substr($segmentPayload, 0, 8000);
 
+            // Early bailout: skip regex if payload has no suspicious characters
+            if (!$this->hasSuspiciousCharacters($segmentPayload)) {
+                continue;
+            }
+
             // Evasion patterns run on raw payload
             foreach ($this->getEvasionPatterns() as $regex => $label) {
+                if ($maxDetections > 0 && count($matches) >= $maxDetections) {
+                    break 2;
+                }
                 if (@preg_match($regex, $segmentPayload)) {
                     $matches[] = [
                         'label' => $label,
@@ -319,6 +360,10 @@ class ThreatDetectionService
             $normalizedPayload = $this->normalizeForDetection($segmentPayload);
 
             foreach ($this->getDefaultThreatPatterns() as $regex => $label) {
+                if ($maxDetections > 0 && count($matches) >= $maxDetections) {
+                    break 2;
+                }
+
                 $level = $this->getThreatLevelByType($label);
 
                 if ($mode === 'relaxed' && $level !== 'high') {
@@ -336,6 +381,10 @@ class ThreatDetectionService
             }
 
             foreach ($this->getValidatedCustomPatterns() as $regex => $label) {
+                if ($maxDetections > 0 && count($matches) >= $maxDetections) {
+                    break 2;
+                }
+
                 if ($isAuthPath && in_array($label, $authExcludePatterns)) {
                     continue;
                 }

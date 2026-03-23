@@ -99,6 +99,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Max Detections Per Request
+    |--------------------------------------------------------------------------
+    |
+    | Stop scanning after this many pattern matches per request.
+    | A request with 5+ detections is clearly malicious — no need to find all 20.
+    | Set to 0 (default) for unlimited detections.
+    |
+    */
+    'max_detections_per_request' => env('THREAT_DETECTION_MAX_DETECTIONS', 0),
+
+    /*
+    |--------------------------------------------------------------------------
     | Auth Paths
     |--------------------------------------------------------------------------
     |
