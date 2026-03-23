@@ -170,8 +170,8 @@ return [
     |
     */
     'threat_levels' => [
-        'high' => ['XSS', 'SQL Injection', 'RCE', 'Aadhaar', 'PAN', 'Bank', 'Token', 'Password', 'JWT', 'Deserialization', 'Metadata Access', 'Evasion', 'Encoding'],
-        'medium' => ['Directory Traversal', 'LFI', 'SSRF', 'Sensitive', 'Config', 'Session', 'Command Chain', 'Recon Tool', 'Raw PHP'],
+        'high' => ['XSS', 'SQL Injection', 'SQL DDL', 'SQL DML', 'SQL File', 'RCE', 'Aadhaar', 'PAN', 'Bank', 'Token', 'Password', 'JWT', 'Deserialization', 'Metadata Access', 'Evasion', 'Encoding', 'Shellshock', 'Spring4Shell', 'PowerShell', 'Windows CMD', 'CRLF', 'Null Byte', 'SSTI', 'Java'],
+        'medium' => ['Directory Traversal', 'LFI', 'SSRF', 'Sensitive', 'Config', 'Session', 'Command Chain', 'Recon Tool', 'Raw PHP', 'Open Redirect', 'LF Injection', 'Windows Script', 'Windows Net'],
         'low' => ['User-Agent', 'JS Redirect', 'SEO Bot', 'Empty', 'Rate', 'Command-line Downloader'],
     ],
 

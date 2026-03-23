@@ -224,21 +224,61 @@ class ThreatDetectionService
         return $segments;
     }
 
-    /** Strip SQL inline comments and collapse whitespace. */
+    /**
+     * Normalize payload to defeat evasion techniques.
+     * Strips SQL comments, decodes HTML entities, decodes Unicode escapes,
+     * performs recursive URL decoding, and collapses whitespace.
+     */
     private function normalizeForDetection(string $payload): string
     {
+        // Strip SQL inline comments: UNION/**/SELECT → UNION SELECT
         $normalized = preg_replace('/\/\*.*?\*\//s', ' ', $payload);
+
+        // Decode HTML entities: &#60;script&#62; → <script>, &#x3c; → <
+        $normalized = html_entity_decode($normalized, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        // Decode Unicode escape sequences: \u003c → <
+        $normalized = preg_replace_callback('/\\\\u([0-9a-fA-F]{4})/', function ($m) {
+            $code = hexdec($m[1]);
+            return $code < 128 ? chr($code) : $m[0];
+        }, $normalized);
+
+        // Decode hex escape sequences: \x3c → <
+        $normalized = preg_replace_callback('/\\\\x([0-9a-fA-F]{2})/', function ($m) {
+            return chr(hexdec($m[1]));
+        }, $normalized);
+
+        // Recursive URL decoding (max 3 passes to prevent infinite loops)
+        for ($i = 0; $i < 3; $i++) {
+            $decoded = urldecode($normalized);
+            if ($decoded === $normalized) {
+                break;
+            }
+            $normalized = $decoded;
+        }
+
+        // Collapse whitespace
         $normalized = preg_replace('/\s+/', ' ', $normalized);
 
         return trim($normalized);
     }
 
-    /** Patterns matched before normalization. */
+    /** Patterns matched before normalization — detect evasion attempts themselves. */
     private function getEvasionPatterns(): array
     {
         return [
             '/\w+\/\*[^*]*\*\/\w+/' => 'SQL Comment Evasion',
             '/%25[0-9a-fA-F]{2}/i' => 'Double URL Encoding',
+            '/&#x?[0-9a-fA-F]+;/i' => 'HTML Entity Encoding Evasion',
+            '/\\\\u00[0-9a-fA-F]{2}/i' => 'Unicode Escape Evasion',
+            '/%u[0-9a-fA-F]{4}/i' => 'IIS Unicode Encoding Evasion',
+
+            // CRLF / HTTP Header Injection (CRS 921, CWE-113) — must run on raw payload
+            '/%0[dD]%0[aA]/' => 'CRLF Injection',
+            '/%0[aA]/' => 'LF Injection',
+
+            // Null Byte Injection (CWE-626) — must run on raw before URL decode
+            '/%00/' => 'Null Byte Injection',
         ];
     }
 
@@ -439,6 +479,42 @@ class ThreatDetectionService
             '/O:\d+:"[A-Za-z_][A-Za-z0-9_]+":\d+:\{[^}]{0,500}\}/s' => 'PHP Object Deserialization',
 
             '/\b(nmap|sqlmap|nikto|acunetix|wpscan|dirbuster|fimap)\b/i' => 'Scanner Tool Detected',
+
+            // Shellshock (CVE-2014-6271) — still top-scanned CVE
+            '/\(\)\s*\{/' => 'Shellshock CVE-2014-6271',
+
+            // Spring4Shell (CVE-2022-22965)
+            '/class\.module\.classLoader/i' => 'Spring4Shell CVE-2022-22965',
+
+            // Windows Command Injection (CRS 932, AWS WAF WindowsRuleSet)
+            '/\b(cmd|cmd\.exe)\s*\/[ckCK]/i' => 'Windows CMD Execution',
+            '/\bpowershell(\.exe)?\b/i' => 'PowerShell Execution',
+            '/\b(wscript|cscript)(\.exe)?\b/i' => 'Windows Script Host',
+            '/\bnet\s+(user|localgroup)\b/i' => 'Windows Net Command',
+
+            // SVG/MathML XSS vectors (CRS 941 — major bypass for <script> filters)
+            '/<svg[^>]*\bon\w+\s*=/i' => 'XSS SVG Event Handler',
+            '/<(body|img|video|audio|details|marquee)[^>]*\bon\w+\s*=/i' => 'XSS HTML Event Handler',
+            '/style\s*=\s*[^>]*expression\s*\(/i' => 'XSS CSS Expression',
+
+            // SQL DDL/DML Injection (CRS 942 — destructive operations)
+            '/\b(ALTER|CREATE|DROP|TRUNCATE)\s+(TABLE|DATABASE|INDEX)\b/i' => 'SQL DDL Injection',
+            '/\b(INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM)\b/i' => 'SQL DML Injection',
+            '/\bINTO\s+(OUT|DUMP)FILE\b/i' => 'SQL File Write',
+            '/\bLOAD_FILE\s*\(/i' => 'SQL File Read',
+
+            // Java Deserialization (CWE-502 — ysoserial gadget chains)
+            '/rO0AB[a-zA-Z0-9+\/=]{10,}/' => 'Java Deserialization',
+            '/aced0005[0-9a-fA-F]{8,}/i' => 'Java Serialization Magic Bytes',
+
+            // Expanded SSTI — Server-Side Template Injection (CRS 944)
+            '/\{\{\s*\d+\s*\*\s*\d+\s*\}\}/' => 'SSTI Mathematical Probe',
+            '/\{\{\s*(config|self|request|cycler)\b/i' => 'SSTI Config Access',
+            '/\{%\s*import\b/i' => 'SSTI Jinja2 Import',
+            '/#set\s*\(\s*\$/i' => 'SSTI Velocity Template',
+
+            // Open Redirect (CWE-601, OWASP A01) — matches both query string and JSON-encoded formats
+            '/(?:redirect|url|next|return|goto|dest)["\s]*[=:]["\s]*"?https?:\/\//i' => 'Open Redirect',
         ];
     }
 
