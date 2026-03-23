@@ -631,6 +631,7 @@ class ThreatDetectionService
         $threats = [];
 
         $scanners = [
+            // Existing scanners
             'sqlmap' => ['label' => 'SQLMap Scanner', 'level' => 'high'],
             'nikto' => ['label' => 'Nikto Scanner', 'level' => 'high'],
             'nmap' => ['label' => 'Nmap Scanner', 'level' => 'high'],
@@ -646,9 +647,29 @@ class ThreatDetectionService
             'havij' => ['label' => 'Havij SQLi Tool', 'level' => 'high'],
             'dirbuster' => ['label' => 'DirBuster', 'level' => 'medium'],
             'gobuster' => ['label' => 'GoBuster', 'level' => 'medium'],
+
+            // Phase 3: Additional security scanners
+            'arachni' => ['label' => 'Arachni Scanner', 'level' => 'high'],
+            'netsparker' => ['label' => 'Netsparker Scanner', 'level' => 'high'],
+            'qualys' => ['label' => 'Qualys Scanner', 'level' => 'high'],
+            'skipfish' => ['label' => 'Skipfish Scanner', 'level' => 'high'],
+            'vega/' => ['label' => 'Vega Scanner', 'level' => 'high'],
+            'wapiti' => ['label' => 'Wapiti Scanner', 'level' => 'high'],
+            'joomscan' => ['label' => 'JoomScan Scanner', 'level' => 'high'],
+            'droopescan' => ['label' => 'DroopeScan Scanner', 'level' => 'high'],
+            'commix' => ['label' => 'Commix Tool', 'level' => 'high'],
+            'xsstrike' => ['label' => 'XSStrike Tool', 'level' => 'high'],
+            'dalfox' => ['label' => 'Dalfox XSS Scanner', 'level' => 'high'],
+            'feroxbuster' => ['label' => 'FeroxBuster', 'level' => 'high'],
+            'ffuf' => ['label' => 'FFUF Fuzzer', 'level' => 'high'],
+            'httpx' => ['label' => 'HTTPX Scanner', 'level' => 'medium'],
+            'subfinder' => ['label' => 'Subfinder Tool', 'level' => 'medium'],
+            'katana' => ['label' => 'Katana Crawler', 'level' => 'medium'],
+            'jaeles' => ['label' => 'Jaeles Scanner', 'level' => 'high'],
         ];
 
         $suspiciousBots = [
+            // Existing bots
             'masscan' => ['label' => 'MassScan Tool', 'level' => 'high'],
             'zgrab' => ['label' => 'ZGrab Scanner', 'level' => 'high'],
             'shodan' => ['label' => 'Shodan Bot', 'level' => 'medium'],
@@ -657,6 +678,29 @@ class ThreatDetectionService
             'curl/' => ['label' => 'cURL Command', 'level' => 'low'],
             'wget/' => ['label' => 'wget Command', 'level' => 'low'],
             'go-http-client' => ['label' => 'Go HTTP Client', 'level' => 'low'],
+
+            // Phase 3: Aggressive/abusive crawlers
+            'ahrefsbot' => ['label' => 'Ahrefs Bot', 'level' => 'low'],
+            'semrushbot' => ['label' => 'SEMRush Bot', 'level' => 'low'],
+            'mj12bot' => ['label' => 'Majestic Bot', 'level' => 'low'],
+            'dotbot' => ['label' => 'DotBot Crawler', 'level' => 'low'],
+            'petalbot' => ['label' => 'PetalBot Crawler', 'level' => 'low'],
+
+            // Phase 3: AI scrapers
+            'gptbot' => ['label' => 'GPTBot AI Scraper', 'level' => 'low'],
+            'chatgpt-user' => ['label' => 'ChatGPT User Agent', 'level' => 'low'],
+            'claudebot' => ['label' => 'ClaudeBot AI Scraper', 'level' => 'low'],
+            'anthropic-ai' => ['label' => 'Anthropic AI Bot', 'level' => 'low'],
+            'bytespider' => ['label' => 'ByteSpider Crawler', 'level' => 'low'],
+            'cohere-ai' => ['label' => 'Cohere AI Bot', 'level' => 'low'],
+            'ccbot' => ['label' => 'Common Crawl Bot', 'level' => 'low'],
+
+            // Phase 3: Headless browsers / automation
+            'headlesschrome' => ['label' => 'Headless Chrome', 'level' => 'medium'],
+            'phantomjs' => ['label' => 'PhantomJS Browser', 'level' => 'medium'],
+            'selenium' => ['label' => 'Selenium WebDriver', 'level' => 'medium'],
+            'puppeteer' => ['label' => 'Puppeteer Automation', 'level' => 'medium'],
+            'playwright' => ['label' => 'Playwright Automation', 'level' => 'medium'],
         ];
 
         $userAgentLower = strtolower($userAgent);
