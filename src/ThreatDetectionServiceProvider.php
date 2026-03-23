@@ -12,6 +12,8 @@ use JayAnta\ThreatDetection\Http\Middleware\ThreatDetectionMiddleware;
 use JayAnta\ThreatDetection\Console\Commands\EnrichThreatLogsCommand;
 use JayAnta\ThreatDetection\Console\Commands\ThreatStatsCommand;
 use JayAnta\ThreatDetection\Console\Commands\PurgeThreatLogsCommand;
+use JayAnta\ThreatDetection\Console\Commands\ExportFail2banCommand;
+use JayAnta\ThreatDetection\Console\Commands\ExportBlocklistCommand;
 
 class ThreatDetectionServiceProvider extends ServiceProvider
 {
@@ -114,6 +116,8 @@ class ThreatDetectionServiceProvider extends ServiceProvider
                 EnrichThreatLogsCommand::class,
                 ThreatStatsCommand::class,
                 PurgeThreatLogsCommand::class,
+                ExportFail2banCommand::class,
+                ExportBlocklistCommand::class,
             ]);
         }
     }
