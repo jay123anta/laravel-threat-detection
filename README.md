@@ -10,7 +10,7 @@
 
 **Know who's attacking your Laravel app — without changing a single line of application code.**
 
-A middleware-based threat detection and logging system for Laravel. Drop it in, and it starts scanning every HTTP request for SQL injection, XSS, RCE, scanner bots, DDoS patterns, and 40+ other attack types — logging everything to your database with full geo-enrichment and a built-in dashboard.
+A middleware-based threat detection and logging system for Laravel. Drop it in, and it starts scanning every HTTP request for SQL injection, XSS, RCE, scanner bots, DDoS patterns, and 60+ other attack types — logging everything to your database with full geo-enrichment and a built-in dashboard.
 
 > Extracted from a production application. Battle-tested with real traffic.
 
@@ -29,7 +29,7 @@ A middleware-based threat detection and logging system for Laravel. Drop it in, 
 ## How It Works
 
 1. A middleware scans every incoming HTTP request
-2. The request is checked against 130+ regex patterns covering SQL injection, XSS, RCE, file traversal, SSRF, and more
+2. The request is checked against 175+ regex patterns covering SQL injection, XSS, RCE, file traversal, SSRF, LDAP, XPath, SSTI, and more
 3. If a threat pattern matches, a record is written to your `threat_logs` database table with the IP, URL, threat type, severity level, and a confidence score
 4. Optionally, a Slack alert is sent for high-severity threats
 5. The request proceeds normally — **nothing is blocked**
@@ -210,13 +210,17 @@ php artisan route:clear
 
 ## Features
 
-- **130+ Detection Patterns** — SQL injection, XSS, RCE, directory traversal, SSRF, XXE, Log4Shell, NoSQL injection, command injection, and more
-- **Scanner Detection** — SQLMap, Nikto, Nmap, Burp Suite, Acunetix, WPScan, Nessus, Nuclei, Metasploit, and others
-- **Bot Detection** — Suspicious user agents, automated scripts, headless browsers
+- **175+ Detection Patterns** — SQL injection (UNION, DDL, DML, file ops), XSS (script, SVG, CSS expression), RCE, directory traversal, SSRF, XXE, Log4Shell, NoSQL injection, command injection (Linux + Windows), LDAP injection, XPath injection, SSTI, CRLF injection, Java deserialization, and more
+- **53 Bot/Scanner Signatures** — SQLMap, Nikto, Nmap, Burp Suite, FeroxBuster, FFUF, XSStrike, Dalfox, Netsparker, and 20+ other security scanners
+- **AI Scraper Detection** — GPTBot, ClaudeBot, ByteSpider, Common Crawl, and other AI training bots
+- **Headless Browser Detection** — HeadlessChrome, PhantomJS, Selenium, Puppeteer, Playwright
+- **404 Probe Tracking** — Detects reconnaissance probes hitting known vulnerable paths (`/wp-admin`, `/.env`, `/phpmyadmin`, `/actuator`, etc.) with 50+ default probe paths
 - **DDoS Monitoring** — Rate-based threshold detection with configurable windows
 - **Confidence Scoring** — Each threat gets a 0-100 confidence score based on pattern count, context, and signals
-- **Evasion Resistance** — Payload normalization defeats SQL comment insertion (`UNION/**/SELECT`), double URL encoding (`%2527`), and CHAR encoding bypasses
+- **Evasion Resistance** — Normalization pipeline defeats SQL comment insertion, double URL encoding, HTML entity encoding, Unicode escapes, and hex escapes before pattern matching
+- **CVE Detection** — Shellshock (CVE-2014-6271), Spring4Shell (CVE-2022-22965), PHPUnit RCE (CVE-2017-9841), Drupalgeddon, Log4Shell
 - **Context-Aware Detection** — Patterns found in query strings score higher than those in POST body
+- **Safe Fields** — Exclude specific form fields from scanning (for CMS editors, code inputs, search fields)
 - **False Positive Reporting** — Mark threats as false positives from the dashboard; auto-creates exclusion rules
 - **Three Detection Modes** — `strict`, `balanced` (default), and `relaxed` — tunable sensitivity
 - **Content Path Suppression** — Whitelist CMS/blog paths to suppress low/medium alerts from rich content
@@ -224,9 +228,13 @@ php artisan route:clear
 - **Geo-Enrichment** — Country, city, ISP, cloud provider identification via free API
 - **Slack Alerts** — Real-time notifications for high-severity threats (works on Laravel 10 and 11+)
 - **Built-in Dashboard** — Dark-mode Blade dashboard (Alpine.js + Tailwind CDN, zero build step)
+- **Dashboard Auth Guard** — Configurable authentication for dashboard and API (none, auth, role, or IP-based)
 - **15 API Endpoints** — Full REST API for building custom Vue/React/mobile dashboards
+- **Fail2ban Export** — Export detected IPs in fail2ban-compatible format or plain blocklist
+- **Blocklist Export** — Export IPs in nginx deny, Apache deny, CSV, or plain format
 - **CSV Export** — One-click threat log export (up to 10,000 rows)
 - **Correlation Analysis** — Detect coordinated attacks and attack campaigns across IPs
+- **Performance Optimized** — Early bailout skips regex for clean requests, batch DB inserts, configurable max detections per request
 - **Database Agnostic** — MySQL, PostgreSQL, SQLite, SQL Server
 - **Zero Config** — Works out of the box with sensible defaults
 - **Safe by Design** — The middleware catches its own errors. If detection fails, your app keeps running. Requests are never blocked.
@@ -283,6 +291,23 @@ THREAT_DETECTION_MODE=balanced
 # Requires Laravel scheduler to be running.
 # THREAT_DETECTION_RETENTION=false
 # THREAT_DETECTION_RETENTION_DAYS=90
+
+# 404 probe tracking (enabled by default)
+# Detects bots hitting /wp-admin, /.env, /phpmyadmin, etc.
+# THREAT_DETECTION_PROBE_TRACKING=true
+
+# Max detections per request (default: 0 = unlimited)
+# Stop scanning after N pattern matches per request.
+# THREAT_DETECTION_MAX_DETECTIONS=0
+
+# Dashboard auth guard (default: none)
+# Options: none, auth, role, ip
+# THREAT_DETECTION_DASHBOARD_GUARD=none
+# THREAT_DETECTION_DASHBOARD_ROLE=admin
+# THREAT_DETECTION_DASHBOARD_IPS=127.0.0.1
+
+# API auth guard (default: none — uses existing middleware config)
+# THREAT_DETECTION_API_GUARD=none
 ```
 
 ### Detection Modes
@@ -570,7 +595,79 @@ php artisan threat-detection:enrich --days=7
 
 # Purge old logs to keep the database clean
 php artisan threat-detection:purge --days=30
+
+# Export threat IPs for fail2ban (pipe to file or run directly)
+php artisan threat-detection:export-fail2ban --level=high --since=24h --min-hits=5
+php artisan threat-detection:export-fail2ban --format=plain > /tmp/banlist.txt
+
+# Export blocklist in various formats
+php artisan threat-detection:export-blocklist --format=nginx > /etc/nginx/blocklist.conf
+php artisan threat-detection:export-blocklist --format=apache > .htaccess-deny
+php artisan threat-detection:export-blocklist --format=csv --since=7d
 ```
+
+---
+
+## 404 Probe Tracking
+
+The package detects reconnaissance probes — bots that hit known vulnerable paths like `/wp-admin`, `/.env`, or `/phpmyadmin` on your non-WordPress, non-phpMyAdmin site. These have no malicious payload; the path itself is the signal.
+
+Logged with a `[probe]` type tag, separate from payload-based detection. If a probe request also contains a malicious payload, both are logged independently.
+
+Enabled by default with 50+ probe paths. Customize in `config/threat-detection.php`:
+
+```php
+'probe_tracking' => [
+    'enabled' => true,
+    'default_level' => 'medium',
+    'paths' => [
+        '/wp-admin' => 'WordPress Admin',
+        '/wp-admin/*' => 'WordPress Admin',
+        '/.env' => 'Environment File',
+        '/phpmyadmin' => 'phpMyAdmin',
+        '/actuator/*' => 'Spring Actuator',
+        // Add your own probe paths...
+    ],
+],
+```
+
+Disable with `THREAT_DETECTION_PROBE_TRACKING=false`.
+
+---
+
+## Safe Fields (False Positive Reduction)
+
+If specific form fields legitimately contain HTML, SQL keywords, or code (e.g., CMS editors, code snippet inputs), you can exclude them from scanning:
+
+```php
+// config/threat-detection.php
+'safe_fields' => ['content', 'body', 'html', 'description', 'code'],
+```
+
+Fields listed here are stripped from both query params and POST body before detection runs. Other fields on the same request are still fully scanned.
+
+---
+
+## Dashboard Authentication
+
+The dashboard and API support configurable auth guards via `.env`:
+
+```env
+# Options: none (default), auth, role, ip
+THREAT_DETECTION_DASHBOARD_GUARD=auth
+
+# For role-based guard (Spatie compatible):
+THREAT_DETECTION_DASHBOARD_GUARD=role
+THREAT_DETECTION_DASHBOARD_ROLE=admin
+
+# For IP-based guard:
+THREAT_DETECTION_DASHBOARD_GUARD=ip
+THREAT_DETECTION_DASHBOARD_IPS=127.0.0.1,10.0.0.0/8
+```
+
+The same options are available for API routes with `THREAT_DETECTION_API_GUARD`.
+
+When `guard=none` (default), the package logs a warning once per day to remind you to configure authentication.
 
 ---
 
@@ -593,9 +690,9 @@ The threat level for each pattern is determined automatically by matching keywor
 
 ```php
 'threat_levels' => [
-    'high' => ['XSS', 'SQL Injection', 'RCE', 'Aadhaar', 'PAN', 'Bank', 'Token', 'Password', 'JWT', 'Deserialization', 'Metadata Access', 'Evasion', 'Encoding'],
-    'medium' => ['Directory Traversal', 'LFI', 'SSRF', 'Sensitive', 'Config', 'Session', 'Command Chain', 'Recon Tool', 'Raw PHP'],
-    'low' => ['User-Agent', 'JS Redirect', 'SEO Bot', 'Empty', 'Rate', 'Command-line Downloader'],
+    'high' => ['XSS', 'SQL Injection', 'SQL DDL', 'SQL DML', 'SQL File', 'SQL Hex', 'RCE', ..., 'Shellshock', 'Spring4Shell', 'PowerShell', 'CRLF', 'Null Byte', 'SSTI', 'Java', 'LDAP', 'XPath', 'PHP assert', ...],
+    'medium' => ['Directory Traversal', 'LFI', 'SSRF', 'Sensitive', 'Config', ..., 'Open Redirect', 'LF Injection', 'GraphQL', 'Spring Boot Actuator', ...],
+    'low' => ['User-Agent', 'JS Redirect', 'SEO Bot', 'Empty', 'Rate', 'Command-line Downloader', 'DNS Rebinding'],
 ],
 ```
 
@@ -697,7 +794,7 @@ Threats below the confidence threshold for your detection mode are not logged (s
 composer test
 ```
 
-The package includes 86 tests covering detection patterns, middleware behavior, API endpoints, confidence scoring, exclusion rules, DDoS detection, evasion resistance (full-cycle), queue support, event dispatch, and input validation.
+The package includes 213 tests (640 assertions) covering detection patterns, middleware behavior, API endpoints, confidence scoring, exclusion rules, DDoS detection, evasion resistance, CVE patterns, LDAP/XPath/SSTI injection, bot/scanner detection, probe tracking, export commands, dashboard auth, safe fields, performance optimizations, and full-cycle HTTP-to-DB verification.
 
 ---
 

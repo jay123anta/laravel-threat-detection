@@ -2,6 +2,64 @@
 
 All notable changes to `jayanta/laravel-threat-detection` will be documented in this file.
 
+## [1.3.0] - 2026-03-23
+
+### Added
+
+- **45 New Detection Patterns** based on OWASP Top 10, CRS, CWE Top 25, and MITRE ATT&CK:
+  - CRLF injection, LF injection, null byte injection (CRS 921, CWE-113/626)
+  - Shellshock CVE-2014-6271, Spring4Shell CVE-2022-22965, PHPUnit RCE CVE-2017-9841
+  - Windows command injection: cmd.exe, PowerShell, wscript, cscript, net user (CRS 932)
+  - SVG/HTML event handler XSS, CSS expression XSS (CRS 941)
+  - SQL DDL injection (DROP/ALTER/CREATE/TRUNCATE), SQL DML injection (INSERT/UPDATE/DELETE)
+  - SQL file operations (INTO OUTFILE, LOAD_FILE), ORDER BY enumeration, HAVING injection, hex strings, UNHEX
+  - Java deserialization (base64 `rO0AB` + hex `aced0005` magic bytes)
+  - Expanded SSTI: mathematical probe `{{7*7}}`, Jinja2 import, config access, Velocity templates
+  - Open redirect detection (CWE-601)
+  - LDAP injection and LDAP OR injection (CWE-90)
+  - XPath attribute and function injection (CWE-643)
+  - PHP assert(), create_function(), preg_replace /e, php_uname(), allow_url_include (CRS 933)
+  - HTTP request smuggling CL+TE indicator (CRS 921)
+  - GraphQL introspection abuse (__schema, __type)
+  - Prototype pollution (__proto__, constructor.prototype)
+  - SSI injection (Server-Side Includes)
+  - SSRF bypass: hex-encoded localhost (0x7f000001), decimal localhost (2130706433), DNS rebinding (xip.io, nip.io, sslip.io)
+  - Drupalgeddon render array injection, Spring Boot actuator probe
+
+- **30 New Bot/Scanner Signatures** (23 → 53 total):
+  - Security scanners: Arachni, Netsparker, Qualys, Skipfish, Vega, Wapiti, JoomScan, DroopeScan, Commix, XSStrike, Dalfox, FeroxBuster, FFUF, HTTPX, Subfinder, Katana, Jaeles
+  - AI scrapers: GPTBot, ChatGPT, ClaudeBot, Anthropic, ByteSpider, Cohere, Common Crawl
+  - Headless browsers: HeadlessChrome, PhantomJS, Selenium, Puppeteer, Playwright
+  - Aggressive crawlers: AhrefsBot, SEMRushBot, MJ12Bot, DotBot, PetalBot
+
+- **404 Probe Tracking** — Detects reconnaissance probes hitting known vulnerable paths (`/wp-admin`, `/.env`, `/phpmyadmin`, `/actuator`, etc.). Logged with `[probe]` type tag. 50+ default probe paths. Configurable via `probe_tracking.paths` config. Enabled by default.
+
+- **Fail2ban Export** (`threat-detection:export-fail2ban`) — Export detected IPs in fail2ban-compatible format. Supports `--level`, `--since`, `--min-hits`, `--format=fail2ban|plain`, and `--jail` options.
+
+- **Blocklist Export** (`threat-detection:export-blocklist`) — Export IPs in multiple formats: `plain`, `csv`, `nginx` (deny directives), `apache` (Deny from directives). Same filtering options as fail2ban export.
+
+- **Dashboard Auth Guard** — Configurable authentication for dashboard and API routes via `THREAT_DETECTION_DASHBOARD_GUARD`. Four modes: `none` (default), `auth` (Laravel auth), `role` (Spatie-compatible hasRole), `ip` (IP whitelist). Logs warning when dashboard is accessed without auth.
+
+- **Safe Fields** — New `safe_fields` config to exclude specific form fields from scanning. Reduces false positives on CMS editors, code inputs, and search fields.
+
+- **Expanded Evasion Detection** — 3 new evasion patterns: HTML entity encoding (`&#60;`), Unicode escape sequences (`\u003c`), IIS Unicode encoding (`%u003c`).
+
+### Improved
+
+- **Normalization Pipeline** — Now includes HTML entity decoding, Unicode escape decoding, hex escape decoding, and recursive URL decoding (3 passes max) in addition to SQL comment stripping.
+- **Early Bailout** — `strpos()` pre-screen skips 150+ regex patterns for clean payloads with no suspicious characters. ~90% of legitimate requests skip regex entirely.
+- **Batch DB Inserts** — Multiple threats from a single request are written in one INSERT instead of N separate writes.
+- **Max Detections Per Request** — Configurable cap (`THREAT_DETECTION_MAX_DETECTIONS`) to stop scanning after N matches. Default: unlimited.
+- **127 new full-cycle tests** — 86 → 213 tests, 338 → 640 assertions. Covers all new patterns, bot detection, probe tracking, export commands, dashboard auth, safe fields, and performance.
+
+### Backward Compatibility
+
+- **Zero breaking changes.** All new features use sensible defaults.
+- Probe tracking is enabled by default but only adds log entries (passive).
+- Dashboard guard defaults to `none`, preserving existing behavior.
+- Safe fields defaults to empty array (all fields scanned, same as before).
+- Existing published config files continue to work without changes.
+
 ## [1.2.0] - 2026-03-11
 
 ### Added
