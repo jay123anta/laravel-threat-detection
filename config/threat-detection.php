@@ -111,6 +111,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Safe Fields (False Positive Reduction)
+    |--------------------------------------------------------------------------
+    |
+    | Field names listed here are excluded from threat detection scanning.
+    | Use this for fields that legitimately contain code, HTML, or SQL-like
+    | content (e.g., CMS editors, code snippet fields, search queries).
+    |
+    | This applies to both query parameters and POST body fields.
+    | Example: ['content', 'body', 'html', 'description', 'code', 'query_text']
+    |
+    */
+    'safe_fields' => [],
+
+    /*
+    |--------------------------------------------------------------------------
     | 404 Probe Tracking
     |--------------------------------------------------------------------------
     |

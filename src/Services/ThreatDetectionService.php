@@ -211,9 +211,16 @@ class ThreatDetectionService
     private function buildPayloadSegments(Request $request): array
     {
         $segments = ['query' => '', 'body' => '', 'headers' => ''];
+        $safeFields = config('threat-detection.safe_fields', []);
 
-        if (!empty($request->query())) {
-            $segments['query'] = json_encode($request->query(), JSON_UNESCAPED_SLASHES);
+        $queryData = $request->query();
+        if (!empty($queryData)) {
+            if (!empty($safeFields)) {
+                $queryData = array_diff_key($queryData, array_flip($safeFields));
+            }
+            if (!empty($queryData)) {
+                $segments['query'] = json_encode($queryData, JSON_UNESCAPED_SLASHES);
+            }
         }
 
         // For multipart file uploads, only scan non-file form fields
@@ -222,6 +229,9 @@ class ThreatDetectionService
             if (str_contains($request->header('Content-Type', ''), 'multipart/form-data')) {
                 $fileKeys = array_keys($request->allFiles());
                 $postData = array_diff_key($postData, array_flip($fileKeys));
+            }
+            if (!empty($safeFields)) {
+                $postData = array_diff_key($postData, array_flip($safeFields));
             }
             if (!empty($postData)) {
                 $segments['body'] = json_encode($postData, JSON_UNESCAPED_SLASHES);
