@@ -9,6 +9,7 @@ use JayAnta\ThreatDetection\Services\ConfidenceScorer;
 use JayAnta\ThreatDetection\Services\ExclusionRuleService;
 use JayAnta\ThreatDetection\Services\ProbeDetectorService;
 use JayAnta\ThreatDetection\Http\Middleware\ThreatDetectionMiddleware;
+use JayAnta\ThreatDetection\Http\Middleware\ThreatDashboardAuthMiddleware;
 use JayAnta\ThreatDetection\Console\Commands\EnrichThreatLogsCommand;
 use JayAnta\ThreatDetection\Console\Commands\ThreatStatsCommand;
 use JayAnta\ThreatDetection\Console\Commands\PurgeThreatLogsCommand;
@@ -76,6 +77,7 @@ class ThreatDetectionServiceProvider extends ServiceProvider
         /** @var Router $router */
         $router = $this->app->make(Router::class);
         $router->aliasMiddleware('threat-detect', ThreatDetectionMiddleware::class);
+        $router->aliasMiddleware('threat-dashboard-auth', ThreatDashboardAuthMiddleware::class);
     }
 
     protected function registerRoutes(): void
@@ -99,12 +101,25 @@ class ThreatDetectionServiceProvider extends ServiceProvider
                 array_unshift($middleware, "throttle:{$throttle}");
             }
 
+            // Inject dashboard auth guard for API routes
+            if (config('threat-detection.api.guard', 'none') !== 'none') {
+                $middleware[] = 'threat-dashboard-auth:api';
+            }
+
             config(['threat-detection.api.middleware' => $middleware]);
             $this->loadRoutesFrom(__DIR__ . '/../routes/api.php');
         }
 
         if (config('threat-detection.dashboard.enabled', false)
             && file_exists(__DIR__ . '/../routes/web.php')) {
+
+            // Inject dashboard auth guard for dashboard routes
+            $dashboardMiddleware = config('threat-detection.dashboard.middleware', ['web', 'auth']);
+            if (config('threat-detection.dashboard.guard', 'none') !== 'none') {
+                $dashboardMiddleware[] = 'threat-dashboard-auth:dashboard';
+            }
+            config(['threat-detection.dashboard.middleware' => $dashboardMiddleware]);
+
             $this->loadRoutesFrom(__DIR__ . '/../routes/web.php');
         }
     }

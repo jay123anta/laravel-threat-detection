@@ -468,6 +468,9 @@ return [
         'enabled' => env('THREAT_DETECTION_DASHBOARD', false),
         'path' => env('THREAT_DETECTION_DASHBOARD_PATH', 'threat-detection'),
         'middleware' => ['web', 'auth'],
+        'guard' => env('THREAT_DETECTION_DASHBOARD_GUARD', 'none'),  // none|auth|role|ip
+        'role' => env('THREAT_DETECTION_DASHBOARD_ROLE', 'admin'),   // used when guard=role
+        'allowed_ips' => array_filter(explode(',', env('THREAT_DETECTION_DASHBOARD_IPS', ''))),
     ],
 
     /*
@@ -486,6 +489,9 @@ return [
         'prefix' => env('THREAT_DETECTION_API_PREFIX', 'api/threat-detection'),
         'middleware' => ['api', 'auth:sanctum'],
         'throttle' => env('THREAT_DETECTION_API_THROTTLE', '60,1'),
+        'guard' => env('THREAT_DETECTION_API_GUARD', 'none'),  // none|auth|role|ip
+        'role' => env('THREAT_DETECTION_API_ROLE', 'admin'),   // used when guard=role
+        'allowed_ips' => array_filter(explode(',', env('THREAT_DETECTION_API_IPS', ''))),
     ],
 
     /*
