@@ -136,6 +136,21 @@ http://localhost:8000/?file=../../etc/passwd
 http://localhost:8000/?cmd=system('ls -la')
 ```
 
+**Shellshock (CVE-2014-6271):**
+```
+http://localhost:8000/?cmd=() { :;}; /bin/bash
+```
+
+**Windows Command Injection:**
+```
+http://localhost:8000/?cmd=powershell -c whoami
+```
+
+**DROP TABLE (SQL DDL):**
+```
+http://localhost:8000/?q=DROP TABLE users
+```
+
 > Use a route that actually exists in your app (like `/`). If the URL returns a 404, the middleware may not have run.
 
 ### Step 3: Check that threats were logged
