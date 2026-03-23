@@ -515,6 +515,54 @@ class ThreatDetectionService
 
             // Open Redirect (CWE-601, OWASP A01) — matches both query string and JSON-encoded formats
             '/(?:redirect|url|next|return|goto|dest)["\s]*[=:]["\s]*"?https?:\/\//i' => 'Open Redirect',
+
+            // ── Phase 2: Missing Attack Categories ───────────────────
+
+            // LDAP Injection (CWE-90, OWASP A05)
+            '/[)(|*\\\\].*\(.*=/s' => 'LDAP Injection',
+            '/\(\|[^)]*\([^)]*=/' => 'LDAP OR Injection',
+
+            // XPath Injection (CWE-643)
+            '/\[\s*@\w+\s*=/' => 'XPath Attribute Injection',
+            '/\b(contains|substring|normalize-space)\s*\(/i' => 'XPath Function Injection',
+
+            // PHP Extended Patterns (CRS 933)
+            '/\bassert\s*\(/i' => 'PHP assert() Execution',
+            '/\bcreate_function\s*\(/i' => 'PHP create_function() Execution',
+            '/\bpreg_replace\s*\([^)]*\/[^)]*e/i' => 'PHP preg_replace /e Execution',
+            '/\bphp_uname\s*\(/i' => 'PHP System Info Disclosure',
+            '/\bget_current_user\s*\(/i' => 'PHP User Info Disclosure',
+            '/\ballow_url_include\b/i' => 'PHP Remote Include Toggle',
+
+            // HTTP Request Smuggling indicators (CRS 921)
+            '/Transfer-Encoding\s*:.*chunked.*Content-Length/is' => 'HTTP Request Smuggling CL+TE',
+
+            // Additional SQL patterns (CRS 942)
+            '/\bORDER\s+BY\s+\d+/i' => 'SQL ORDER BY Enumeration',
+            '/\bGROUP\s+BY\s+.{0,50}\bHAVING\b/i' => 'SQL HAVING Injection',
+            '/0x[0-9a-fA-F]{8,}/i' => 'SQL Hex Encoded String',
+            '/\bUNHEX\s*\(/i' => 'SQL UNHEX Function',
+
+            // GraphQL Introspection abuse (OWASP API7)
+            '/__schema\b/i' => 'GraphQL Introspection',
+            '/__type\b/i' => 'GraphQL Type Introspection',
+
+            // Prototype Pollution (JavaScript apps)
+            '/__proto__/' => 'Prototype Pollution',
+            '/constructor\s*\[\s*["\']prototype/' => 'Prototype Chain Access',
+
+            // SSI Injection (Server-Side Includes)
+            '/<!--#\s*(exec|include|echo|config)\b/i' => 'SSI Injection',
+
+            // DNS Rebinding / SSRF bypass
+            '/0x7f000001/i' => 'SSRF Hex Encoded Localhost',
+            '/2130706433/' => 'SSRF Decimal Encoded Localhost',
+            '/\.(xip|nip|sslip)\.io\b/i' => 'SSRF DNS Rebinding Service',
+
+            // Known exploit endpoint probes
+            '/vendor\/phpunit\/phpunit/i' => 'PHPUnit RCE Probe CVE-2017-9841',
+            '/\/actuator\b/i' => 'Spring Boot Actuator Probe',
+            '/#(post_render|lazy_builder|pre_render)/i' => 'Drupalgeddon Render Injection',
         ];
     }
 

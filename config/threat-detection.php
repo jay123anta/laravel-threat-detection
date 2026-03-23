@@ -170,9 +170,9 @@ return [
     |
     */
     'threat_levels' => [
-        'high' => ['XSS', 'SQL Injection', 'SQL DDL', 'SQL DML', 'SQL File', 'RCE', 'Aadhaar', 'PAN', 'Bank', 'Token', 'Password', 'JWT', 'Deserialization', 'Metadata Access', 'Evasion', 'Encoding', 'Shellshock', 'Spring4Shell', 'PowerShell', 'Windows CMD', 'CRLF', 'Null Byte', 'SSTI', 'Java'],
-        'medium' => ['Directory Traversal', 'LFI', 'SSRF', 'Sensitive', 'Config', 'Session', 'Command Chain', 'Recon Tool', 'Raw PHP', 'Open Redirect', 'LF Injection', 'Windows Script', 'Windows Net'],
-        'low' => ['User-Agent', 'JS Redirect', 'SEO Bot', 'Empty', 'Rate', 'Command-line Downloader'],
+        'high' => ['XSS', 'SQL Injection', 'SQL DDL', 'SQL DML', 'SQL File', 'SQL Hex', 'RCE', 'Aadhaar', 'PAN', 'Bank', 'Token', 'Password', 'JWT', 'Deserialization', 'Metadata Access', 'Evasion', 'Encoding', 'Shellshock', 'Spring4Shell', 'PowerShell', 'Windows CMD', 'CRLF', 'Null Byte', 'SSTI', 'Java', 'LDAP', 'XPath', 'PHP assert', 'PHP create_function', 'PHP preg_replace', 'HTTP Request Smuggling', 'Prototype Pollution', 'Prototype Chain', 'SSI Injection', 'Drupalgeddon', 'PHPUnit RCE'],
+        'medium' => ['Directory Traversal', 'LFI', 'SSRF', 'Sensitive', 'Config', 'Session', 'Command Chain', 'Recon Tool', 'Raw PHP', 'Open Redirect', 'LF Injection', 'Windows Script', 'Windows Net', 'SQL ORDER', 'SQL HAVING', 'SQL UNHEX', 'GraphQL', 'Spring Boot Actuator', 'PHP System Info', 'PHP User Info', 'PHP Remote Include'],
+        'low' => ['User-Agent', 'JS Redirect', 'SEO Bot', 'Empty', 'Rate', 'Command-line Downloader', 'DNS Rebinding'],
     ],
 
     /*
