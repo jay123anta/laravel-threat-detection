@@ -47,9 +47,15 @@ All notable changes to `jayanta/laravel-threat-detection` will be documented in 
 ### Improved
 
 - **Normalization Pipeline** — Now includes HTML entity decoding, Unicode escape decoding, hex escape decoding, and recursive URL decoding (3 passes max) in addition to SQL comment stripping.
-- **Early Bailout** — `strpos()` pre-screen skips 150+ regex patterns for clean payloads with no suspicious characters. ~90% of legitimate requests skip regex entirely.
+- **Category-Based Lazy Pattern Loading** — Pre-checks keywords per attack category before running regex. Only relevant categories' patterns execute. Reduces regex evaluations by ~80% on average.
+- **Early Bailout** — Keyword-based pre-screen skips 175+ regex patterns for clean payloads. Content-type aware — doesn't false-trigger on JSON structural characters.
+- **Browser UA Short-Circuit** — Normal browsers (Mozilla/Gecko) skip 70+ scanner/bot str_contains checks. Only headless browser markers are checked.
+- **Static Pattern Caching** — Default patterns, evasion patterns, and scanner/bot arrays cached as static properties (no array recreation per request).
+- **Probe Path Hash Lookup** — Exact probe paths use O(1) hash table. Only wildcard paths use fnmatch.
+- **Payload Deduplication** — Segments built once and reused for both detection and payload logging (eliminated 3 redundant json_encode calls).
 - **Batch DB Inserts** — Multiple threats from a single request are written in one INSERT instead of N separate writes.
 - **Max Detections Per Request** — Configurable cap (`THREAT_DETECTION_MAX_DETECTIONS`) to stop scanning after N matches. Default: unlimited.
+- **Cache Key Optimization** — Direct string keys for dedup cache instead of md5 hashing.
 - **127 new full-cycle tests** — 86 → 213 tests, 338 → 640 assertions. Covers all new patterns, bot detection, probe tracking, export commands, dashboard auth, safe fields, and performance.
 
 ### Backward Compatibility

@@ -249,7 +249,7 @@ php artisan route:clear
 - **Blocklist Export** — Export IPs in nginx deny, Apache deny, CSV, or plain format
 - **CSV Export** — One-click threat log export (up to 10,000 rows)
 - **Correlation Analysis** — Detect coordinated attacks and attack campaigns across IPs
-- **Performance Optimized** — Early bailout skips regex for clean requests, batch DB inserts, configurable max detections per request
+- **Performance Optimized** — Category-based lazy pattern loading (only runs regex for relevant attack categories), early bailout for clean requests, browser UA short-circuit (skips 70+ checks for normal browsers), probe path hash lookup, batch DB inserts, configurable max detections per request
 - **Database Agnostic** — MySQL, PostgreSQL, SQLite, SQL Server
 - **Zero Config** — Works out of the box with sensible defaults
 - **Safe by Design** — The middleware catches its own errors. If detection fails, your app keeps running. Requests are never blocked.
