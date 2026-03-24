@@ -8,6 +8,7 @@
 
 /.github export-ignore
 /tests export-ignore
+/docs export-ignore
 phpunit.xml export-ignore
 .gitignore export-ignore
 .phpunit.result.cache export-ignore
