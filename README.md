@@ -18,6 +18,16 @@ A middleware-based threat detection and logging system for Laravel. Drop it in, 
 
 ---
 
+## What This Is NOT
+
+- **Not a WAF.** It does not block, filter, or modify any request. Use Cloudflare, mod_security, or a proper WAF for that.
+- **Not a replacement for secure coding.** Parameterized queries, input validation, output escaping — those are your real defenses. This package assumes your code is already secure.
+- **Not a Cloudflare replacement.** If you can use Cloudflare or a similar edge service, use it. This provides application-level visibility that edge services don't — you can see exactly what's hitting your routes, with full request context.
+
+**What it IS:** A passive monitoring layer that sits alongside your existing security. Think of it as a security camera — it doesn't lock the door, but it shows you who's trying to get in, how often, and what techniques they're using. That visibility helps you make informed decisions (IP blocking via fail2ban, rate limiting, geo-blocking).
+
+---
+
 ## Requirements
 
 - PHP 8.1+
