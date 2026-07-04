@@ -3,6 +3,7 @@
 namespace JayAnta\ThreatDetection\Tests\Unit;
 
 use JayAnta\ThreatDetection\Services\ConfidenceScorer;
+use PHPUnit\Framework\Attributes\Test;
 use JayAnta\ThreatDetection\Tests\TestCase;
 
 class ConfidenceScorerTest extends TestCase
@@ -15,7 +16,7 @@ class ConfidenceScorerTest extends TestCase
         $this->scorer = new ConfidenceScorer();
     }
 
-    /** @test */
+    #[Test]
     public function it_returns_zero_for_empty_matches(): void
     {
         $result = $this->scorer->calculate([]);
@@ -24,7 +25,7 @@ class ConfidenceScorerTest extends TestCase
         $this->assertEquals('low', $result['label']);
     }
 
-    /** @test */
+    #[Test]
     public function single_match_gets_base_score(): void
     {
         $matches = [['XSS Script Tag', 'high', 'query']];
@@ -35,7 +36,7 @@ class ConfidenceScorerTest extends TestCase
         $this->assertEquals('medium', $result['label']);
     }
 
-    /** @test */
+    #[Test]
     public function multiple_matches_increase_score(): void
     {
         $matches = [
@@ -50,7 +51,7 @@ class ConfidenceScorerTest extends TestCase
         $this->assertEquals('high', $result['label']);
     }
 
-    /** @test */
+    #[Test]
     public function extra_matches_capped_at_three(): void
     {
         $matches = [
@@ -67,7 +68,7 @@ class ConfidenceScorerTest extends TestCase
         $this->assertEquals('very_high', $result['label']);
     }
 
-    /** @test */
+    #[Test]
     public function context_weight_adds_bonus(): void
     {
         $matches = [['XSS Script Tag', 'medium', 'query']];
@@ -80,7 +81,7 @@ class ConfidenceScorerTest extends TestCase
         $this->assertEquals('medium', $result['label']);
     }
 
-    /** @test */
+    #[Test]
     public function attack_tool_ua_adds_bonus(): void
     {
         $matches = [['XSS Script Tag', 'medium', 'query']];
@@ -91,7 +92,7 @@ class ConfidenceScorerTest extends TestCase
         $this->assertEquals('medium', $result['label']);
     }
 
-    /** @test */
+    #[Test]
     public function strict_mode_adds_bonus(): void
     {
         $matches = [['XSS Script Tag', 'medium', 'query']];
@@ -102,7 +103,7 @@ class ConfidenceScorerTest extends TestCase
         $this->assertEquals($balanced['score'] + 10, $strict['score']);
     }
 
-    /** @test */
+    #[Test]
     public function relaxed_mode_subtracts_penalty(): void
     {
         $matches = [['XSS Script Tag', 'medium', 'query']];
@@ -113,7 +114,7 @@ class ConfidenceScorerTest extends TestCase
         $this->assertEquals($balanced['score'] - 10, $relaxed['score']);
     }
 
-    /** @test */
+    #[Test]
     public function score_is_clamped_to_100(): void
     {
         $matches = [
@@ -129,7 +130,7 @@ class ConfidenceScorerTest extends TestCase
         $this->assertLessThanOrEqual(100, $result['score']);
     }
 
-    /** @test */
+    #[Test]
     public function score_is_clamped_to_zero(): void
     {
         $matches = [['Minor', 'low', 'body']];
@@ -138,7 +139,7 @@ class ConfidenceScorerTest extends TestCase
         $this->assertGreaterThanOrEqual(0, $result['score']);
     }
 
-    /** @test */
+    #[Test]
     public function it_detects_attack_tool_user_agents(): void
     {
         $this->assertTrue($this->scorer->isAttackToolUserAgent('sqlmap/1.5'));
@@ -148,7 +149,7 @@ class ConfidenceScorerTest extends TestCase
         $this->assertFalse($this->scorer->isAttackToolUserAgent(''));
     }
 
-    /** @test */
+    #[Test]
     public function score_to_label_mapping_is_correct(): void
     {
         $this->assertEquals('low', $this->scorer->scoreToLabel(0));

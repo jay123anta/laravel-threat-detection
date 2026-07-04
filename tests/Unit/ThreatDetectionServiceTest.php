@@ -3,6 +3,7 @@
 namespace JayAnta\ThreatDetection\Tests\Unit;
 
 use JayAnta\ThreatDetection\Services\ThreatDetectionService;
+use PHPUnit\Framework\Attributes\Test;
 use JayAnta\ThreatDetection\Tests\TestCase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -18,7 +19,7 @@ class ThreatDetectionServiceTest extends TestCase
         $this->service = new ThreatDetectionService();
     }
 
-    /** @test */
+    #[Test]
     public function it_returns_non_empty_default_patterns(): void
     {
         $patterns = $this->service->getDefaultThreatPatterns();
@@ -33,7 +34,7 @@ class ThreatDetectionServiceTest extends TestCase
         }
     }
 
-    /** @test */
+    #[Test]
     public function it_detects_sql_injection(): void
     {
         $payload = "QUERY: {\"q\":\"' UNION SELECT * FROM users--\"}";
@@ -47,7 +48,7 @@ class ThreatDetectionServiceTest extends TestCase
         );
     }
 
-    /** @test */
+    #[Test]
     public function it_detects_xss_script_tag(): void
     {
         $payload = "BODY: {\"msg\":\"<script>alert(1)</script>\"}";
@@ -58,7 +59,7 @@ class ThreatDetectionServiceTest extends TestCase
         $this->assertContains('XSS Script Tag', $labels);
     }
 
-    /** @test */
+    #[Test]
     public function it_detects_directory_traversal(): void
     {
         $payload = "QUERY: {\"file\":\"../../etc/passwd\"}";
@@ -69,7 +70,7 @@ class ThreatDetectionServiceTest extends TestCase
         $this->assertContains('Directory Traversal', $labels);
     }
 
-    /** @test */
+    #[Test]
     public function it_detects_rce_shell_functions(): void
     {
         $payload = "BODY: {\"cmd\":\"system('ls -la')\"}";
@@ -80,7 +81,7 @@ class ThreatDetectionServiceTest extends TestCase
         $this->assertContains('RCE Shell Function', $labels);
     }
 
-    /** @test */
+    #[Test]
     public function it_returns_empty_for_normal_text(): void
     {
         $payload = "QUERY: {\"search\":\"latest news\",\"page\":\"1\"}";
@@ -89,7 +90,7 @@ class ThreatDetectionServiceTest extends TestCase
         $this->assertEmpty($results, 'Normal text should not trigger any threat patterns');
     }
 
-    /** @test */
+    #[Test]
     public function each_result_has_correct_structure(): void
     {
         $payload = "BODY: {\"q\":\"<script>alert('xss')</script>\"}";
@@ -105,7 +106,7 @@ class ThreatDetectionServiceTest extends TestCase
         }
     }
 
-    /** @test */
+    #[Test]
     public function it_suppresses_auth_patterns_on_auth_paths(): void
     {
         $payload = "BODY: password=mysecretpassword123";
@@ -120,7 +121,7 @@ class ThreatDetectionServiceTest extends TestCase
         $this->assertContains('Password Exposure', $nonAuthLabels);
     }
 
-    /** @test */
+    #[Test]
     public function it_logs_ddos_when_threshold_exceeded(): void
     {
         $this->createThreatLogsTable();
@@ -149,7 +150,7 @@ class ThreatDetectionServiceTest extends TestCase
 
     // ── Evasion Resistance Tests ──
 
-    /** @test */
+    #[Test]
     public function it_detects_sql_comment_evasion(): void
     {
         $segments = ['query' => 'UNION/**/SELECT'];
@@ -159,7 +160,7 @@ class ThreatDetectionServiceTest extends TestCase
         $this->assertContains('SQL Comment Evasion', $labels);
     }
 
-    /** @test */
+    #[Test]
     public function it_detects_sql_char_encoding(): void
     {
         $segments = ['query' => "CHAR(39)"];
@@ -169,7 +170,7 @@ class ThreatDetectionServiceTest extends TestCase
         $this->assertContains('SQL Injection CHAR Encoding', $labels);
     }
 
-    /** @test */
+    #[Test]
     public function it_detects_double_url_encoding(): void
     {
         $segments = ['query' => '%2527'];
@@ -179,7 +180,7 @@ class ThreatDetectionServiceTest extends TestCase
         $this->assertContains('Double URL Encoding', $labels);
     }
 
-    /** @test */
+    #[Test]
     public function it_catches_obfuscated_sql_after_normalization(): void
     {
         $segments = ['query' => 'UNION/**/SELECT'];
@@ -190,7 +191,7 @@ class ThreatDetectionServiceTest extends TestCase
         $this->assertContains('SQL Injection UNION', $labels);
     }
 
-    /** @test */
+    #[Test]
     public function it_does_not_false_positive_on_double_dash(): void
     {
         $segments = ['body' => 'font--bold'];

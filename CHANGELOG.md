@@ -2,6 +2,18 @@
 
 All notable changes to `jayanta/laravel-threat-detection` will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **Laravel 13 support** — Added `^13.0` to all `illuminate/*` constraints. The package now supports Laravel 10, 11, 12, and 13.
+
+### Changed
+
+- Bumped `orchestra/testbench` to allow `^11.0` (Laravel 13) and `phpunit/phpunit` to allow `^12.0`.
+- Converted test methods from the `/** @test */` docblock annotation to the `#[Test]` attribute, required by PHPUnit 12. Compatible with PHPUnit 10–12.
+- CI matrix now tests Laravel 13 on PHP 8.3 and 8.4.
+
 ## [1.2.0] - 2026-03-11
 
 ### Added

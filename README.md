@@ -21,7 +21,7 @@ A middleware-based threat detection and logging system for Laravel. Drop it in, 
 ## Requirements
 
 - PHP 8.1+
-- Laravel 10.x, 11.x, or 12.x
+- Laravel 10.x, 11.x, 12.x, or 13.x
 - Any database supported by Laravel (MySQL, PostgreSQL, SQLite, SQL Server)
 
 ---
@@ -67,7 +67,7 @@ Look for `create_threat_logs_table`, `add_confidence_to_threat_logs_table`, and 
 
 The middleware is what scans requests. You need to add it to your `web` middleware group.
 
-**If you use Laravel 11 or 12** — open `bootstrap/app.php`:
+**If you use Laravel 11, 12, or 13** — open `bootstrap/app.php`:
 
 ```php
 ->withMiddleware(function (Middleware $middleware) {

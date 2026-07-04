@@ -2,6 +2,7 @@
 
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
+use PHPUnit\Framework\Attributes\Test;
 use JayAnta\ThreatDetection\Tests\TestCase;
 use Illuminate\Support\Facades\DB;
 
@@ -33,7 +34,7 @@ class ApiEndpointTest extends TestCase
         DB::table('threat_logs')->insert($rows);
     }
 
-    /** @test */
+    #[Test]
     public function stats_endpoint_returns_correct_structure(): void
     {
         $this->seedThreats(3);
@@ -58,7 +59,7 @@ class ApiEndpointTest extends TestCase
         $this->assertEquals(3, $response->json('data.total_threats'));
     }
 
-    /** @test */
+    #[Test]
     public function threats_endpoint_returns_paginated_data(): void
     {
         $this->seedThreats(25);
@@ -82,7 +83,7 @@ class ApiEndpointTest extends TestCase
         $this->assertEquals(25, $data['total']);
     }
 
-    /** @test */
+    #[Test]
     public function threats_endpoint_supports_level_filter(): void
     {
         $this->seedThreats(12);
@@ -97,7 +98,7 @@ class ApiEndpointTest extends TestCase
         }
     }
 
-    /** @test */
+    #[Test]
     public function stats_returns_zeros_when_empty(): void
     {
         $response = $this->getJson('/api/threat-detection/stats');
@@ -108,7 +109,7 @@ class ApiEndpointTest extends TestCase
         $this->assertEquals(0, $data['unique_ips']);
     }
 
-    /** @test */
+    #[Test]
     public function live_count_endpoint_works(): void
     {
         $this->seedThreats(3);
@@ -122,7 +123,7 @@ class ApiEndpointTest extends TestCase
         $this->assertEquals(3, $response->json('data.count'));
     }
 
-    /** @test */
+    #[Test]
     public function show_endpoint_returns_single_threat(): void
     {
         $this->seedThreats(1);
@@ -137,7 +138,7 @@ class ApiEndpointTest extends TestCase
             ]);
     }
 
-    /** @test */
+    #[Test]
     public function show_endpoint_returns_404_for_missing_threat(): void
     {
         $response = $this->getJson('/api/threat-detection/threats/999');
@@ -145,7 +146,7 @@ class ApiEndpointTest extends TestCase
         $response->assertStatus(404);
     }
 
-    /** @test */
+    #[Test]
     public function mark_false_positive_creates_exclusion_rule(): void
     {
         $this->seedThreats(1);
@@ -169,7 +170,7 @@ class ApiEndpointTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function mark_false_positive_returns_404_for_missing_threat(): void
     {
         $response = $this->postJson('/api/threat-detection/threats/999/false-positive');
@@ -177,7 +178,7 @@ class ApiEndpointTest extends TestCase
         $response->assertStatus(404);
     }
 
-    /** @test */
+    #[Test]
     public function exclusion_rules_endpoint_lists_rules(): void
     {
         DB::table('threat_exclusion_rules')->insert([
@@ -195,7 +196,7 @@ class ApiEndpointTest extends TestCase
         $this->assertCount(1, $response->json('data'));
     }
 
-    /** @test */
+    #[Test]
     public function delete_exclusion_rule_works(): void
     {
         $id = DB::table('threat_exclusion_rules')->insertGetId([
@@ -213,7 +214,7 @@ class ApiEndpointTest extends TestCase
         $this->assertDatabaseMissing('threat_exclusion_rules', ['id' => $id]);
     }
 
-    /** @test */
+    #[Test]
     public function delete_exclusion_rule_returns_404_for_missing(): void
     {
         $response = $this->deleteJson('/api/threat-detection/exclusion-rules/999');
@@ -221,7 +222,7 @@ class ApiEndpointTest extends TestCase
         $response->assertStatus(404);
     }
 
-    /** @test */
+    #[Test]
     public function summary_endpoint_returns_correct_structure(): void
     {
         $this->seedThreats(5);
@@ -243,7 +244,7 @@ class ApiEndpointTest extends TestCase
             ]);
     }
 
-    /** @test */
+    #[Test]
     public function by_country_endpoint_returns_data(): void
     {
         DB::table('threat_logs')->insert([
@@ -268,7 +269,7 @@ class ApiEndpointTest extends TestCase
         $this->assertEquals('US', $data[0]['country_code']);
     }
 
-    /** @test */
+    #[Test]
     public function by_cloud_provider_endpoint_returns_data(): void
     {
         DB::table('threat_logs')->insert([
@@ -292,7 +293,7 @@ class ApiEndpointTest extends TestCase
         $this->assertEquals('AWS', $data[0]['cloud_provider']);
     }
 
-    /** @test */
+    #[Test]
     public function top_ips_endpoint_returns_data_with_limit(): void
     {
         $this->seedThreats(10);
@@ -306,7 +307,7 @@ class ApiEndpointTest extends TestCase
         $this->assertLessThanOrEqual(5, count($data));
     }
 
-    /** @test */
+    #[Test]
     public function timeline_endpoint_returns_grouped_data(): void
     {
         $this->seedThreats(3);
@@ -318,7 +319,7 @@ class ApiEndpointTest extends TestCase
             ->assertJsonStructure(['success', 'data']);
     }
 
-    /** @test */
+    #[Test]
     public function ip_stats_endpoint_returns_stats(): void
     {
         $this->seedThreats(3);
@@ -338,7 +339,7 @@ class ApiEndpointTest extends TestCase
             ]);
     }
 
-    /** @test */
+    #[Test]
     public function ip_stats_requires_valid_ip(): void
     {
         $response = $this->getJson('/api/threat-detection/ip-stats');
@@ -346,7 +347,7 @@ class ApiEndpointTest extends TestCase
         $response->assertStatus(422);
     }
 
-    /** @test */
+    #[Test]
     public function correlation_endpoint_returns_data(): void
     {
         $this->seedThreats(5);
@@ -361,7 +362,7 @@ class ApiEndpointTest extends TestCase
             ]);
     }
 
-    /** @test */
+    #[Test]
     public function export_endpoint_returns_csv(): void
     {
         $this->seedThreats(3);
@@ -374,7 +375,7 @@ class ApiEndpointTest extends TestCase
         $this->assertStringContainsString('ID,Time,"IP Address"', $response->getContent());
     }
 
-    /** @test */
+    #[Test]
     public function threats_endpoint_supports_false_positive_filter(): void
     {
         $this->seedThreats(5);
@@ -388,7 +389,7 @@ class ApiEndpointTest extends TestCase
         $this->assertTrue((bool) $threats[0]['is_false_positive']);
     }
 
-    /** @test */
+    #[Test]
     public function threats_endpoint_supports_date_filters(): void
     {
         $this->seedThreats(3);
@@ -402,7 +403,7 @@ class ApiEndpointTest extends TestCase
         $this->assertEquals(2, $response->json('data.total'));
     }
 
-    /** @test */
+    #[Test]
     public function threats_endpoint_validates_per_page(): void
     {
         $response = $this->getJson('/api/threat-detection/threats?per_page=999999');
@@ -410,7 +411,7 @@ class ApiEndpointTest extends TestCase
         $response->assertStatus(422);
     }
 
-    /** @test */
+    #[Test]
     public function top_ips_validates_limit(): void
     {
         $response = $this->getJson('/api/threat-detection/top-ips?limit=999');
@@ -418,7 +419,7 @@ class ApiEndpointTest extends TestCase
         $response->assertStatus(422);
     }
 
-    /** @test */
+    #[Test]
     public function timeline_validates_days(): void
     {
         $response = $this->getJson('/api/threat-detection/timeline?days=0');

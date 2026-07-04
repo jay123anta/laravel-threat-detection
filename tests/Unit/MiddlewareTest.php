@@ -4,6 +4,7 @@ namespace JayAnta\ThreatDetection\Tests\Unit;
 
 use JayAnta\ThreatDetection\Http\Middleware\ThreatDetectionMiddleware;
 use JayAnta\ThreatDetection\Services\ThreatDetectionService;
+use PHPUnit\Framework\Attributes\Test;
 use JayAnta\ThreatDetection\Tests\TestCase;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -14,8 +15,8 @@ class MiddlewareTest extends TestCase
     {
         parent::setUp();
 
-        // Mock the service to prevent DB writes in middleware unit tests
-        $mock = $this->createMock(ThreatDetectionService::class);
+        // Stub the service to prevent DB writes in middleware unit tests
+        $mock = $this->createStub(ThreatDetectionService::class);
         $mock->method('detectAndLogFromRequest');
         $this->app->instance(ThreatDetectionService::class, $mock);
         $this->app->instance('threat-detection', $mock);
@@ -32,7 +33,7 @@ class MiddlewareTest extends TestCase
         return $middleware->handle($request, fn($req) => new Response('OK', 200));
     }
 
-    /** @test */
+    #[Test]
     public function it_passes_request_through(): void
     {
         $request = Request::create('/test-path', 'GET');
@@ -43,7 +44,7 @@ class MiddlewareTest extends TestCase
         $this->assertEquals('OK', $response->getContent());
     }
 
-    /** @test */
+    #[Test]
     public function it_skips_when_disabled(): void
     {
         $request = Request::create('/test', 'GET', ['q' => "' UNION SELECT * FROM users"]);
@@ -55,7 +56,7 @@ class MiddlewareTest extends TestCase
         $this->assertEquals(200, $response->getStatusCode());
     }
 
-    /** @test */
+    #[Test]
     public function it_skips_whitelisted_ips(): void
     {
         $request = Request::create('/test', 'GET', ['q' => "'; DROP TABLE users;--"]);
@@ -68,7 +69,7 @@ class MiddlewareTest extends TestCase
         $this->assertEquals(200, $response->getStatusCode());
     }
 
-    /** @test */
+    #[Test]
     public function it_skips_paths_matching_skip_patterns(): void
     {
         $request = Request::create('/public/assets/logo.png', 'GET');
@@ -80,7 +81,7 @@ class MiddlewareTest extends TestCase
         $this->assertEquals(200, $response->getStatusCode());
     }
 
-    /** @test */
+    #[Test]
     public function it_sets_content_path_attribute(): void
     {
         $request = Request::create('/admin/posts/edit', 'POST');
@@ -92,7 +93,7 @@ class MiddlewareTest extends TestCase
         $this->assertTrue($request->attributes->get('threat-detection:content-path', false));
     }
 
-    /** @test */
+    #[Test]
     public function it_does_not_set_content_path_for_other_routes(): void
     {
         $request = Request::create('/api/users', 'GET');
@@ -104,7 +105,7 @@ class MiddlewareTest extends TestCase
         $this->assertNull($request->attributes->get('threat-detection:content-path'));
     }
 
-    /** @test */
+    #[Test]
     public function it_only_scans_paths_in_only_paths_whitelist(): void
     {
         // Mock should NOT receive detectAndLogFromRequest for non-matching path
@@ -122,7 +123,7 @@ class MiddlewareTest extends TestCase
         $this->assertEquals(200, $response->getStatusCode());
     }
 
-    /** @test */
+    #[Test]
     public function it_scans_matching_path_in_only_paths_whitelist(): void
     {
         // Mock SHOULD receive detectAndLogFromRequest for matching path
@@ -140,7 +141,7 @@ class MiddlewareTest extends TestCase
         $this->assertEquals(200, $response->getStatusCode());
     }
 
-    /** @test */
+    #[Test]
     public function it_scans_all_paths_when_only_paths_is_empty(): void
     {
         // Mock SHOULD receive detectAndLogFromRequest when only_paths is empty (default)
@@ -158,7 +159,7 @@ class MiddlewareTest extends TestCase
         $this->assertEquals(200, $response->getStatusCode());
     }
 
-    /** @test */
+    #[Test]
     public function skip_paths_still_applies_within_only_paths(): void
     {
         // Path matches only_paths BUT also matches skip_paths — should be skipped
