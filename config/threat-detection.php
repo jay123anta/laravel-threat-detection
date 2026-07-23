@@ -73,10 +73,13 @@ return [
     ],
 
     'skip_paths' => [
-        'public/assets/*',
-        'public/images/*',
-        'public/css/*',
-        'public/js/*',
+        // Match against $request->path(), which has no leading "public/" segment.
+        'assets/*',
+        'images/*',
+        'css/*',
+        'js/*',
+        'fonts/*',
+        'build/*',
         'api/healthcheck',
         'favicon.ico',
         '_debugbar/*',
@@ -194,6 +197,12 @@ return [
             '/*.aspx' => 'ASPX Probe',
             '/*.jsp' => 'JSP Probe',
 
+            // Framework / dependency exploit paths (path itself is the attack)
+            '/vendor/phpunit/*' => 'PHPUnit RCE Probe',
+            '/.aws/credentials' => 'AWS Credentials File',
+            '/.ssh/id_rsa' => 'SSH Private Key Probe',
+            '/.git/*' => 'Git Directory Probe',
+
             // Spring / Java
             '/actuator' => 'Spring Actuator',
             '/actuator/*' => 'Spring Actuator',
@@ -255,7 +264,7 @@ return [
     | Supports CIDR notation.
     |
     */
-    'whitelisted_ips' => array_filter(explode(',', env('THREAT_DETECTION_WHITELISTED_IPS', ''))),
+    'whitelisted_ips' => array_filter(array_map('trim', explode(',', env('THREAT_DETECTION_WHITELISTED_IPS', '')))),
 
     /*
     |--------------------------------------------------------------------------
@@ -279,8 +288,8 @@ return [
     |
     */
     'threat_levels' => [
-        'high' => ['XSS', 'SQL Injection', 'SQL DDL', 'SQL DML', 'SQL File', 'SQL Hex', 'RCE', 'Aadhaar', 'PAN', 'Bank', 'Token', 'Password', 'JWT', 'Deserialization', 'Metadata Access', 'Evasion', 'Encoding', 'Shellshock', 'Spring4Shell', 'PowerShell', 'Windows CMD', 'CRLF', 'Null Byte', 'SSTI', 'Java', 'LDAP', 'XPath', 'PHP assert', 'PHP create_function', 'PHP preg_replace', 'HTTP Request Smuggling', 'Prototype Pollution', 'Prototype Chain', 'SSI Injection', 'Drupalgeddon', 'PHPUnit RCE'],
-        'medium' => ['Directory Traversal', 'LFI', 'SSRF', 'Sensitive', 'Config', 'Session', 'Command Chain', 'Recon Tool', 'Raw PHP', 'Open Redirect', 'LF Injection', 'Windows Script', 'Windows Net', 'SQL ORDER', 'SQL HAVING', 'SQL UNHEX', 'GraphQL', 'Spring Boot Actuator', 'PHP System Info', 'PHP User Info', 'PHP Remote Include'],
+        'high' => ['XSS', 'SQL Injection', 'SQL DDL', 'SQL DML', 'SQL File', 'SQL Hex', 'RCE', 'Aadhaar', 'PAN', 'Bank', 'Token', 'Password', 'JWT', 'Deserialization', 'Serialization', 'Metadata Access', 'Evasion', 'Encoding', 'Shellshock', 'Spring4Shell', 'PowerShell', 'Windows CMD', 'CRLF', 'Null Byte', 'SSTI', 'LDAP', 'XPath', 'PHP assert', 'PHP create_function', 'PHP preg_replace', 'HTTP Request Smuggling', 'Prototype Pollution', 'Prototype Chain', 'SSI Injection', 'Drupalgeddon', 'PHPUnit RCE', 'Log4j', 'JNDI', 'XXE', 'IFSC', 'Web Shell', 'File Manager', 'Reverse Shell', 'Encoded Eval', 'SQLi', 'Time-based', 'Benchmark', 'Sleep Attack', 'API Key'],
+        'medium' => ['Directory Traversal', 'LFI', 'SSRF', 'Sensitive', 'Config', 'Session', 'Command Chain', 'Recon Tool', 'Raw PHP', 'Open Redirect', 'LF Injection', 'Windows Script', 'Windows Net', 'SQL ORDER', 'SQL HAVING', 'SQL UNHEX', 'GraphQL', 'Spring Boot Actuator', 'PHP System Info', 'PHP User Info', 'PHP Remote Include', 'File Inclusion', 'JavaScript URI'],
         'low' => ['User-Agent', 'JS Redirect', 'SEO Bot', 'Empty', 'Rate', 'Command-line Downloader', 'DNS Rebinding'],
     ],
 
@@ -416,7 +425,7 @@ return [
         // SSRF & DNS Rebinding
         '/169\.254\.169\.254/i' => 'AWS Metadata SSRF',
         '/metadata\.google\.internal/i' => 'GCP Metadata SSRF',
-        '/(10|172\.(1[6-9]|2[0-9]|3[01])|192\.168)\.\d+\.\d+/i' => 'Private IP Access',
+        '/\b(10|172\.(1[6-9]|2[0-9]|3[01])|192\.168)\.\d+\.\d+/i' => 'Private IP Access',
 
         // SQL Injection Variants
         '/\b(select|union|drop)\b\s+\*?\s*\bfrom\b\s+\w+/i' => 'SQLi Variant',
@@ -485,7 +494,7 @@ return [
         'middleware' => ['web', 'auth'],
         'guard' => env('THREAT_DETECTION_DASHBOARD_GUARD', 'none'),  // none|auth|role|ip
         'role' => env('THREAT_DETECTION_DASHBOARD_ROLE', 'admin'),   // used when guard=role
-        'allowed_ips' => array_filter(explode(',', env('THREAT_DETECTION_DASHBOARD_IPS', ''))),
+        'allowed_ips' => array_filter(array_map('trim', explode(',', env('THREAT_DETECTION_DASHBOARD_IPS', '')))),
     ],
 
     /*
@@ -506,7 +515,7 @@ return [
         'throttle' => env('THREAT_DETECTION_API_THROTTLE', '60,1'),
         'guard' => env('THREAT_DETECTION_API_GUARD', 'none'),  // none|auth|role|ip
         'role' => env('THREAT_DETECTION_API_ROLE', 'admin'),   // used when guard=role
-        'allowed_ips' => array_filter(explode(',', env('THREAT_DETECTION_API_IPS', ''))),
+        'allowed_ips' => array_filter(array_map('trim', explode(',', env('THREAT_DETECTION_API_IPS', '')))),
     ],
 
     /*

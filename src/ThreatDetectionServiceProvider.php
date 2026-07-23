@@ -58,11 +58,7 @@ class ThreatDetectionServiceProvider extends ServiceProvider
                 __DIR__ . '/../config/threat-detection.php' => config_path('threat-detection.php'),
             ], 'threat-detection-config');
 
-            $this->publishes([
-                __DIR__ . '/../database/migrations/create_threat_logs_table.php.stub' => database_path('migrations/' . date('Y_m_d_His') . '_create_threat_logs_table.php'),
-                __DIR__ . '/../database/migrations/add_confidence_to_threat_logs_table.php.stub' => database_path('migrations/' . date('Y_m_d_His', time() + 1) . '_add_confidence_to_threat_logs_table.php'),
-                __DIR__ . '/../database/migrations/create_threat_exclusion_rules_table.php.stub' => database_path('migrations/' . date('Y_m_d_His', time() + 2) . '_create_threat_exclusion_rules_table.php'),
-            ], 'threat-detection-migrations');
+            $this->publishes($this->migrationsToPublish(), 'threat-detection-migrations');
 
             if (is_dir(__DIR__ . '/../resources/views')) {
                 $this->publishes([
@@ -70,6 +66,33 @@ class ThreatDetectionServiceProvider extends ServiceProvider
                 ], 'threat-detection-views');
             }
         }
+    }
+
+    /**
+     * Build the migration publish map, skipping any migration already present
+     * in the host app so re-running vendor:publish does not create duplicate
+     * timestamped copies of the same table migration.
+     */
+    protected function migrationsToPublish(): array
+    {
+        $stubs = [
+            'create_threat_logs_table' => __DIR__ . '/../database/migrations/create_threat_logs_table.php.stub',
+            'add_confidence_to_threat_logs_table' => __DIR__ . '/../database/migrations/add_confidence_to_threat_logs_table.php.stub',
+            'create_threat_exclusion_rules_table' => __DIR__ . '/../database/migrations/create_threat_exclusion_rules_table.php.stub',
+        ];
+
+        $map = [];
+        $offset = 0;
+        foreach ($stubs as $name => $stub) {
+            // Already published (matches *_<name>.php)? Skip it.
+            if (!empty(glob(database_path('migrations/*_' . $name . '.php')))) {
+                continue;
+            }
+            $map[$stub] = database_path('migrations/' . date('Y_m_d_His', time() + $offset) . '_' . $name . '.php');
+            $offset++;
+        }
+
+        return $map;
     }
 
     protected function registerMiddleware(): void

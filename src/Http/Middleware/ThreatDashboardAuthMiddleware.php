@@ -43,7 +43,13 @@ class ThreatDashboardAuthMiddleware
             }
             $role = config("threat-detection.{$context}.role", 'admin');
             $user = Auth::user();
-            if (method_exists($user, 'hasRole') && !$user->hasRole($role)) {
+            // Fail closed: if the user model has no hasRole() we cannot verify
+            // the role, so deny rather than silently allow.
+            if (!method_exists($user, 'hasRole')) {
+                Log::warning("Threat detection {$context} guard is 'role' but the authenticated user model has no hasRole() method. Denying access. Install a roles package (e.g. spatie/laravel-permission) or switch the guard to 'auth'.");
+                abort(403, 'Insufficient permissions');
+            }
+            if (!$user->hasRole($role)) {
                 abort(403, 'Insufficient permissions');
             }
             return $next($request);
@@ -57,6 +63,9 @@ class ThreatDashboardAuthMiddleware
             return $next($request);
         }
 
-        return $next($request);
+        // Unknown guard value (typo, unsupported mode): fail closed rather than
+        // silently granting access to a security dashboard.
+        Log::warning("Threat detection {$context} guard '{$guard}' is not recognised (expected none|auth|role|ip). Denying access.");
+        abort(403, 'Unauthorized');
     }
 }

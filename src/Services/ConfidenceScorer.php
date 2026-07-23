@@ -7,7 +7,9 @@ class ConfidenceScorer
     private array $attackTools = [
         'sqlmap', 'nikto', 'nmap', 'acunetix', 'nessus', 'openvas',
         'nuclei', 'metasploit', 'w3af', 'havij', 'masscan', 'zgrab',
-        'burp', 'zap',
+        // 'owasp zap'/'zaproxy' rather than bare 'zap' — avoids a +25 confidence
+        // bonus on legitimate integration UAs such as "Zapier".
+        'burp', 'owasp zap', 'zaproxy',
     ];
 
     /**

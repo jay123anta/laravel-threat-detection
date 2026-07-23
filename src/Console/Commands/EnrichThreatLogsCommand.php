@@ -97,14 +97,17 @@ class EnrichThreatLogsCommand extends Command
             $cloudProvider = $this->detectCloudProvider($ip, $geo['isp'] ?? null, $geo['org'] ?? null);
 
             $homeCountry = config('threat-detection.home_country', 'IN');
+            $countryCode = $geo['country_code'] ?? null;
 
             return [
-                'country_code' => $geo['country_code'] ?? null,
+                'country_code' => $countryCode,
                 'country_name' => $geo['country_name'] ?? null,
                 'city' => $geo['city'] ?? null,
                 'isp' => $geo['isp'] ?? null,
                 'cloud_provider' => $cloudProvider,
-                'is_foreign' => ($geo['country_code'] ?? '') !== $homeCountry,
+                // Only flag as foreign when the country is known AND differs from
+                // home. Unknown geo (failed lookup, private IP) is not "foreign".
+                'is_foreign' => $countryCode !== null && $countryCode !== $homeCountry,
                 'is_cloud_ip' => $cloudProvider !== null,
             ];
         });
@@ -115,6 +118,12 @@ class EnrichThreatLogsCommand extends Command
         try {
             // Validate IP format to prevent SSRF via crafted values
             if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+                return [];
+            }
+
+            // Skip private/reserved ranges — the geo API can't resolve them and
+            // there's no point spending a rate-limited request (or flagging them).
+            if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
                 return [];
             }
 

@@ -45,8 +45,12 @@ class ExportBlocklistCommand extends Command
         $minHits = (int) $this->option('min-hits');
         $level = $this->option('level');
 
+        // Rank severity numerically — MAX(threat_level) would be lexicographic
+        // ('medium' > 'low' > 'high'), which reports the wrong highest level.
+        $levelRank = "MAX(CASE threat_level WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END)";
+
         $query = DB::table($table)
-            ->select('ip_address', DB::raw('COUNT(*) as hits'), DB::raw('MAX(created_at) as last_seen'), DB::raw('MAX(threat_level) as threat_level'))
+            ->select('ip_address', DB::raw('COUNT(*) as hits'), DB::raw('MAX(created_at) as last_seen'), DB::raw("{$levelRank} as level_rank"))
             ->where('created_at', '>=', $cutoff)
             ->groupBy('ip_address')
             ->having(DB::raw('COUNT(*)'), '>=', $minHits)
@@ -56,7 +60,15 @@ class ExportBlocklistCommand extends Command
             $query->where('threat_level', $level);
         }
 
-        return $query->get();
+        return $query->get()->map(function ($row) {
+            $row->threat_level = match ((int) $row->level_rank) {
+                3 => 'high',
+                2 => 'medium',
+                1 => 'low',
+                default => 'unknown',
+            };
+            return $row;
+        });
     }
 
     private function parseSince(string $since): Carbon

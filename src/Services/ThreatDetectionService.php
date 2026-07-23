@@ -33,6 +33,9 @@ class ThreatDetectionService
     {
         $ip = $request->ip();
         $url = $request->fullUrl();
+        // Route path only (never the query string) so api_route_filtering
+        // cannot be toggled on/off by an attacker appending ?x=/api/ to the URL.
+        $isApiRoute = str_contains('/' . trim($request->path(), '/') . '/', '/api/');
         $userAgent = $request->userAgent() ?? 'N/A';
         $isAuthPath = $request->attributes->get('threat-detection:auth-path', false);
         $isContentPath = $request->attributes->get('threat-detection:content-path', false);
@@ -91,6 +94,7 @@ class ThreatDetectionService
         // Collect all log entries for batch insert
         $batchLogData = [];
         $notificationQueue = [];
+        $seenTypes = [];   // within-request dedup; cache mark deferred until after a successful write
         $truncatedPayload = substr($payload, 0, 2000);
         $now = now();
         $userId = Auth::id();
@@ -98,7 +102,7 @@ class ThreatDetectionService
         foreach ($allThreats as [$label, $level, $sourceTag]) {
             if (
                 config('threat-detection.api_route_filtering.enabled', true)
-                && str_contains($url, '/api/')
+                && $isApiRoute
                 && in_array($level, config('threat-detection.api_route_filtering.suppress_levels', ['low', 'medium']))
             ) {
                 continue;
@@ -114,10 +118,14 @@ class ThreatDetectionService
                 continue;
             }
 
-            if ($this->isRecentlyLogged($ip, $type)) {
+            // Skip if logged in a recent request (cross-request dedup) or already
+            // queued for this request (within-request dedup). The 5-minute cache
+            // mark is applied only after a successful write (see below), so a
+            // failed insert does not silently mute this threat.
+            if ($this->isRecentlyLogged($ip, $type) || isset($seenTypes[$type])) {
                 continue;
             }
-            $this->markAsLogged($ip, $type);
+            $seenTypes[$type] = true;
 
             $logData = [
                 'ip_address' => $ip,
@@ -176,13 +184,27 @@ class ThreatDetectionService
                 $job->onQueue($queue);
 
                 dispatch($job);
+
+                // Job is queued (it retries on failure), so mark these as logged.
+                $this->markTypesLogged($ip, array_keys($seenTypes));
             } else {
+                // A failing insert throws here and is caught by the middleware;
+                // in that case the types are NOT marked and will be retried.
                 DB::table(config('threat-detection.table_name', 'threat_logs'))->insert($batchLogData);
+
+                $this->markTypesLogged($ip, array_keys($seenTypes));
 
                 if (!empty($notificationQueue)) {
                     $this->sendNotifications($ip, $url, $batchLogData[0]['type'], $batchLogData[0]['threat_level'], $userAgent);
                 }
             }
+        }
+    }
+
+    private function markTypesLogged(string $ip, array $types): void
+    {
+        foreach ($types as $type) {
+            $this->markAsLogged($ip, $type);
         }
     }
 
@@ -207,6 +229,14 @@ class ThreatDetectionService
         return implode("\n", $data);
     }
 
+    /**
+     * json_encode flags used for every segment.
+     * JSON_INVALID_UTF8_SUBSTITUTE ensures a single malformed byte (e.g. an
+     * appended %FF evasion attempt) does not make json_encode() return false
+     * and silently blank the whole segment.
+     */
+    private const SEGMENT_JSON_FLAGS = JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE;
+
     private function buildPayloadSegments(Request $request): array
     {
         $segments = ['query' => '', 'body' => '', 'headers' => ''];
@@ -218,13 +248,21 @@ class ThreatDetectionService
                 $queryData = array_diff_key($queryData, array_flip($safeFields));
             }
             if (!empty($queryData)) {
-                $segments['query'] = json_encode($queryData, JSON_UNESCAPED_SLASHES);
+                $segments['query'] = json_encode($queryData, self::SEGMENT_JSON_FLAGS);
             }
         }
 
-        // For multipart file uploads, only scan non-file form fields
-        $postData = $request->post();
+        // Body: form fields for standard requests, decoded JSON for JSON requests.
+        // $request->post() only returns the form-data bag, so JSON API bodies
+        // (Content-Type: application/json) must be read via $request->json().
+        if ($request->isJson()) {
+            $postData = (array) $request->json()->all();
+        } else {
+            $postData = $request->post();
+        }
+
         if (!empty($postData)) {
+            // For multipart file uploads, only scan non-file form fields
             if (str_contains($request->header('Content-Type', ''), 'multipart/form-data')) {
                 $fileKeys = array_keys($request->allFiles());
                 $postData = array_diff_key($postData, array_flip($fileKeys));
@@ -233,16 +271,18 @@ class ThreatDetectionService
                 $postData = array_diff_key($postData, array_flip($safeFields));
             }
             if (!empty($postData)) {
-                $segments['body'] = json_encode($postData, JSON_UNESCAPED_SLASHES);
+                $segments['body'] = json_encode($postData, self::SEGMENT_JSON_FLAGS);
             }
         }
 
+        // 'authorization' is excluded so ordinary authenticated traffic
+        // (Bearer/JWT tokens) is not logged as a high-severity token threat.
         $headers = collect($request->headers->all())
-            ->except(['cookie', 'x-xsrf-token', 'accept-language', 'accept-encoding', 'connection', 'host', 'referer', 'origin'])
+            ->except(['cookie', 'authorization', 'x-xsrf-token', 'accept-language', 'accept-encoding', 'connection', 'host', 'referer', 'origin'])
             ->map(fn($v) => is_array($v) ? implode('; ', array_slice($v, 0, 2)) : $v);
 
         if ($headers->isNotEmpty()) {
-            $segments['headers'] = json_encode($headers, JSON_UNESCAPED_SLASHES);
+            $segments['headers'] = json_encode($headers, self::SEGMENT_JSON_FLAGS);
         }
 
         return $segments;
@@ -331,13 +371,14 @@ class ThreatDetectionService
             'passwd', 'etc/', 'localhost', '127.0', '0.0.0.0', 'proto', 'jndi',
             'onload', 'onerror', '__proto__', 'document.', 'javascript:',
             'base64', '../', 'chmod', 'wget', 'curl ', '/bin/',
-            'class.module', 'actuator', '%00', '%0d', '%0a', '%25',
+            'class.module', 'actuator', '%00', '%0d', '%0a', '%25', '%u',
             'char(', 'phar:', 'expect:', 'input:', '172.', '192.168',
             'redirect=', 'url=http', 'next=http', 'goto=http',
-            'phpunit', '#post_render', 'order by', '{{', '{%', '<%',
+            'phpunit', '#post_render', '#pre_render', 'order by', '{{', '{%', '<%',
             'ro0ab', 'aced0005', '__schema', '__type', 'wscript',
             'net user', 'net localgroup', '@', 'contains(', 'substring(',
             '2130706433', 'redirect":', 'url":"http', 'next":"http',
+            'filesman', 'c99', 'r57', 'b374k',
         ];
 
         $lower = strtolower($payload);
@@ -365,7 +406,8 @@ class ThreatDetectionService
             'expression(', 'setinterval', 'settimeout', 'function(', '<marquee', 'style='],
         'rce' => ['system(', 'shell_exec', 'passthru', 'proc_open', 'popen(', 'base64_decode',
             'include(', 'require(', 'assert(', 'create_function', 'preg_replace', 'php_uname',
-            'get_current_user', 'allow_url_include', '<?php', '/bin/', 'chmod'],
+            'get_current_user', 'allow_url_include', '<?php', '/bin/', 'chmod',
+            'c99', 'r57', 'b374k', 'wso', 'c100', 'filesman'],
         'path' => ['../', '..\\', '/etc/', 'passwd', 'win.ini', 'file://', 'php://', 'zip://',
             'data://', 'glob://', 'phar://', 'expect://', 'input://'],
         'ssrf' => ['localhost', '127.0.0.1', '0.0.0.0', '::1', '169.254.', 'metadata.google',
@@ -381,7 +423,7 @@ class ThreatDetectionService
             'session_id', 'session-id', 'phpsessid', 'xdebug'],
         'scanner' => ['nmap', 'sqlmap', 'nikto', 'acunetix', 'wpscan', 'dirbuster', 'fimap'],
         'deser' => ['o:', 'ro0ab', 'aced0005', 'ysoserial'],
-        'cve' => ['() {', 'class.module', 'phpunit', 'actuator', '#post_render', '#lazy_builder'],
+        'cve' => ['() {', '(){', 'class.module', 'phpunit', 'actuator', '#post_render', '#lazy_builder', '#pre_render'],
         'redirect' => ['redirect=', 'redirect":', 'url=http', 'url":"http', 'next=http', 'next":"http',
             'return=http', 'goto=http', 'dest=http'],
         'misc' => ['coinhive', 'cryptonight', 'monero', '--inspect', 'xdebug', 'trace_id',
@@ -496,7 +538,7 @@ class ThreatDetectionService
                 'Aadhaar Number Detected' => 'token', 'PAN Number Detected' => 'token',
                 'Bank Account Number Detected' => 'token', 'IFSC Code Detected' => 'token',
                 'Mobile Number Detected' => 'token', 'PHP Session Exposure' => 'token',
-                'XDebug Session' => 'token', 'Trace ID Exposure' => 'token',
+                'XDebug Session' => 'token', 'Trace ID Exposure' => 'misc',
                 // Scanner
                 'Scanner Tool Detected' => 'scanner', 'Security Scanner Detected' => 'scanner',
                 'Port Scanner' => 'scanner', 'Scripted Request' => 'scanner',
@@ -505,9 +547,9 @@ class ThreatDetectionService
                 'Java Serialization Magic Bytes' => 'deser',
                 // Redirect
                 'Open Redirect' => 'redirect',
-                // NoSQL
-                'NoSQL $ne Injection' => 'sql', 'NoSQL $gt Injection' => 'sql',
-                'NoSQL Regex Injection' => 'sql', 'NoSQL $where Injection' => 'sql',
+                // NoSQL — keywords ($ne, $gt, $regex, $where) live in the 'injection' category
+                'NoSQL $ne Injection' => 'injection', 'NoSQL $gt Injection' => 'injection',
+                'NoSQL Regex Injection' => 'injection', 'NoSQL $where Injection' => 'injection',
                 // GraphQL / Misc
                 'GraphQL Introspection' => 'misc', 'GraphQL Type Introspection' => 'misc',
                 'GraphQL Query Detected' => 'misc',
@@ -759,7 +801,9 @@ class ThreatDetectionService
             '/\.\.(\/|\\\\)/' => 'Directory Traversal',
             '/\b(file|php|zip|data|glob|phar|expect|input):\/\//i' => 'LFI Protocol Usage',
             '/\/etc\/passwd|\/proc\/self\/environ|c:\\\\windows\\\\win\.ini/i' => 'Sensitive File Access',
-            '/(localhost|127\.0\.0\.1|0\.0\.0\.0|::1)(:\d+)?\b/i' => 'Localhost SSRF',
+            // (?<!\d) on the numeric hosts prevents matching 0.0.0.0 / 127.0.0.1
+            // inside longer number runs such as a Chrome UA "Chrome/120.0.0.0".
+            '/(?:localhost|::1|(?<!\d)127\.0\.0\.1|(?<!\d)0\.0\.0\.0)(?::\d+)?\b/i' => 'Localhost SSRF',
 
             '/(?<![a-z0-9])(?:;|&&|\|\|)(?![a-z0-9])/i' => 'Command Chain Injection',
             '/\b(curl|wget)\s+["\']?https?:\/\//i' => 'Command Downloader',
@@ -964,7 +1008,10 @@ class ThreatDetectionService
             'openvas' => ['label' => 'OpenVAS Scanner', 'level' => 'high'],
             'nuclei' => ['label' => 'Nuclei Scanner', 'level' => 'high'],
             'burp' => ['label' => 'Burp Suite', 'level' => 'medium'],
-            'zap' => ['label' => 'OWASP ZAP', 'level' => 'medium'],
+            // 'owasp zap'/'zaproxy' rather than bare 'zap' — avoids matching
+            // legitimate integration UAs such as "Zapier".
+            'owasp zap' => ['label' => 'OWASP ZAP', 'level' => 'medium'],
+            'zaproxy' => ['label' => 'OWASP ZAP', 'level' => 'medium'],
             'metasploit' => ['label' => 'Metasploit', 'level' => 'high'],
             'w3af' => ['label' => 'W3AF Scanner', 'level' => 'high'],
             'havij' => ['label' => 'Havij SQLi Tool', 'level' => 'high'],

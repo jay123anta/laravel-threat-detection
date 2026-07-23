@@ -2,6 +2,86 @@
 
 All notable changes to `jayanta/laravel-threat-detection` will be documented in this file.
 
+## [1.3.1] - 2026-07-23
+
+Correctness and false-positive fixes. No breaking changes: detection is still
+passive (never blocks a request), all existing config keys keep working, and
+published config files continue to function untouched. 14 new full-cycle
+regression tests (213 → 227 tests, 640 → 657 assertions).
+
+### Fixed — detection coverage (previously silent bypasses)
+
+- **JSON request bodies are now scanned.** `buildPayloadSegments()` previously
+  read only `$request->post()` (the form-data bag), so payloads sent as
+  `application/json` — most modern API traffic — were never inspected. JSON
+  bodies are now read via `$request->json()` and scanned like form fields
+  (with the same `safe_fields` stripping).
+- **A malformed UTF-8 byte no longer disables a segment.** `json_encode()`
+  returns `false` on invalid UTF-8, which silently blanked the whole segment
+  (e.g. appending `%FF` to a parameter). All segment encoding now uses
+  `JSON_INVALID_UTF8_SUBSTITUTE`.
+- **`api_route_filtering` can no longer be evaded via the query string.** The
+  API-route check now keys off the route path (`$request->path()`) instead of
+  the full URL, so appending `?x=/api/` can neither suppress detections nor
+  wrongly filter a non-API page.
+- **Remapped patterns that never fired now do:** the four NoSQL operator
+  patterns (`$ne`, `$gt`, `$regex`, `$where`) are mapped to the `injection`
+  category where their keywords live; web-shell signatures (`c99`, `r57`,
+  `b374k`, `wso`, `c100`, `FilesMan`) and the space-less Shellshock variant
+  (`(){`) and the Drupalgeddon `#pre_render` variant now have matching category
+  and pre-screen keywords. Added exploit-recon probe paths
+  (`/vendor/phpunit/*`, `/.aws/credentials`, `/.ssh/id_rsa`, `/.git/*`).
+
+### Fixed — false positives (noise reduction)
+
+- **The `Authorization` header is no longer scanned.** Ordinary authenticated
+  traffic (Bearer / JWT tokens) was logged as a high-severity `JWT Token Found`
+  / `Bearer Token Detected` per IP every 5 minutes. The header is now excluded
+  from the headers segment (a token in the query string is still flagged).
+- **`Private IP Access`** gained a leading word boundary so UA fragments like
+  `Chrome/110.0.0.0` no longer match `10.0.0.0`.
+- **`Localhost SSRF`** no longer matches `0.0.0.0` / `127.0.0.1` embedded in a
+  longer digit run — a real Chrome user-agent (`Chrome/120.0.0.0`) was being
+  logged as SSRF on nearly every request. Genuine `0.0.0.0`/`127.0.0.1` hosts
+  still match. (Found by a live end-to-end run, not covered by the unit asserts.)
+- **`zap`** (scanner list and confidence attack-tool list) is now matched as
+  `owasp zap` / `zaproxy` instead of the bare substring, so integration UAs
+  such as `Zapier` are no longer flagged / scored.
+
+### Fixed — severity correctness
+
+- Corrected severities that resolved to the wrong level: `Log4j/Log4Shell` and
+  `JNDI` (→ high), `XXE` entity/DOCTYPE (→ high), `IFSC Code` (→ high, matching
+  the other PII), web-shell / reverse-shell / encoded-eval (→ high), SQLi
+  variant / time-based / benchmark / sleep (→ high), `API Key Exposure`
+  (→ high), `File Inclusion` and `JavaScript URI` (→ medium). Removed the
+  over-broad `Java` severity keyword that accidentally promoted `JavaScript URI`
+  to high (deserialization stays high via the `Serialization` keyword).
+
+### Fixed — hardening & robustness
+
+- **Dashboard/API auth guard now fails closed.** An unrecognised guard value
+  (typo) previously fell through and granted access; it now logs a warning and
+  returns 403. `guard = role` with a user model that has no `hasRole()` method
+  now denies (with a warning) instead of silently allowing.
+- **Whitelist/allowed-IP env lists are trimmed** so `"1.2.3.4, 5.6.7.8"` no
+  longer breaks the entries after the comma.
+- **`export-blocklist` CSV reports the correct level.** `MAX(threat_level)` was
+  lexicographic (`medium > low > high`); it now ranks severity numerically.
+- **`enrich`** no longer marks unknown-geo IPs as `is_foreign` and skips
+  private/reserved ranges (no wasted rate-limited API calls).
+- **Dedup cache is marked only after a successful write**, so a failed insert no
+  longer mutes a threat type for 5 minutes; within-request dedup is preserved.
+- **Corrected default `skip_paths`** (`assets/*`, `css/*`, `js/*`, … instead of
+  the never-matching `public/…` prefixes).
+- **`purge`** cleans orphaned exclusion rules with a DB-side subquery instead of
+  loading every purged id into memory.
+- **`vendor:publish --tag=threat-detection-migrations` is idempotent** — already
+  published migrations are skipped instead of creating duplicate timestamped
+  copies.
+- Declared the `illuminate/console`, `illuminate/events`, `illuminate/bus`, and
+  `illuminate/queue` dependencies the package already uses.
+
 ## [1.3.0] - 2026-03-23
 
 ### Added

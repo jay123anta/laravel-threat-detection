@@ -31,20 +31,21 @@ class PurgeThreatLogsCommand extends Command
         $this->warn("This will permanently delete {$count} threat log(s) older than {$days} days.");
 
         if (!$this->input->isInteractive() || $this->confirm('Are you sure you want to proceed?')) {
-            $purgedIds = DB::table($table)
-                ->where('created_at', '<', $cutoff)
-                ->pluck('id');
-
             $deleted = DB::table($table)
                 ->where('created_at', '<', $cutoff)
                 ->delete();
 
             $this->info("Successfully deleted {$deleted} threat log(s).");
 
-            if (Schema::hasTable('threat_exclusion_rules') && $purgedIds->isNotEmpty()) {
+            // Remove exclusion rules whose source threat no longer exists. Done
+            // with a DB-side subquery so we never load every purged id into
+            // memory (safe on very large tables).
+            if (Schema::hasTable('threat_exclusion_rules')) {
                 $orphaned = DB::table('threat_exclusion_rules')
                     ->whereNotNull('created_from_threat_id')
-                    ->whereIn('created_from_threat_id', $purgedIds)
+                    ->whereNotIn('created_from_threat_id', function ($q) use ($table) {
+                        $q->select('id')->from($table);
+                    })
                     ->delete();
 
                 if ($orphaned > 0) {

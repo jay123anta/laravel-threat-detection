@@ -244,7 +244,8 @@ php artisan route:clear
 - **Confidence Scoring** — Each threat gets a 0-100 confidence score based on pattern count, context, and signals
 - **Evasion Resistance** — Normalization pipeline defeats SQL comment insertion, double URL encoding, HTML entity encoding, Unicode escapes, and hex escapes before pattern matching
 - **CVE Detection** — Shellshock (CVE-2014-6271), Spring4Shell (CVE-2022-22965), PHPUnit RCE (CVE-2017-9841), Drupalgeddon, Log4Shell
-- **Context-Aware Detection** — Patterns found in query strings score higher than those in POST body
+- **Context-Aware Detection** — Patterns found in query strings score higher than those in the request body
+- **Request Body Scanning** — Both form-encoded and JSON (`application/json`) request bodies are inspected
 - **Safe Fields** — Exclude specific form fields from scanning (for CMS editors, code inputs, search fields)
 - **False Positive Reporting** — Mark threats as false positives from the dashboard; auto-creates exclusion rules
 - **Three Detection Modes** — `strict`, `balanced` (default), and `relaxed` — tunable sensitivity
@@ -686,7 +687,7 @@ If specific form fields legitimately contain HTML, SQL keywords, or code (e.g., 
 'safe_fields' => ['content', 'body', 'html', 'description', 'code'],
 ```
 
-Fields listed here are stripped from both query params and POST body before detection runs. Other fields on the same request are still fully scanned.
+Fields listed here are stripped from query params and the request body — both form-encoded and JSON (`application/json`) — before detection runs. Other fields on the same request are still fully scanned.
 
 ---
 
@@ -710,6 +711,10 @@ THREAT_DETECTION_DASHBOARD_IPS=127.0.0.1,10.0.0.0/8
 The same options are available for API routes with `THREAT_DETECTION_API_GUARD`.
 
 When `guard=none` (default), the package logs a warning once per day to remind you to configure authentication.
+
+The guard **fails closed**: an unrecognised guard value (e.g. a typo) is denied with a 403 and a logged warning rather than silently granting access, and `guard=role` denies (with a warning) when the authenticated user model has no `hasRole()` method.
+
+> **Dashboard ↔ API note:** the built-in dashboard fetches its data from the API routes using the browser session cookie. If your API routes are protected with `auth:sanctum`, configure Sanctum stateful/SPA authentication (or point the dashboard at a cookie-authenticated guard) so those AJAX calls are authorised — otherwise the dashboard renders empty.
 
 ---
 
