@@ -33,6 +33,9 @@ A middleware-based threat detection and logging system for Laravel. Drop it in, 
 - PHP 8.1+
 - Laravel 10.x, 11.x, or 12.x
 - Any database supported by Laravel (MySQL, PostgreSQL, SQLite, SQL Server)
+- Any cache driver — **no Redis or queue worker required**. Redis/Memcached is
+  only *recommended* to enable the optional DDoS check (which auto-disables on
+  non-atomic drivers). Queued writes are opt-in and off by default.
 
 ---
 
@@ -308,7 +311,10 @@ THREAT_DETECTION_MODE=balanced
 # API rate limiting (default: 60 requests per minute)
 # THREAT_DETECTION_API_THROTTLE=60,1
 
-# Queue support — offload DB writes to a queue (disabled by default)
+# Queue support — offload DB writes to a queue (disabled by default).
+# OPTIONAL: only enable if your app already runs a queue worker. When false
+# (default), threats are written synchronously with a plain DB insert — no
+# Redis, no worker, nothing extra to run.
 # THREAT_DETECTION_QUEUE=false
 # THREAT_DETECTION_QUEUE_CONNECTION=redis
 # THREAT_DETECTION_QUEUE_NAME=default
@@ -770,6 +776,21 @@ $campaigns = ThreatDetection::detectAttackCampaigns(24);
 // Get a summary of all correlation data
 $summary = ThreatDetection::getCorrelationSummary();
 ```
+
+---
+
+## Going to Production
+
+The package is passive by design — it never blocks, rejects, or alters a request, and the detection middleware wraps its whole body in `try/catch`, so a detection failure can never break your app. It ships with sensible defaults and needs no external services to run. Before you go live, this short checklist is worth a look:
+
+1. **Protect the dashboard and API.** Both default to `guard = none` for a zero-config first run, and log a daily warning while unprotected. Before production, set a guard — `THREAT_DETECTION_DASHBOARD_GUARD` and `THREAT_DETECTION_API_GUARD` (`auth`, `role`, or `ip`). An unrecognised value or a `role` guard on a user model without `hasRole()` now **fails closed** (403), so a typo won't silently expose data. See [Dashboard Authentication](#dashboard-authentication).
+2. **Run the migrations** (`vendor:publish --tag=threat-detection-migrations && migrate`). Re-publishing is safe — already-published migrations are skipped.
+3. **Pick a detection mode.** `balanced` (default) suits most apps; use `relaxed` for content-heavy sites, `strict` for high-security surfaces. Tune with `content_paths`, `safe_fields`, and `min_confidence` — see [Reducing False Positives](#reducing-false-positives).
+4. **Review the regional PII / custom patterns.** Defaults are India-centric (Aadhaar, PAN, IFSC) and the broad numeric patterns (e.g. bank-account) can match long numeric IDs outside auth routes. Replace or trim `custom_patterns` for your region and app, and add heavy-content routes to `auth_paths` / `content_paths`.
+5. **Turn on retention** if you expect volume: `THREAT_DETECTION_RETENTION=true` (auto-purges via the scheduler). Requires Laravel's scheduler (`schedule:run`) to be cron-driven.
+6. **Optional extras, all off by default:** Slack alerts (`THREAT_DETECTION_NOTIFICATIONS`), geo-enrichment (`php artisan threat-detection:enrich` — the only feature that makes an outbound call, to the free ip-api.com), and queued writes (`THREAT_DETECTION_QUEUE` — enable only if you already run a queue worker; otherwise writes are synchronous and need no Redis).
+
+No Redis, no queue worker, and no outbound network calls are required for core detection and logging.
 
 ---
 
