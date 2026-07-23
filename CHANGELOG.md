@@ -2,6 +2,22 @@
 
 All notable changes to `jayanta/laravel-threat-detection` will be documented in this file.
 
+## [1.3.2] - 2026-07-23
+
+### Changed
+
+- **Minimum PHP raised to 8.2.** PHP 8.1 reached end of security support in
+  November 2025, and the current Laravel 10 test tooling (Testbench / PHPUnit)
+  no longer supports it, so the `PHP 8.1 / Laravel 10` CI combination could no
+  longer install. If you are still on PHP 8.1, stay on v1.3.1.
+- **CI matrix updated** to PHP 8.2 / 8.3 / 8.4 × Laravel 10 / 11 / 12 (excluding
+  the unsupported PHP 8.4 + Laravel 10 pair), with `fail-fast: false` so every
+  cell reports independently. The Laravel-version pin step now also constrains
+  `illuminate/console`, `illuminate/events`, `illuminate/bus`, and
+  `illuminate/queue` (added in v1.3.1) to the matrix version.
+
+No functional or API changes — detection behaviour is identical to v1.3.1.
+
 ## [1.3.1] - 2026-07-23
 
 Correctness and false-positive fixes. No breaking changes: detection is still
