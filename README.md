@@ -10,6 +10,10 @@
 
 **Know who's attacking your Laravel app — without changing a single line of application code.**
 
+<p align="center">
+  <img src="docs/dashboard.png" alt="Threat Detection Dashboard — stats, 7-day timeline, live threat log, top offending IPs and threats by country" width="100%">
+</p>
+
 A middleware-based threat detection and logging system for Laravel. Drop it in, and it starts scanning every HTTP request for SQL injection, XSS, RCE, scanner bots, DDoS patterns, and 60+ other attack types — logging everything to your database with full geo-enrichment and a built-in dashboard.
 
 > Extracted from a production application. Battle-tested with real traffic.
