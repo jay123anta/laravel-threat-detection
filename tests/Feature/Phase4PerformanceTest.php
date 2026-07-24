@@ -3,6 +3,7 @@
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
 use JayAnta\ThreatDetection\Tests\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Cache;
@@ -53,7 +54,7 @@ class Phase4PerformanceTest extends TestCase
     //  Early Bailout: clean payloads skip regex
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_clean_request_produces_no_threat_logs(): void
     {
         $this->get('/perf-test?name=John&city=London&age=30');
@@ -63,7 +64,7 @@ class Phase4PerformanceTest extends TestCase
         $this->assertEquals(0, $count);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_clean_post_body_produces_no_threat_logs(): void
     {
         $this->call('POST', '/perf-test', [
@@ -76,7 +77,7 @@ class Phase4PerformanceTest extends TestCase
         $this->assertEquals(0, $count);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_suspicious_chars_still_trigger_detection(): void
     {
         // Contains suspicious char '<' → early bailout skipped, regex runs
@@ -91,7 +92,7 @@ class Phase4PerformanceTest extends TestCase
     //  Batch Insert: multiple threats in one INSERT
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_multiple_threats_stored_in_single_request(): void
     {
         // This payload triggers multiple patterns at once
@@ -106,7 +107,7 @@ class Phase4PerformanceTest extends TestCase
         $this->assertEquals(1, $ips->count());
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_batch_insert_preserves_all_threat_types(): void
     {
         // Payload that triggers SQL + other patterns
@@ -121,7 +122,7 @@ class Phase4PerformanceTest extends TestCase
     //  Max Detections Per Request
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_max_detections_caps_pattern_matches(): void
     {
         config(['threat-detection.max_detections_per_request' => 2]);
@@ -139,7 +140,7 @@ class Phase4PerformanceTest extends TestCase
         $this->assertLessThanOrEqual(2, $middlewareCount, 'Max detections should cap pattern matches');
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_max_detections_zero_means_unlimited(): void
     {
         config(['threat-detection.max_detections_per_request' => 0]);
@@ -157,7 +158,7 @@ class Phase4PerformanceTest extends TestCase
     //  Response time: all still return 200
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_performance_optimizations_dont_break_passive_mode(): void
     {
         $this->get('/perf-test?name=normal')->assertStatus(200);

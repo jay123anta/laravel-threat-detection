@@ -3,6 +3,7 @@
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
 use JayAnta\ThreatDetection\Tests\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Cache;
@@ -58,7 +59,7 @@ class EvasionResistanceTest extends TestCase
     //  SQL Comment Evasion: UNION/**/SELECT
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_sql_comment_evasion_is_detected_and_logged(): void
     {
         $response = $this->get('/evasion-test?q=UNION/**/SELECT+*+FROM+users');
@@ -95,7 +96,7 @@ class EvasionResistanceTest extends TestCase
     //  Double URL Encoding: %2527
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_double_url_encoding_is_detected_and_logged(): void
     {
         // POST body preserves the literal "%2527" (GET query params get decoded by PHP)
@@ -122,7 +123,7 @@ class EvasionResistanceTest extends TestCase
     //  SQL CHAR Encoding: CHAR(39)
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_sql_char_encoding_is_detected_and_logged(): void
     {
         $response = $this->get('/evasion-test?id=1+AND+CHAR(39)');
@@ -146,7 +147,7 @@ class EvasionResistanceTest extends TestCase
     //  POST body evasion: comment injection in body
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_post_body_sql_comment_evasion_is_detected(): void
     {
         $response = $this->post('/evasion-test', [
@@ -171,7 +172,7 @@ class EvasionResistanceTest extends TestCase
     //  LFI Protocol Evasion: phar://
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_phar_protocol_lfi_is_detected(): void
     {
         $response = $this->get('/evasion-test?file=phar://malicious.phar/exploit');
@@ -184,7 +185,7 @@ class EvasionResistanceTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_expect_protocol_lfi_is_detected(): void
     {
         $response = $this->get('/evasion-test?cmd=expect://id');
@@ -201,7 +202,7 @@ class EvasionResistanceTest extends TestCase
     //  Combined evasion: multiple techniques at once
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_combined_evasion_techniques_produce_high_confidence(): void
     {
         // Use POST so literal %2527 survives PHP's URL decoding
@@ -230,7 +231,7 @@ class EvasionResistanceTest extends TestCase
     //  NO false positive: benign double-dash / CSS classes
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_benign_double_dash_does_not_trigger_sql_comment(): void
     {
         $response = $this->post('/evasion-test', [
@@ -251,7 +252,7 @@ class EvasionResistanceTest extends TestCase
     //  Normalization end-to-end proof
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_normalization_strips_comments_enabling_pattern_match(): void
     {
         // "SELECT/*comment*/FROM" — without normalization, "SELECT FROM" pattern won't match
@@ -275,7 +276,7 @@ class EvasionResistanceTest extends TestCase
     //  Confidence scoring is accurate in full cycle
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_confidence_score_and_label_are_populated(): void
     {
         // POST body preserves literal %2527 (GET would decode it)
@@ -296,7 +297,7 @@ class EvasionResistanceTest extends TestCase
     //  Payload is captured correctly
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_payload_column_captures_the_malicious_input(): void
     {
         $response = $this->get('/evasion-test?inject=UNION/**/SELECT');
@@ -316,7 +317,7 @@ class EvasionResistanceTest extends TestCase
     //  Private IP range detection (full RFC 1918)
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_private_ip_172_range_is_detected(): void
     {
         // 172.20.x.x is in the 172.16-31 private range
@@ -333,7 +334,7 @@ class EvasionResistanceTest extends TestCase
     //  Localhost SSRF with 0.0.0.0
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_localhost_ssrf_with_zero_ip_is_detected(): void
     {
         $response = $this->get('/evasion-test?url=http://0.0.0.0:9200/_cat/indices');
@@ -349,7 +350,7 @@ class EvasionResistanceTest extends TestCase
     //  Event is dispatched during full cycle
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_threat_detected_event_is_dispatched(): void
     {
         \Illuminate\Support\Facades\Event::fake([
@@ -372,7 +373,7 @@ class EvasionResistanceTest extends TestCase
     //  Response is never blocked (passive detector)
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_response_is_always_200_even_for_attacks(): void
     {
         // The package is a passive detector — it must NEVER block the request
@@ -394,7 +395,7 @@ class EvasionResistanceTest extends TestCase
     //  Queue mode: job is dispatched, not sync insert
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_queue_mode_dispatches_job_instead_of_sync_insert(): void
     {
         \Illuminate\Support\Facades\Queue::fake();

@@ -24,20 +24,20 @@
     ],
     "require": {
         "php": "^8.2",
-        "illuminate/support": "^10.0|^11.0|^12.0",
-        "illuminate/http": "^10.0|^11.0|^12.0",
-        "illuminate/routing": "^10.0|^11.0|^12.0",
-        "illuminate/database": "^10.0|^11.0|^12.0",
-        "illuminate/cache": "^10.0|^11.0|^12.0",
-        "illuminate/console": "^10.0|^11.0|^12.0",
-        "illuminate/events": "^10.0|^11.0|^12.0",
-        "illuminate/bus": "^10.0|^11.0|^12.0",
-        "illuminate/queue": "^10.0|^11.0|^12.0",
-        "illuminate/notifications": "^10.0|^11.0|^12.0"
+        "illuminate/support": "^10.0|^11.0|^12.0|^13.0",
+        "illuminate/http": "^10.0|^11.0|^12.0|^13.0",
+        "illuminate/routing": "^10.0|^11.0|^12.0|^13.0",
+        "illuminate/database": "^10.0|^11.0|^12.0|^13.0",
+        "illuminate/cache": "^10.0|^11.0|^12.0|^13.0",
+        "illuminate/console": "^10.0|^11.0|^12.0|^13.0",
+        "illuminate/events": "^10.0|^11.0|^12.0|^13.0",
+        "illuminate/bus": "^10.0|^11.0|^12.0|^13.0",
+        "illuminate/queue": "^10.0|^11.0|^12.0|^13.0",
+        "illuminate/notifications": "^10.0|^11.0|^12.0|^13.0"
     },
     "require-dev": {
-        "orchestra/testbench": "^8.0|^9.0|^10.0",
-        "phpunit/phpunit": "^10.0|^11.0"
+        "orchestra/testbench": "^8.0|^9.0|^10.0|^11.0",
+        "phpunit/phpunit": "^10.0|^11.0|^12.0"
     },
     "suggest": {
         "laravel/slack-notification-channel": "Required for Slack notifications on Laravel 11+ (^3.0)",

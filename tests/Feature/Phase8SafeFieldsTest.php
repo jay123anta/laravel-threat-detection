@@ -3,6 +3,7 @@
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
 use JayAnta\ThreatDetection\Tests\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Cache;
@@ -53,7 +54,7 @@ class Phase8SafeFieldsTest extends TestCase
     //  Safe fields in POST body
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_safe_field_in_body_is_not_scanned(): void
     {
         config(['threat-detection.safe_fields' => ['content']]);
@@ -68,7 +69,7 @@ class Phase8SafeFieldsTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_non_safe_field_in_body_is_still_scanned(): void
     {
         config(['threat-detection.safe_fields' => ['content']]);
@@ -84,7 +85,7 @@ class Phase8SafeFieldsTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_multiple_safe_fields_excluded(): void
     {
         config(['threat-detection.safe_fields' => ['content', 'html', 'code']]);
@@ -103,7 +104,7 @@ class Phase8SafeFieldsTest extends TestCase
     //  Safe fields in query params
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_safe_field_in_query_is_not_scanned(): void
     {
         config(['threat-detection.safe_fields' => ['q']]);
@@ -115,7 +116,7 @@ class Phase8SafeFieldsTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_non_safe_query_field_still_scanned(): void
     {
         config(['threat-detection.safe_fields' => ['content']]);
@@ -131,7 +132,7 @@ class Phase8SafeFieldsTest extends TestCase
     //  Empty safe_fields (default) scans everything
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_empty_safe_fields_scans_all(): void
     {
         config(['threat-detection.safe_fields' => []]);
@@ -150,7 +151,7 @@ class Phase8SafeFieldsTest extends TestCase
     //  Passive mode preserved
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_safe_fields_dont_break_response(): void
     {
         config(['threat-detection.safe_fields' => ['content']]);

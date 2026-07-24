@@ -3,6 +3,7 @@
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
 use JayAnta\ThreatDetection\Tests\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Cache;
@@ -51,7 +52,7 @@ class Phase3BotDetectionTest extends TestCase
     //  New Security Scanners
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_feroxbuster_scanner_is_detected(): void
     {
         $this->get('/bot-test', ['HTTP_USER_AGENT' => 'feroxbuster/2.10.0']);
@@ -62,7 +63,7 @@ class Phase3BotDetectionTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_ffuf_fuzzer_is_detected(): void
     {
         $this->get('/bot-test', ['HTTP_USER_AGENT' => 'Fuzz Faster U Fool v2.0.0-dev (ffuf)']);
@@ -73,7 +74,7 @@ class Phase3BotDetectionTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_xsstrike_is_detected(): void
     {
         $this->get('/bot-test', ['HTTP_USER_AGENT' => 'XSStrike/3.1.5']);
@@ -84,7 +85,7 @@ class Phase3BotDetectionTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_netsparker_is_detected(): void
     {
         $this->get('/bot-test', ['HTTP_USER_AGENT' => 'Netsparker/5.8']);
@@ -95,7 +96,7 @@ class Phase3BotDetectionTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_commix_is_detected(): void
     {
         $this->get('/bot-test', ['HTTP_USER_AGENT' => 'commix/v3.5']);
@@ -106,7 +107,7 @@ class Phase3BotDetectionTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_dalfox_is_detected(): void
     {
         $this->get('/bot-test', ['HTTP_USER_AGENT' => 'dalfox/v2.9.0']);
@@ -121,7 +122,7 @@ class Phase3BotDetectionTest extends TestCase
     //  AI Scrapers
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_gptbot_is_detected(): void
     {
         $this->get('/bot-test', ['HTTP_USER_AGENT' => 'Mozilla/5.0 AppleWebKit/537.36 (compatible; GPTBot/1.0)']);
@@ -132,7 +133,7 @@ class Phase3BotDetectionTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_claudebot_is_detected(): void
     {
         $this->get('/bot-test', ['HTTP_USER_AGENT' => 'ClaudeBot/1.0']);
@@ -143,7 +144,7 @@ class Phase3BotDetectionTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_bytespider_is_detected(): void
     {
         $this->get('/bot-test', ['HTTP_USER_AGENT' => 'Mozilla/5.0 (compatible; Bytespider)']);
@@ -158,7 +159,7 @@ class Phase3BotDetectionTest extends TestCase
     //  Headless Browsers / Automation
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_headless_chrome_is_detected(): void
     {
         $this->get('/bot-test', ['HTTP_USER_AGENT' => 'Mozilla/5.0 HeadlessChrome/120.0.0.0']);
@@ -169,7 +170,7 @@ class Phase3BotDetectionTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_puppeteer_is_detected(): void
     {
         $this->get('/bot-test', ['HTTP_USER_AGENT' => 'Mozilla/5.0 (puppeteer)']);
@@ -180,7 +181,7 @@ class Phase3BotDetectionTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_selenium_is_detected(): void
     {
         $this->get('/bot-test', ['HTTP_USER_AGENT' => 'selenium/4.8.0']);
@@ -191,7 +192,7 @@ class Phase3BotDetectionTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_playwright_is_detected(): void
     {
         $this->get('/bot-test', ['HTTP_USER_AGENT' => 'Playwright/1.40.0']);
@@ -206,7 +207,7 @@ class Phase3BotDetectionTest extends TestCase
     //  Aggressive Crawlers
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_ahrefsbot_is_detected(): void
     {
         $this->get('/bot-test', ['HTTP_USER_AGENT' => 'Mozilla/5.0 (compatible; AhrefsBot/7.0)']);
@@ -217,7 +218,7 @@ class Phase3BotDetectionTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_semrushbot_is_detected(): void
     {
         $this->get('/bot-test', ['HTTP_USER_AGENT' => 'Mozilla/5.0 (compatible; SemrushBot/7~bl)']);
@@ -232,7 +233,7 @@ class Phase3BotDetectionTest extends TestCase
     //  Passive + false positive
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_all_bots_return_200(): void
     {
         $this->get('/bot-test', ['HTTP_USER_AGENT' => 'feroxbuster/2.10'])->assertStatus(200);
@@ -240,7 +241,7 @@ class Phase3BotDetectionTest extends TestCase
         $this->get('/bot-test', ['HTTP_USER_AGENT' => 'HeadlessChrome/120'])->assertStatus(200);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_normal_chrome_browser_not_flagged(): void
     {
         $this->get('/bot-test', ['HTTP_USER_AGENT' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36']);
@@ -250,7 +251,7 @@ class Phase3BotDetectionTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_normal_firefox_not_flagged(): void
     {
         $this->get('/bot-test', ['HTTP_USER_AGENT' => 'Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0']);

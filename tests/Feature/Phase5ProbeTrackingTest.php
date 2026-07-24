@@ -3,6 +3,7 @@
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
 use JayAnta\ThreatDetection\Tests\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Cache;
@@ -67,7 +68,7 @@ class Phase5ProbeTrackingTest extends TestCase
     //  WordPress Probes
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_wp_admin_probe_is_detected(): void
     {
         $this->get('/wp-admin');
@@ -78,7 +79,7 @@ class Phase5ProbeTrackingTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_wp_login_probe_is_detected(): void
     {
         $this->get('/wp-login.php');
@@ -93,7 +94,7 @@ class Phase5ProbeTrackingTest extends TestCase
     //  Config / Sensitive File Probes
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_env_file_probe_is_detected(): void
     {
         $this->get('/.env');
@@ -104,7 +105,7 @@ class Phase5ProbeTrackingTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_phpmyadmin_probe_is_detected(): void
     {
         $this->get('/phpmyadmin');
@@ -119,7 +120,7 @@ class Phase5ProbeTrackingTest extends TestCase
     //  Technology / Stack Probes
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_spring_actuator_probe_is_detected(): void
     {
         $this->get('/actuator/env');
@@ -129,7 +130,7 @@ class Phase5ProbeTrackingTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_cgi_bin_probe_is_detected(): void
     {
         $this->get('/cgi-bin/test');
@@ -139,7 +140,7 @@ class Phase5ProbeTrackingTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_swagger_probe_is_detected(): void
     {
         $this->get('/swagger/index.html');
@@ -149,7 +150,7 @@ class Phase5ProbeTrackingTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_jsp_probe_is_detected(): void
     {
         $this->get('/test.jsp');
@@ -159,7 +160,7 @@ class Phase5ProbeTrackingTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_backup_probe_is_detected(): void
     {
         $this->get('/backup/db.sql');
@@ -173,7 +174,7 @@ class Phase5ProbeTrackingTest extends TestCase
     //  Probe + Payload: both logged independently
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_probe_with_payload_logs_both(): void
     {
         $this->get('/wp-admin?q=UNION+SELECT+*+FROM+users');
@@ -193,7 +194,7 @@ class Phase5ProbeTrackingTest extends TestCase
     //  Config: enabled/disabled
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_probe_disabled_produces_no_probe_logs(): void
     {
         config(['threat-detection.probe_tracking.enabled' => false]);
@@ -209,7 +210,7 @@ class Phase5ProbeTrackingTest extends TestCase
     //  Deduplication
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_probe_uses_deduplication(): void
     {
         $this->get('/wp-admin');
@@ -226,7 +227,7 @@ class Phase5ProbeTrackingTest extends TestCase
     //  Event dispatch
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_probe_fires_threat_detected_event(): void
     {
         Event::fake([ThreatDetected::class]);
@@ -240,7 +241,7 @@ class Phase5ProbeTrackingTest extends TestCase
     //  False positives: normal paths not flagged
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_normal_path_not_flagged_as_probe(): void
     {
         $this->get('/normal-page');
@@ -260,7 +261,7 @@ class Phase5ProbeTrackingTest extends TestCase
     //  Passive: all probes return 200
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_probe_detection_never_blocks(): void
     {
         $this->get('/wp-admin')->assertStatus(200);

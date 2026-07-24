@@ -2,21 +2,32 @@
 
 All notable changes to `jayanta/laravel-threat-detection` will be documented in this file.
 
-## [1.3.2] - 2026-07-23
+## [1.4.0] - 2026-07-23
+
+### Added
+
+- **Laravel 13 support.** Widened `illuminate/*` constraints to `^13.0` and dev
+  tooling to `orchestra/testbench ^11.0` and `phpunit/phpunit ^12.0`. The package
+  now supports Laravel 10, 11, 12, and 13. Based on the approach proposed by
+  **@davidvandertuijn** in #1 — thank you!
 
 ### Changed
 
-- **Minimum PHP raised to 8.2.** PHP 8.1 reached end of security support in
-  November 2025, and the current Laravel 10 test tooling (Testbench / PHPUnit)
-  no longer supports it, so the `PHP 8.1 / Laravel 10` CI combination could no
-  longer install. If you are still on PHP 8.1, stay on v1.3.1.
-- **CI matrix updated** to PHP 8.2 / 8.3 / 8.4 × Laravel 10 / 11 / 12 (excluding
-  the unsupported PHP 8.4 + Laravel 10 pair), with `fail-fast: false` so every
-  cell reports independently. The Laravel-version pin step now also constrains
-  `illuminate/console`, `illuminate/events`, `illuminate/bus`, and
-  `illuminate/queue` (added in v1.3.1) to the matrix version.
+- **Minimum PHP raised to 8.2** (Laravel 13 itself requires PHP 8.3+). PHP 8.1
+  reached end of security support in November 2025 and the current Laravel test
+  tooling no longer supports it. If you are still on PHP 8.1, stay on v1.3.1.
+- **Test methods migrated from the `@test` docblock annotation to the `#[Test]`
+  attribute** across all 15 test files (227 methods). PHPUnit 12 (pulled in by
+  Laravel 13) removed docblock metadata; `#[Test]` is supported by PHPUnit 10, 11,
+  and 12, so Laravel 10/11/12 remain fully compatible.
+- The no-op service double in `MiddlewareTest` now uses `createStub()` instead of
+  `createMock()` (clears PHPUnit 12 "useless mock" notices).
+- **CI matrix** now covers PHP 8.2/8.3/8.4 × Laravel 12 & 13 (Laravel 13 on PHP
+  8.3+), with `fail-fast: false`. Laravel 10 & 11 remain supported in
+  `composer.json` but are no longer in the CI matrix — they are end-of-life and
+  their unpatched security advisories block a clean CI install.
 
-No functional or API changes — detection behaviour is identical to v1.3.1.
+No functional or API changes to detection behaviour.
 
 ## [1.3.1] - 2026-07-23
 

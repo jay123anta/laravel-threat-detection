@@ -30,8 +30,8 @@ A middleware-based threat detection and logging system for Laravel. Drop it in, 
 
 ## Requirements
 
-- PHP 8.2+
-- Laravel 10.x, 11.x, or 12.x
+- PHP 8.2+ (Laravel 13 requires PHP 8.3+)
+- Laravel 10.x, 11.x, 12.x, or 13.x
 - Any database supported by Laravel (MySQL, PostgreSQL, SQLite, SQL Server)
 - Any cache driver — **no Redis or queue worker required**. Redis/Memcached is
   only *recommended* to enable the optional DDoS check (which auto-disables on

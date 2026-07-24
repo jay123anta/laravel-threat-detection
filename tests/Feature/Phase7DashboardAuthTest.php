@@ -3,6 +3,7 @@
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
 use JayAnta\ThreatDetection\Tests\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 use JayAnta\ThreatDetection\Http\Middleware\ThreatDashboardAuthMiddleware;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Cache;
@@ -44,7 +45,7 @@ class Phase7DashboardAuthTest extends TestCase
     //  Guard: none (default)
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function dashboard_accessible_when_guard_is_none(): void
     {
         config(['threat-detection.dashboard.guard' => 'none']);
@@ -52,7 +53,7 @@ class Phase7DashboardAuthTest extends TestCase
         $this->get('/test-dashboard')->assertStatus(200);
     }
 
-    /** @test */
+    #[Test]
     public function dashboard_logs_warning_when_guard_is_none(): void
     {
         config(['threat-detection.dashboard.guard' => 'none']);
@@ -66,7 +67,7 @@ class Phase7DashboardAuthTest extends TestCase
             ->once();
     }
 
-    /** @test */
+    #[Test]
     public function api_accessible_when_guard_is_none(): void
     {
         config(['threat-detection.api.guard' => 'none']);
@@ -78,7 +79,7 @@ class Phase7DashboardAuthTest extends TestCase
     //  Guard: auth
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function dashboard_blocked_when_guard_is_auth_and_not_logged_in(): void
     {
         config(['threat-detection.dashboard.guard' => 'auth']);
@@ -86,7 +87,7 @@ class Phase7DashboardAuthTest extends TestCase
         $this->get('/test-dashboard')->assertStatus(403);
     }
 
-    /** @test */
+    #[Test]
     public function dashboard_accessible_when_guard_is_auth_and_logged_in(): void
     {
         config(['threat-detection.dashboard.guard' => 'auth']);
@@ -99,7 +100,7 @@ class Phase7DashboardAuthTest extends TestCase
             ->assertStatus(200);
     }
 
-    /** @test */
+    #[Test]
     public function api_blocked_when_guard_is_auth_and_not_logged_in(): void
     {
         config(['threat-detection.api.guard' => 'auth']);
@@ -107,7 +108,7 @@ class Phase7DashboardAuthTest extends TestCase
         $this->get('/test-api-endpoint')->assertStatus(403);
     }
 
-    /** @test */
+    #[Test]
     public function api_accessible_when_guard_is_auth_and_logged_in(): void
     {
         config(['threat-detection.api.guard' => 'auth']);
@@ -124,7 +125,7 @@ class Phase7DashboardAuthTest extends TestCase
     //  Guard: ip
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function dashboard_blocked_when_guard_is_ip_and_wrong_ip(): void
     {
         config([
@@ -136,7 +137,7 @@ class Phase7DashboardAuthTest extends TestCase
         $this->get('/test-dashboard')->assertStatus(403);
     }
 
-    /** @test */
+    #[Test]
     public function dashboard_accessible_when_guard_is_ip_and_correct_ip(): void
     {
         config([
@@ -147,7 +148,7 @@ class Phase7DashboardAuthTest extends TestCase
         $this->get('/test-dashboard')->assertStatus(200);
     }
 
-    /** @test */
+    #[Test]
     public function api_blocked_when_guard_is_ip_and_wrong_ip(): void
     {
         config([
@@ -162,7 +163,7 @@ class Phase7DashboardAuthTest extends TestCase
     //  Guard: role
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function dashboard_blocked_when_guard_is_role_and_not_logged_in(): void
     {
         config(['threat-detection.dashboard.guard' => 'role']);
@@ -170,7 +171,7 @@ class Phase7DashboardAuthTest extends TestCase
         $this->get('/test-dashboard')->assertStatus(403);
     }
 
-    /** @test */
+    #[Test]
     public function dashboard_accessible_when_guard_is_role_and_user_has_role(): void
     {
         config([
@@ -189,7 +190,7 @@ class Phase7DashboardAuthTest extends TestCase
             ->assertStatus(200);
     }
 
-    /** @test */
+    #[Test]
     public function dashboard_blocked_when_guard_is_role_and_user_lacks_role(): void
     {
         config([

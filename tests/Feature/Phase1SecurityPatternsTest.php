@@ -3,6 +3,7 @@
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
 use JayAnta\ThreatDetection\Tests\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Cache;
@@ -56,7 +57,7 @@ class Phase1SecurityPatternsTest extends TestCase
     //  CRLF Injection (CRS 921, CWE-113)
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_crlf_injection_is_detected(): void
     {
         $this->call('POST', '/phase1-test', ['input' => "value%0d%0aSet-Cookie: hacked=true"]);
@@ -67,7 +68,7 @@ class Phase1SecurityPatternsTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_lf_injection_is_detected(): void
     {
         $this->call('POST', '/phase1-test', ['input' => "header%0aX-Injected: yes"]);
@@ -81,7 +82,7 @@ class Phase1SecurityPatternsTest extends TestCase
     //  Null Byte Injection (CWE-626)
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_null_byte_injection_is_detected(): void
     {
         $this->call('POST', '/phase1-test', ['file' => "image.php%00.jpg"]);
@@ -96,7 +97,7 @@ class Phase1SecurityPatternsTest extends TestCase
     //  Shellshock (CVE-2014-6271)
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_shellshock_is_detected(): void
     {
         $this->call('POST', '/phase1-test', ['cmd' => "() { :;}; /bin/bash -c 'cat /etc/passwd'"]);
@@ -111,7 +112,7 @@ class Phase1SecurityPatternsTest extends TestCase
     //  Spring4Shell (CVE-2022-22965)
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_spring4shell_is_detected(): void
     {
         // PHP converts dots to underscores in query param names, so use POST body
@@ -127,7 +128,7 @@ class Phase1SecurityPatternsTest extends TestCase
     //  Windows Command Injection (CRS 932)
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_windows_cmd_execution_is_detected(): void
     {
         $this->call('POST', '/phase1-test', ['input' => 'cmd /c dir C:\\Windows\\System32']);
@@ -138,7 +139,7 @@ class Phase1SecurityPatternsTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_powershell_execution_is_detected(): void
     {
         $this->call('POST', '/phase1-test', ['input' => 'powershell -ExecutionPolicy Bypass -File exploit.ps1']);
@@ -149,7 +150,7 @@ class Phase1SecurityPatternsTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_windows_script_host_is_detected(): void
     {
         $this->call('POST', '/phase1-test', ['input' => 'wscript C:\\malware.vbs']);
@@ -159,7 +160,7 @@ class Phase1SecurityPatternsTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_windows_net_command_is_detected(): void
     {
         $this->call('POST', '/phase1-test', ['input' => 'net user administrator password123']);
@@ -173,7 +174,7 @@ class Phase1SecurityPatternsTest extends TestCase
     //  SVG/HTML Event Handler XSS (CRS 941)
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_svg_xss_is_detected(): void
     {
         $this->call('POST', '/phase1-test', ['input' => '<svg onload=alert(1)>']);
@@ -184,7 +185,7 @@ class Phase1SecurityPatternsTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_body_onload_xss_is_detected(): void
     {
         $this->call('POST', '/phase1-test', ['input' => '<body onload=alert(document.cookie)>']);
@@ -195,7 +196,7 @@ class Phase1SecurityPatternsTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_img_onerror_xss_is_detected(): void
     {
         $this->call('POST', '/phase1-test', ['input' => '<img src=x onerror=alert(1)>']);
@@ -206,7 +207,7 @@ class Phase1SecurityPatternsTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_css_expression_xss_is_detected(): void
     {
         $this->call('POST', '/phase1-test', ['input' => '<div style="width: expression(alert(1))">']);
@@ -221,7 +222,7 @@ class Phase1SecurityPatternsTest extends TestCase
     //  SQL DDL/DML Injection (CRS 942)
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_sql_drop_table_is_detected(): void
     {
         $this->get('/phase1-test?q=DROP TABLE users');
@@ -232,7 +233,7 @@ class Phase1SecurityPatternsTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_sql_insert_into_is_detected(): void
     {
         $this->call('POST', '/phase1-test', ['q' => "INSERT INTO users VALUES(1,'admin','pass')"]);
@@ -243,7 +244,7 @@ class Phase1SecurityPatternsTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_sql_into_outfile_is_detected(): void
     {
         $this->get('/phase1-test?q=SELECT+*+INTO+OUTFILE+"/tmp/data.csv"+FROM+users');
@@ -254,7 +255,7 @@ class Phase1SecurityPatternsTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_sql_load_file_is_detected(): void
     {
         $this->get('/phase1-test?q=SELECT+LOAD_FILE("/etc/passwd")');
@@ -269,7 +270,7 @@ class Phase1SecurityPatternsTest extends TestCase
     //  Java Deserialization (CWE-502)
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_java_deserialization_base64_is_detected(): void
     {
         $this->call('POST', '/phase1-test', ['data' => 'rO0ABXNyABFqYXZhLnV0aWwuSGFzaE1h']);
@@ -280,7 +281,7 @@ class Phase1SecurityPatternsTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_java_serialization_hex_is_detected(): void
     {
         $this->call('POST', '/phase1-test', ['data' => 'aced00057372001173756e2e7265666c6563742e']);
@@ -295,7 +296,7 @@ class Phase1SecurityPatternsTest extends TestCase
     //  Expanded SSTI (CRS 944)
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_ssti_mathematical_probe_is_detected(): void
     {
         $this->call('POST', '/phase1-test', ['input' => '{{7*7}}']);
@@ -306,7 +307,7 @@ class Phase1SecurityPatternsTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_ssti_config_access_is_detected(): void
     {
         $this->call('POST', '/phase1-test', ['input' => '{{config.items()}}']);
@@ -317,7 +318,7 @@ class Phase1SecurityPatternsTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_ssti_jinja2_import_is_detected(): void
     {
         $this->call('POST', '/phase1-test', ['input' => '{% import "os" %}']);
@@ -332,7 +333,7 @@ class Phase1SecurityPatternsTest extends TestCase
     //  Open Redirect (CWE-601)
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_open_redirect_is_detected(): void
     {
         $this->get('/phase1-test?redirect=https://evil.com/phish');
@@ -343,7 +344,7 @@ class Phase1SecurityPatternsTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_open_redirect_next_param_is_detected(): void
     {
         $this->get('/phase1-test?next=http://attacker.com/steal');
@@ -358,7 +359,7 @@ class Phase1SecurityPatternsTest extends TestCase
     //  Normalization Pipeline Expansion
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_html_entity_encoded_xss_is_detected_after_normalization(): void
     {
         // &#60;script&#62; should be normalized to <script> and caught
@@ -369,7 +370,7 @@ class Phase1SecurityPatternsTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_html_entity_evasion_is_flagged_before_normalization(): void
     {
         $this->call('POST', '/phase1-test', ['input' => '&#60;script&#62;alert(1)']);
@@ -381,7 +382,7 @@ class Phase1SecurityPatternsTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_unicode_escape_evasion_is_detected(): void
     {
         $this->call('POST', '/phase1-test', ['input' => '\\u003cscript\\u003ealert(1)']);
@@ -396,7 +397,7 @@ class Phase1SecurityPatternsTest extends TestCase
     //  Cross-cutting: passive detector (never blocks)
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_all_new_patterns_never_block_request(): void
     {
         // Even the most dangerous payloads return 200
@@ -410,7 +411,7 @@ class Phase1SecurityPatternsTest extends TestCase
     //  False positive check: legitimate content
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_legitimate_redirect_param_without_url_not_flagged(): void
     {
         // "redirect=dashboard" should NOT trigger Open Redirect (no http://)
@@ -421,7 +422,7 @@ class Phase1SecurityPatternsTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_normal_net_word_not_flagged_as_windows_command(): void
     {
         // "networking" should NOT trigger Windows Net Command

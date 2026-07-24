@@ -3,6 +3,7 @@
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
 use JayAnta\ThreatDetection\Tests\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Cache;
@@ -53,7 +54,7 @@ class Phase2AttackCategoriesTest extends TestCase
     //  LDAP Injection (CWE-90)
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_ldap_injection_is_detected(): void
     {
         $this->call('POST', '/phase2-test', ['filter' => '*(|(uid=admin)(userPassword=*))']);
@@ -64,7 +65,7 @@ class Phase2AttackCategoriesTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_ldap_or_injection_is_detected(): void
     {
         $this->call('POST', '/phase2-test', ['q' => '(|(cn=*)(sn=admin))']);
@@ -79,7 +80,7 @@ class Phase2AttackCategoriesTest extends TestCase
     //  XPath Injection (CWE-643)
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_xpath_attribute_injection_is_detected(): void
     {
         $this->call('POST', '/phase2-test', ['q' => "[@username='admin' or '1'='1']"]);
@@ -90,7 +91,7 @@ class Phase2AttackCategoriesTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_xpath_function_injection_is_detected(): void
     {
         $this->call('POST', '/phase2-test', ['q' => "contains(@role, 'admin'))"]);
@@ -105,7 +106,7 @@ class Phase2AttackCategoriesTest extends TestCase
     //  PHP Extended Patterns (CRS 933)
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_php_assert_is_detected(): void
     {
         $this->call('POST', '/phase2-test', ['code' => "assert(system('id'));"]);
@@ -116,7 +117,7 @@ class Phase2AttackCategoriesTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_php_create_function_is_detected(): void
     {
         $this->call('POST', '/phase2-test', ['code' => "create_function('', 'system(\"id\");');"]);
@@ -127,7 +128,7 @@ class Phase2AttackCategoriesTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_php_preg_replace_e_is_detected(): void
     {
         $this->call('POST', '/phase2-test', ['code' => "preg_replace('/test/e', 'system(\"id\")', 'test');"]);
@@ -138,7 +139,7 @@ class Phase2AttackCategoriesTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_php_system_info_disclosure_is_detected(): void
     {
         $this->call('POST', '/phase2-test', ['code' => 'echo php_uname();']);
@@ -152,7 +153,7 @@ class Phase2AttackCategoriesTest extends TestCase
     //  Additional SQL Patterns (CRS 942)
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_sql_order_by_enumeration_is_detected(): void
     {
         $this->get('/phase2-test?q=ORDER+BY+15');
@@ -162,7 +163,7 @@ class Phase2AttackCategoriesTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_sql_hex_encoded_string_is_detected(): void
     {
         $this->call('POST', '/phase2-test', ['q' => "SELECT * FROM users WHERE name=0x61646d696e"]);
@@ -172,7 +173,7 @@ class Phase2AttackCategoriesTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_sql_unhex_function_is_detected(): void
     {
         $this->call('POST', '/phase2-test', ['q' => "SELECT UNHEX('61646d696e')"]);
@@ -186,7 +187,7 @@ class Phase2AttackCategoriesTest extends TestCase
     //  GraphQL Introspection (OWASP API)
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_graphql_introspection_is_detected(): void
     {
         $this->call('POST', '/phase2-test', ['query' => '{ __schema { types { name } } }']);
@@ -196,7 +197,7 @@ class Phase2AttackCategoriesTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_graphql_type_introspection_is_detected(): void
     {
         $this->call('POST', '/phase2-test', ['query' => '{ __type(name: "User") { fields { name } } }']);
@@ -210,7 +211,7 @@ class Phase2AttackCategoriesTest extends TestCase
     //  Prototype Pollution
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_prototype_pollution_is_detected(): void
     {
         $this->call('POST', '/phase2-test', ['data' => '{"__proto__": {"admin": true}}']);
@@ -225,7 +226,7 @@ class Phase2AttackCategoriesTest extends TestCase
     //  SSI Injection
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_ssi_injection_is_detected(): void
     {
         $this->call('POST', '/phase2-test', ['input' => '<!--#exec cmd="cat /etc/passwd"-->']);
@@ -240,7 +241,7 @@ class Phase2AttackCategoriesTest extends TestCase
     //  DNS Rebinding / SSRF Bypass
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_ssrf_hex_localhost_is_detected(): void
     {
         $this->call('POST', '/phase2-test', ['url' => 'http://0x7f000001/admin']);
@@ -250,7 +251,7 @@ class Phase2AttackCategoriesTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_ssrf_decimal_localhost_is_detected(): void
     {
         $this->call('POST', '/phase2-test', ['url' => 'http://2130706433/admin']);
@@ -260,7 +261,7 @@ class Phase2AttackCategoriesTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_ssrf_dns_rebinding_is_detected(): void
     {
         $this->call('POST', '/phase2-test', ['url' => 'http://127.0.0.1.nip.io/admin']);
@@ -274,7 +275,7 @@ class Phase2AttackCategoriesTest extends TestCase
     //  Known Exploit Probes
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_phpunit_rce_probe_is_detected(): void
     {
         $this->get('/phase2-test?path=vendor/phpunit/phpunit/src/Util/PHP/eval-stdin.php');
@@ -285,7 +286,7 @@ class Phase2AttackCategoriesTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_spring_boot_actuator_probe_is_detected(): void
     {
         $this->get('/phase2-test?path=/actuator/env');
@@ -295,7 +296,7 @@ class Phase2AttackCategoriesTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_drupalgeddon_is_detected(): void
     {
         $this->call('POST', '/phase2-test', ['input' => 'element[#post_render][]=exec&cmd=id']);
@@ -310,7 +311,7 @@ class Phase2AttackCategoriesTest extends TestCase
     //  Passive detector + false positive checks
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function full_cycle_all_phase2_attacks_return_200(): void
     {
         $this->call('POST', '/phase2-test', ['q' => '*(|(uid=admin))'])->assertStatus(200);
@@ -319,7 +320,7 @@ class Phase2AttackCategoriesTest extends TestCase
         $this->get('/phase2-test?q=ORDER+BY+99')->assertStatus(200);
     }
 
-    /** @test */
+    #[Test]
     public function full_cycle_legitimate_contains_function_not_flagged_as_xpath(): void
     {
         // PHP's str_contains or JS array.contains in normal text shouldn't trigger

@@ -4,6 +4,7 @@ namespace JayAnta\ThreatDetection\Tests\Unit;
 
 use JayAnta\ThreatDetection\Services\ExclusionRuleService;
 use JayAnta\ThreatDetection\Tests\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\DB;
 
 class ExclusionRuleServiceTest extends TestCase
@@ -18,7 +19,7 @@ class ExclusionRuleServiceTest extends TestCase
         $this->service = new ExclusionRuleService();
     }
 
-    /** @test */
+    #[Test]
     public function it_returns_empty_when_no_rules_exist(): void
     {
         $rules = $this->service->getActiveRules();
@@ -27,7 +28,7 @@ class ExclusionRuleServiceTest extends TestCase
         $this->assertEmpty($rules);
     }
 
-    /** @test */
+    #[Test]
     public function it_creates_rule_from_threat(): void
     {
         $threatId = DB::table('threat_logs')->insertGetId([
@@ -50,7 +51,7 @@ class ExclusionRuleServiceTest extends TestCase
         $this->assertTrue((bool) $rule->is_active);
     }
 
-    /** @test */
+    #[Test]
     public function it_returns_null_for_nonexistent_threat(): void
     {
         $rule = $this->service->createFromThreat(999);
@@ -58,7 +59,7 @@ class ExclusionRuleServiceTest extends TestCase
         $this->assertNull($rule);
     }
 
-    /** @test */
+    #[Test]
     public function it_checks_exclusion_by_label(): void
     {
         DB::table('threat_exclusion_rules')->insert([
@@ -74,7 +75,7 @@ class ExclusionRuleServiceTest extends TestCase
         $this->assertFalse($this->service->isExcluded('[query] SQL Injection', 'https://example.com/any'));
     }
 
-    /** @test */
+    #[Test]
     public function it_checks_exclusion_by_path_pattern(): void
     {
         DB::table('threat_exclusion_rules')->insert([
@@ -91,7 +92,7 @@ class ExclusionRuleServiceTest extends TestCase
         $this->assertFalse($this->service->isExcluded('[query] XSS Script Tag', 'https://example.com/admin/users'));
     }
 
-    /** @test */
+    #[Test]
     public function inactive_rules_are_ignored(): void
     {
         DB::table('threat_exclusion_rules')->insert([
@@ -106,7 +107,7 @@ class ExclusionRuleServiceTest extends TestCase
         $this->assertFalse($this->service->isExcluded('[query] XSS Script Tag', 'https://example.com/any'));
     }
 
-    /** @test */
+    #[Test]
     public function it_deletes_a_rule(): void
     {
         $id = DB::table('threat_exclusion_rules')->insertGetId([
@@ -120,7 +121,7 @@ class ExclusionRuleServiceTest extends TestCase
         $this->assertFalse($this->service->delete($id)); // already deleted
     }
 
-    /** @test */
+    #[Test]
     public function all_returns_all_rules(): void
     {
         DB::table('threat_exclusion_rules')->insert([

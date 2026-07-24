@@ -3,6 +3,7 @@
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
 use JayAnta\ThreatDetection\Tests\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 
@@ -97,7 +98,7 @@ class Phase6ExportCommandsTest extends TestCase
     //  Fail2ban Export
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function fail2ban_export_outputs_ips_in_fail2ban_format(): void
     {
         $this->seedThreats();
@@ -107,7 +108,7 @@ class Phase6ExportCommandsTest extends TestCase
             ->assertExitCode(0);
     }
 
-    /** @test */
+    #[Test]
     public function fail2ban_export_plain_format_outputs_one_ip_per_line(): void
     {
         $this->seedThreats();
@@ -118,7 +119,7 @@ class Phase6ExportCommandsTest extends TestCase
             ->assertExitCode(0);
     }
 
-    /** @test */
+    #[Test]
     public function fail2ban_export_filters_by_level(): void
     {
         $this->seedThreats();
@@ -129,7 +130,7 @@ class Phase6ExportCommandsTest extends TestCase
             ->assertExitCode(0);
     }
 
-    /** @test */
+    #[Test]
     public function fail2ban_export_filters_by_min_hits(): void
     {
         $this->seedThreats();
@@ -141,7 +142,7 @@ class Phase6ExportCommandsTest extends TestCase
             ->assertExitCode(0);
     }
 
-    /** @test */
+    #[Test]
     public function fail2ban_export_filters_by_since(): void
     {
         $this->seedThreats();
@@ -152,7 +153,7 @@ class Phase6ExportCommandsTest extends TestCase
             ->assertExitCode(0);
     }
 
-    /** @test */
+    #[Test]
     public function fail2ban_export_wider_since_includes_old_ips(): void
     {
         $this->seedThreats();
@@ -162,7 +163,7 @@ class Phase6ExportCommandsTest extends TestCase
             ->assertExitCode(0);
     }
 
-    /** @test */
+    #[Test]
     public function fail2ban_export_no_results_shows_message(): void
     {
         // Empty DB
@@ -171,7 +172,7 @@ class Phase6ExportCommandsTest extends TestCase
             ->assertExitCode(0);
     }
 
-    /** @test */
+    #[Test]
     public function fail2ban_export_custom_jail_name(): void
     {
         $this->seedThreats();
@@ -185,7 +186,7 @@ class Phase6ExportCommandsTest extends TestCase
     //  Blocklist Export
     // ────────────────────────────────────────────
 
-    /** @test */
+    #[Test]
     public function blocklist_export_plain_format(): void
     {
         $this->seedThreats();
@@ -195,7 +196,7 @@ class Phase6ExportCommandsTest extends TestCase
             ->assertExitCode(0);
     }
 
-    /** @test */
+    #[Test]
     public function blocklist_export_nginx_format(): void
     {
         $this->seedThreats();
@@ -205,7 +206,7 @@ class Phase6ExportCommandsTest extends TestCase
             ->assertExitCode(0);
     }
 
-    /** @test */
+    #[Test]
     public function blocklist_export_apache_format(): void
     {
         $this->seedThreats();
@@ -215,7 +216,7 @@ class Phase6ExportCommandsTest extends TestCase
             ->assertExitCode(0);
     }
 
-    /** @test */
+    #[Test]
     public function blocklist_export_csv_format(): void
     {
         $this->seedThreats();
@@ -226,7 +227,7 @@ class Phase6ExportCommandsTest extends TestCase
             ->assertExitCode(0);
     }
 
-    /** @test */
+    #[Test]
     public function blocklist_export_filters_by_level_and_min_hits(): void
     {
         $this->seedThreats();
