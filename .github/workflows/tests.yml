@@ -14,11 +14,10 @@ jobs:
       fail-fast: false
       matrix:
         php: [8.2, 8.3, 8.4]
-        laravel: [10.*, 11.*, 12.*]
-        exclude:
-          # Laravel 10 supports PHP 8.1–8.3 only (no 8.4).
-          - php: 8.4
-            laravel: 10.*
+        laravel: [12.*]
+        # Laravel 10 & 11 are end-of-life: their unpatched security advisories
+        # (in illuminate/mail) make a clean composer install fail in CI. The
+        # package still SUPPORTS ^10|^11|^12 for existing apps — see composer.json.
 
     name: PHP ${{ matrix.php }} / Laravel ${{ matrix.laravel }}
 
