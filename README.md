@@ -899,4 +899,6 @@ Contributions are welcome! Please submit a Pull Request.
 
 ## Credits
 
-- [Jay Anta](https://github.com/jay123anta)
+- [Jay Anta](https://github.com/jay123anta) — author & maintainer
+- [David van der Tuijn](https://github.com/davidvandertuijn) — Laravel 13 support
+- [All contributors](https://github.com/jay123anta/laravel-threat-detection/graphs/contributors)
