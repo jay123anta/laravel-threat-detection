@@ -375,7 +375,7 @@ Publish the config file to see all available options:
 php artisan vendor:publish --tag=threat-detection-config
 ```
 
-Key config sections: `skip_paths` (paths to skip), `only_paths` (whitelist mode), `auth_paths` (smart detection for login routes), `content_paths` (suppress non-high alerts), `safe_fields` (exclude specific fields from scanning), `probe_tracking` (404 probe detection), `context_weights` (scoring multipliers), `threat_levels` (severity keyword mapping), `api_route_filtering` (suppress low/medium on API routes), `queue` (async processing), `retention` (auto-purge), `max_detections_per_request` (performance cap), `dashboard.guard` / `api.guard` (auth mode).
+Key config sections: `skip_paths` (paths to skip), `only_paths` (whitelist mode), `auth_paths` (smart detection for login routes), `content_paths` (suppress non-high alerts), `safe_fields` (exclude specific fields from scanning), `safe_paths` (path-aware field exclusion for nested JSON), `probe_tracking` (404 probe detection), `context_weights` (scoring multipliers), `threat_levels` (severity keyword mapping), `api_route_filtering` (suppress low/medium on API routes), `queue` (async processing), `retention` (auto-purge), `max_detections_per_request` (performance cap), `dashboard.guard` / `api.guard` (auth mode).
 
 ### Route Whitelisting (`only_paths`)
 
@@ -698,6 +698,17 @@ If specific form fields legitimately contain HTML, SQL keywords, or code (e.g., 
 ```
 
 Fields listed here are stripped from query params and the request body — both form-encoded and JSON (`application/json`) — before detection runs. Other fields on the same request are still fully scanned.
+
+### Safe Paths (path-aware, for nested JSON APIs)
+
+`safe_fields` matches a key name **anywhere** it appears. For nested JSON APIs that's often too broad — you may want to exempt one specific field's value without exempting that key everywhere. Use `safe_paths`, which matches by dot-notation **path** and supports `fnmatch` wildcards:
+
+```php
+// config/threat-detection.php
+'safe_paths' => ['search.query', 'filters.*.value'],
+```
+
+For example, `search.query` exempts the value of `{"search": {"query": "..."}}` (a search box whose text legitimately contains words like `SELECT`), while a `query` field anywhere else in the request is still scanned. Everything not listed is scanned exactly as before.
 
 ---
 

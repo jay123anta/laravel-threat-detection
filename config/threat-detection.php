@@ -129,6 +129,25 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Safe Paths (Path-Aware False Positive Reduction)
+    |--------------------------------------------------------------------------
+    |
+    | Like safe_fields, but matches by dot-notation *path* into the request
+    | (query or JSON/form body) instead of by field name anywhere. This is more
+    | precise for nested JSON APIs: exclude one specific field's value without
+    | exempting that key everywhere it appears.
+    |
+    | Supports fnmatch wildcards. Detection scans only leaf string values, so a
+    | legitimate search term containing SQL keywords no longer trips a pattern
+    | once its path is listed here.
+    |
+    | Example: ['search.query', 'filters.*.value', 'content.*.body']
+    |
+    */
+    'safe_paths' => [],
+
+    /*
+    |--------------------------------------------------------------------------
     | 404 Probe Tracking
     |--------------------------------------------------------------------------
     |

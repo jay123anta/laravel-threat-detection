@@ -2,6 +2,28 @@
 
 All notable changes to `jayanta/laravel-threat-detection` will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **`safe_paths` — path-aware false-positive control.** Like `safe_fields`, but
+  matches by dot-notation *path* into the request (query or JSON/form body)
+  instead of by field name anywhere. This is precise for nested JSON APIs: you
+  can exempt one field's value — e.g. a search box whose value legitimately
+  contains SQL keywords — without exempting that key name everywhere it appears.
+  Supports `fnmatch` wildcards:
+
+  ```php
+  'safe_paths' => ['search.query', 'filters.*.value'],
+  ```
+
+  Fully backward-compatible (defaults to an empty array; `safe_fields` is
+  unchanged). Directly addresses the JSON false-positive problem discussed on
+  r/PHP — thanks to **u/Deep_Ad1959** for suggesting path-based allow-listing.
+
+No changes to detection behaviour otherwise — all existing patterns scan exactly
+as before. 5 new tests (227 → 232).
+
 ## [1.4.0] - 2026-07-23
 
 ### Added

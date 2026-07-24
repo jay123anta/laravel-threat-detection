@@ -241,11 +241,15 @@ class ThreatDetectionService
     {
         $segments = ['query' => '', 'body' => '', 'headers' => ''];
         $safeFields = config('threat-detection.safe_fields', []);
+        $safePaths  = config('threat-detection.safe_paths', []);
 
         $queryData = $request->query();
         if (!empty($queryData)) {
             if (!empty($safeFields)) {
                 $queryData = array_diff_key($queryData, array_flip($safeFields));
+            }
+            if (!empty($safePaths)) {
+                $queryData = $this->stripSafePaths($queryData, $safePaths, '');
             }
             if (!empty($queryData)) {
                 $segments['query'] = json_encode($queryData, self::SEGMENT_JSON_FLAGS);
@@ -270,6 +274,9 @@ class ThreatDetectionService
             if (!empty($safeFields)) {
                 $postData = array_diff_key($postData, array_flip($safeFields));
             }
+            if (!empty($safePaths)) {
+                $postData = $this->stripSafePaths($postData, $safePaths, '');
+            }
             if (!empty($postData)) {
                 $segments['body'] = json_encode($postData, self::SEGMENT_JSON_FLAGS);
             }
@@ -286,6 +293,34 @@ class ThreatDetectionService
         }
 
         return $segments;
+    }
+
+    /**
+     * Recursively remove any entry whose dot-notation path matches a safe_paths
+     * pattern (fnmatch — e.g. "search.query", "filters.*.value"). Path-aware
+     * false-positive control: exempt one specific field's value in a nested
+     * JSON/form body without exempting that key name everywhere it appears.
+     */
+    private function stripSafePaths(array $data, array $safePaths, string $prefix): array
+    {
+        $out = [];
+        foreach ($data as $key => $value) {
+            $path = $prefix === '' ? (string) $key : $prefix . '.' . $key;
+            foreach ($safePaths as $sp) {
+                if (fnmatch($sp, $path)) {
+                    continue 2;
+                }
+            }
+            if (is_array($value)) {
+                $child = $this->stripSafePaths($value, $safePaths, $path);
+                if (!empty($child)) {
+                    $out[$key] = $child;
+                }
+            } else {
+                $out[$key] = $value;
+            }
+        }
+        return $out;
     }
 
     /**
