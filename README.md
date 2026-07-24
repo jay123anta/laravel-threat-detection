@@ -8,13 +8,13 @@
 
 # Laravel Threat Detection
 
-**Know who's attacking your Laravel app — without changing a single line of application code.**
+**Know who's attacking your Laravel app -  without changing a single line of application code.**
 
 <p align="center">
-  <img src="docs/dashboard.png" alt="Threat Detection Dashboard — stats, 7-day timeline, live threat log, top offending IPs and threats by country" width="100%">
+  <img src="docs/dashboard.png" alt="Threat Detection Dashboard -  stats, 7-day timeline, live threat log, top offending IPs and threats by country" width="100%">
 </p>
 
-A middleware-based threat detection and logging system for Laravel. Drop it in, and it starts scanning every HTTP request for SQL injection, XSS, RCE, scanner bots, DDoS patterns, and 60+ other attack types — logging everything to your database with full geo-enrichment and a built-in dashboard.
+A middleware-based threat detection and logging system for Laravel. Drop it in, and it starts scanning every HTTP request for SQL injection, XSS, RCE, scanner bots, DDoS patterns, and 60+ other attack types -  logging everything to your database with full geo-enrichment and a built-in dashboard.
 
 > Extracted from a production application. Battle-tested with real traffic.
 
@@ -25,10 +25,10 @@ A middleware-based threat detection and logging system for Laravel. Drop it in, 
 ## What This Is NOT
 
 - **Not a WAF.** It does not block, filter, or modify any request. Use Cloudflare, mod_security, or a proper WAF for that.
-- **Not a replacement for secure coding.** Parameterized queries, input validation, output escaping — those are your real defenses. This package assumes your code is already secure.
-- **Not a Cloudflare replacement.** If you can use Cloudflare or a similar edge service, use it. This provides application-level visibility that edge services don't — you can see exactly what's hitting your routes, with full request context.
+- **Not a replacement for secure coding.** Parameterized queries, input validation, output escaping -  those are your real defenses. This package assumes your code is already secure.
+- **Not a Cloudflare replacement.** If you can use Cloudflare or a similar edge service, use it. This provides application-level visibility that edge services don't -  you can see exactly what's hitting your routes, with full request context.
 
-**What it IS:** A passive monitoring layer that sits alongside your existing security. Think of it as a security camera — it doesn't lock the door, but it shows you who's trying to get in, how often, and what techniques they're using. That visibility helps you make informed decisions (IP blocking via fail2ban, rate limiting, geo-blocking).
+**What it IS:** A passive monitoring layer that sits alongside your existing security. Think of it as a security camera -  it doesn't lock the door, but it shows you who's trying to get in, how often, and what techniques they're using. That visibility helps you make informed decisions (IP blocking via fail2ban, rate limiting, geo-blocking).
 
 ---
 
@@ -37,7 +37,7 @@ A middleware-based threat detection and logging system for Laravel. Drop it in, 
 - PHP 8.2+ (Laravel 13 requires PHP 8.3+)
 - Laravel 10.x, 11.x, 12.x, or 13.x
 - Any database supported by Laravel (MySQL, PostgreSQL, SQLite, SQL Server)
-- Any cache driver — **no Redis or queue worker required**. Redis/Memcached is
+- Any cache driver -  **no Redis or queue worker required**. Redis/Memcached is
   only *recommended* to enable the optional DDoS check (which auto-disables on
   non-atomic drivers). Queued writes are opt-in and off by default.
 
@@ -49,7 +49,7 @@ A middleware-based threat detection and logging system for Laravel. Drop it in, 
 2. The request is checked against 175+ regex patterns covering SQL injection, XSS, RCE, file traversal, SSRF, LDAP, XPath, SSTI, and more
 3. If a threat pattern matches, a record is written to your `threat_logs` database table with the IP, URL, threat type, severity level, and a confidence score
 4. Optionally, a Slack alert is sent for high-severity threats
-5. The request proceeds normally — **nothing is blocked**
+5. The request proceeds normally -  **nothing is blocked**
 
 No internet connection is needed for detection.
 
@@ -78,13 +78,13 @@ This creates two tables: `threat_logs` (stores detected threats) and `threat_exc
 ```bash
 php artisan migrate:status
 ```
-Look for `create_threat_logs_table`, `add_confidence_to_threat_logs_table`, and `create_threat_exclusion_rules_table` — all should show `Ran`.
+Look for `create_threat_logs_table`, `add_confidence_to_threat_logs_table`, and `create_threat_exclusion_rules_table` -  all should show `Ran`.
 
 ### 3. Register the middleware
 
 The middleware is what scans requests. You need to add it to your `web` middleware group.
 
-**If you use Laravel 11 or 12** — open `bootstrap/app.php`:
+**If you use Laravel 11 or 12** -  open `bootstrap/app.php`:
 
 ```php
 ->withMiddleware(function (Middleware $middleware) {
@@ -96,7 +96,7 @@ The middleware is what scans requests. You need to add it to your `web` middlewa
 
 > **How to check your Laravel version:** Run `php artisan --version` in your terminal.
 
-**If you use Laravel 10** — open `app/Http/Kernel.php`:
+**If you use Laravel 10** -  open `app/Http/Kernel.php`:
 
 ```php
 protected $middlewareGroups = [
@@ -172,13 +172,13 @@ http://localhost:8000/?q=DROP TABLE users
 
 ### Step 3: Check that threats were logged
 
-**Option A — Artisan command (quickest):**
+**Option A -  Artisan command (quickest):**
 ```bash
 php artisan threat-detection:stats
 ```
 You should see a table with `Total Threats`, severity counts, and top IPs.
 
-**Option B — Tinker:**
+**Option B -  Tinker:**
 ```bash
 php artisan tinker
 ```
@@ -186,7 +186,7 @@ php artisan tinker
 DB::table('threat_logs')->latest()->take(5)->get(['ip_address', 'type', 'threat_level', 'confidence_score']);
 ```
 
-**Option C — Laravel log file:**
+**Option C -  Laravel log file:**
 Each detected threat is written as a warning to `storage/logs/laravel.log`:
 ```
 [high] Threat Detected: [middleware] SQL Injection UNION from 127.0.0.1 (http://localhost:8000/?q=...) [confidence: 50%]
@@ -197,7 +197,7 @@ Each detected threat is written as a warning to `storage/logs/laravel.log`:
 | Behavior | Explanation |
 |----------|-------------|
 | Same threat only logs once per 5 minutes | Deduplication: same IP + same threat type is cached for 5 minutes. Use **different attack types** for each test, or wait between tests. |
-| `curl` requests trigger extra detection | Using `curl` also logs a "cURL Command" user-agent detection (low severity). This is expected — the package detects automated tools. |
+| `curl` requests trigger extra detection | Using `curl` also logs a "cURL Command" user-agent detection (low severity). This is expected -  the package detects automated tools. |
 | The package never blocks requests | Your app continues to function normally. Detection is passive. |
 | No Slack setup needed | Notifications are off by default. |
 | No internet connection needed | Core detection is 100% local. Only the optional `threat-detection:enrich` command calls an external API for geo-data. |
@@ -210,13 +210,13 @@ This is almost always because migrations were not published. The package detects
 
 | Check | How to verify |
 |-------|---------------|
-| Migrations were **published** | Run `php artisan migrate:status` — look for `create_threat_logs_table` and `create_threat_exclusion_rules_table`. If missing, you need to publish first (see below) |
-| Migrations were **run** | Same command — status should show `Ran`, not `Pending` |
+| Migrations were **published** | Run `php artisan migrate:status` -  look for `create_threat_logs_table` and `create_threat_exclusion_rules_table`. If missing, you need to publish first (see below) |
+| Migrations were **run** | Same command -  status should show `Ran`, not `Pending` |
 | Middleware is registered | Confirm `ThreatDetectionMiddleware` is in your `web` middleware group (see [Step 3](#3-register-the-middleware) above) |
 | IP is not whitelisted | If you added `THREAT_DETECTION_WHITELISTED_IPS` to `.env`, remove it during testing |
 | Environment is enabled | Default enabled environments: `production`, `staging`, `local`. Check `APP_ENV` in `.env` |
 | Used an existing route | The test URL must match a real route (e.g., `/`). |
-| Dedup cache | Same IP + same attack type is cached for 5 minutes — try a different attack type |
+| Dedup cache | Same IP + same attack type is cached for 5 minutes -  try a different attack type |
 
 **"`threat-detection:stats` throws a database error" / "`threat_exclusion_rules` table not found"**
 
@@ -225,7 +225,7 @@ The tables don't exist yet. You need to **publish** the migrations first, then r
 php artisan vendor:publish --tag=threat-detection-migrations
 php artisan migrate
 ```
-> **Note:** Running `php artisan migrate` alone is not enough — the migration files are inside the package and need to be published to your app's `database/migrations/` folder first.
+> **Note:** Running `php artisan migrate` alone is not enough -  the migration files are inside the package and need to be published to your app's `database/migrations/` folder first.
 
 **"API returns 401 Unauthorized"**
 
@@ -242,41 +242,41 @@ php artisan route:clear
 
 ## Features
 
-- **175+ Detection Patterns** — SQL injection (UNION, DDL, DML, file ops), XSS (script, SVG, CSS expression), RCE, directory traversal, SSRF, XXE, Log4Shell, NoSQL injection, command injection (Linux + Windows), LDAP injection, XPath injection, SSTI, CRLF injection, Java deserialization, and more
-- **53 Bot/Scanner Signatures** — SQLMap, Nikto, Nmap, Burp Suite, FeroxBuster, FFUF, XSStrike, Dalfox, Netsparker, and 20+ other security scanners
-- **AI Scraper Detection** — GPTBot, ClaudeBot, ByteSpider, Common Crawl, and other AI training bots
-- **Headless Browser Detection** — HeadlessChrome, PhantomJS, Selenium, Puppeteer, Playwright
-- **404 Probe Tracking** — Detects reconnaissance probes hitting known vulnerable paths (`/wp-admin`, `/.env`, `/phpmyadmin`, `/actuator`, etc.) with 50+ default probe paths
-- **DDoS Monitoring** — Rate-based threshold detection with configurable windows
-- **Confidence Scoring** — Each threat gets a 0-100 confidence score based on pattern count, context, and signals
-- **Evasion Resistance** — Normalization pipeline defeats SQL comment insertion, double URL encoding, HTML entity encoding, Unicode escapes, and hex escapes before pattern matching
-- **CVE Detection** — Shellshock (CVE-2014-6271), Spring4Shell (CVE-2022-22965), PHPUnit RCE (CVE-2017-9841), Drupalgeddon, Log4Shell
-- **Context-Aware Detection** — Patterns found in query strings score higher than those in the request body
-- **Request Body Scanning** — Both form-encoded and JSON (`application/json`) request bodies are inspected
-- **Safe Fields** — Exclude specific form fields from scanning (for CMS editors, code inputs, search fields)
-- **False Positive Reporting** — Mark threats as false positives from the dashboard; auto-creates exclusion rules
-- **Three Detection Modes** — `strict`, `balanced` (default), and `relaxed` — tunable sensitivity
-- **Content Path Suppression** — Whitelist CMS/blog paths to suppress low/medium alerts from rich content
-- **PII Detection** — Sensitive data exposure patterns (configurable per region)
-- **Geo-Enrichment** — Country, city, ISP, cloud provider identification via free API
-- **Slack Alerts** — Real-time notifications for high-severity threats (works on Laravel 10 and 11+)
-- **Built-in Dashboard** — Dark-mode Blade dashboard (Alpine.js + Tailwind CDN, zero build step)
-- **Dashboard Auth Guard** — Configurable authentication for dashboard and API (none, auth, role, or IP-based)
-- **15 API Endpoints** — Full REST API for building custom Vue/React/mobile dashboards
-- **Fail2ban Export** — Export detected IPs in fail2ban-compatible format or plain blocklist
-- **Blocklist Export** — Export IPs in nginx deny, Apache deny, CSV, or plain format
-- **CSV Export** — One-click threat log export (up to 10,000 rows)
-- **Correlation Analysis** — Detect coordinated attacks and attack campaigns across IPs
-- **Performance Optimized** — Category-based lazy pattern loading (only runs regex for relevant attack categories), early bailout for clean requests, browser UA short-circuit (skips 70+ checks for normal browsers), probe path hash lookup, batch DB inserts, configurable max detections per request
-- **Database Agnostic** — MySQL, PostgreSQL, SQLite, SQL Server
-- **Zero Config** — Works out of the box with sensible defaults
-- **Safe by Design** — The middleware catches its own errors. If detection fails, your app keeps running. Requests are never blocked.
+- **175+ Detection Patterns** -  SQL injection (UNION, DDL, DML, file ops), XSS (script, SVG, CSS expression), RCE, directory traversal, SSRF, XXE, Log4Shell, NoSQL injection, command injection (Linux + Windows), LDAP injection, XPath injection, SSTI, CRLF injection, Java deserialization, and more
+- **53 Bot/Scanner Signatures** -  SQLMap, Nikto, Nmap, Burp Suite, FeroxBuster, FFUF, XSStrike, Dalfox, Netsparker, and 20+ other security scanners
+- **AI Scraper Detection** -  GPTBot, ClaudeBot, ByteSpider, Common Crawl, and other AI training bots
+- **Headless Browser Detection** -  HeadlessChrome, PhantomJS, Selenium, Puppeteer, Playwright
+- **404 Probe Tracking** -  Detects reconnaissance probes hitting known vulnerable paths (`/wp-admin`, `/.env`, `/phpmyadmin`, `/actuator`, etc.) with 50+ default probe paths
+- **DDoS Monitoring** -  Rate-based threshold detection with configurable windows
+- **Confidence Scoring** -  Each threat gets a 0-100 confidence score based on pattern count, context, and signals
+- **Evasion Resistance** -  Normalization pipeline defeats SQL comment insertion, double URL encoding, HTML entity encoding, Unicode escapes, and hex escapes before pattern matching
+- **CVE Detection** -  Shellshock (CVE-2014-6271), Spring4Shell (CVE-2022-22965), PHPUnit RCE (CVE-2017-9841), Drupalgeddon, Log4Shell
+- **Context-Aware Detection** -  Patterns found in query strings score higher than those in the request body
+- **Request Body Scanning** -  Both form-encoded and JSON (`application/json`) request bodies are inspected
+- **Safe Fields** -  Exclude specific form fields from scanning (for CMS editors, code inputs, search fields)
+- **False Positive Reporting** -  Mark threats as false positives from the dashboard; auto-creates exclusion rules
+- **Three Detection Modes** -  `strict`, `balanced` (default), and `relaxed` -  tunable sensitivity
+- **Content Path Suppression** -  Whitelist CMS/blog paths to suppress low/medium alerts from rich content
+- **PII Detection** -  Sensitive data exposure patterns (configurable per region)
+- **Geo-Enrichment** -  Country, city, ISP, cloud provider identification via free API
+- **Slack Alerts** -  Real-time notifications for high-severity threats (works on Laravel 10 and 11+)
+- **Built-in Dashboard** -  Dark-mode Blade dashboard (Alpine.js + Tailwind CDN, zero build step)
+- **Dashboard Auth Guard** -  Configurable authentication for dashboard and API (none, auth, role, or IP-based)
+- **15 API Endpoints** -  Full REST API for building custom Vue/React/mobile dashboards
+- **Fail2ban Export** -  Export detected IPs in fail2ban-compatible format or plain blocklist
+- **Blocklist Export** -  Export IPs in nginx deny, Apache deny, CSV, or plain format
+- **CSV Export** -  One-click threat log export (up to 10,000 rows)
+- **Correlation Analysis** -  Detect coordinated attacks and attack campaigns across IPs
+- **Performance Optimized** -  Category-based lazy pattern loading (only runs regex for relevant attack categories), early bailout for clean requests, browser UA short-circuit (skips 70+ checks for normal browsers), probe path hash lookup, batch DB inserts, configurable max detections per request
+- **Database Agnostic** -  MySQL, PostgreSQL, SQLite, SQL Server
+- **Zero Config** -  Works out of the box with sensible defaults
+- **Safe by Design** -  The middleware catches its own errors. If detection fails, your app keeps running. Requests are never blocked.
 
 ---
 
 ## Configuration
 
-The package works without any `.env` changes. All values below are optional — add them only if you want to override the defaults.
+The package works without any `.env` changes. All values below are optional -  add them only if you want to override the defaults.
 
 ```env
 # Enable/disable detection globally (default: true)
@@ -315,9 +315,9 @@ THREAT_DETECTION_MODE=balanced
 # API rate limiting (default: 60 requests per minute)
 # THREAT_DETECTION_API_THROTTLE=60,1
 
-# Queue support — offload DB writes to a queue (disabled by default).
+# Queue support -  offload DB writes to a queue (disabled by default).
 # OPTIONAL: only enable if your app already runs a queue worker. When false
-# (default), threats are written synchronously with a plain DB insert — no
+# (default), threats are written synchronously with a plain DB insert -  no
 # Redis, no worker, nothing extra to run.
 # THREAT_DETECTION_QUEUE=false
 # THREAT_DETECTION_QUEUE_CONNECTION=redis
@@ -342,7 +342,7 @@ THREAT_DETECTION_MODE=balanced
 # THREAT_DETECTION_DASHBOARD_ROLE=admin
 # THREAT_DETECTION_DASHBOARD_IPS=127.0.0.1
 
-# API auth guard (default: none — uses existing middleware config)
+# API auth guard (default: none -  uses existing middleware config)
 # THREAT_DETECTION_API_GUARD=none
 ```
 
@@ -379,7 +379,7 @@ Key config sections: `skip_paths` (paths to skip), `only_paths` (whitelist mode)
 
 ### Route Whitelisting (`only_paths`)
 
-If your app has many routes but you only care about a few, use `only_paths` to scan **only** those routes. All other routes are automatically skipped — no middleware overhead at all.
+If your app has many routes but you only care about a few, use `only_paths` to scan **only** those routes. All other routes are automatically skipped -  no middleware overhead at all.
 
 ```php
 // config/threat-detection.php
@@ -403,7 +403,7 @@ THREAT_DETECTION_QUEUE_CONNECTION=redis
 THREAT_DETECTION_QUEUE_NAME=threat-logs
 ```
 
-This dispatches a `StoreThreatLog` job (3 retries, backoff 10s/30s). Detection still happens in real-time — only the write is deferred.
+This dispatches a `StoreThreatLog` job (3 retries, backoff 10s/30s). Detection still happens in real-time -  only the write is deferred.
 
 ### Auto-Purge (Retention Policy)
 
@@ -431,7 +431,7 @@ protected $listen = [
 ];
 ```
 
-The event carries `$threatLog` (full DB row array), `$ipAddress`, and `$threatLevel`. Use it to trigger custom actions — send Telegram alerts, update a blocklist, feed a SIEM, etc.
+The event carries `$threatLog` (full DB row array), `$ipAddress`, and `$threatLevel`. Use it to trigger custom actions -  send Telegram alerts, update a blocklist, feed a SIEM, etc.
 
 ---
 
@@ -459,7 +459,7 @@ composer require laravel/slack-notification-channel
 
 ## Dashboard
 
-The package ships with a built-in dark-mode dashboard (Alpine.js + Tailwind CDN — no build step required).
+The package ships with a built-in dark-mode dashboard (Alpine.js + Tailwind CDN -  no build step required).
 
 ```
 +-------------------------------------------------------------------------+
@@ -493,19 +493,19 @@ Visit: `http://your-app.test/threat-detection`
 
 ### Dashboard authentication
 
-The dashboard uses `['web', 'auth']` middleware by default — users must be logged in.
+The dashboard uses `['web', 'auth']` middleware by default -  users must be logged in.
 
 **If your app does not have authentication set up yet** (e.g., during local development), you have two options:
 
-**Option 1 — Use the built-in auth guard (recommended):**
+**Option 1 -  Use the built-in auth guard (recommended):**
 ```env
 # In your .env file:
 THREAT_DETECTION_DASHBOARD_GUARD=ip
 THREAT_DETECTION_DASHBOARD_IPS=127.0.0.1
 ```
-This restricts the dashboard to your local machine only. Other guard options: `auth` (login required), `role` (role-based), `none` (no auth — for local dev only). See [Dashboard Authentication](#dashboard-authentication) for all options.
+This restricts the dashboard to your local machine only. Other guard options: `auth` (login required), `role` (role-based), `none` (no auth -  for local dev only). See [Dashboard Authentication](#dashboard-authentication) for all options.
 
-**Option 2 — Remove auth middleware:**
+**Option 2 -  Remove auth middleware:**
 ```php
 // config/threat-detection.php
 'dashboard' => [
@@ -534,12 +534,12 @@ API routes use `auth:sanctum` middleware by default. The package handles this gr
 
 **If you don't use Sanctum but want to protect your API**, you have two options:
 
-**Option 1 — Use the built-in auth guard:**
+**Option 1 -  Use the built-in auth guard:**
 ```env
 THREAT_DETECTION_API_GUARD=auth
 ```
 
-**Option 2 — Change the middleware directly:**
+**Option 2 -  Change the middleware directly:**
 ```php
 // config/threat-detection.php
 'api' => [
@@ -663,7 +663,7 @@ php artisan threat-detection:export-blocklist --format=csv --since=7d
 
 ## 404 Probe Tracking
 
-The package detects reconnaissance probes — bots that hit known vulnerable paths like `/wp-admin`, `/.env`, or `/phpmyadmin` on your non-WordPress, non-phpMyAdmin site. These have no malicious payload; the path itself is the signal.
+The package detects reconnaissance probes -  bots that hit known vulnerable paths like `/wp-admin`, `/.env`, or `/phpmyadmin` on your non-WordPress, non-phpMyAdmin site. These have no malicious payload; the path itself is the signal.
 
 Logged with a `[probe]` type tag, separate from payload-based detection. If a probe request also contains a malicious payload, both are logged independently.
 
@@ -697,7 +697,7 @@ If specific form fields legitimately contain HTML, SQL keywords, or code (e.g., 
 'safe_fields' => ['content', 'body', 'html', 'description', 'code'],
 ```
 
-Fields listed here are stripped from query params and the request body — both form-encoded and JSON (`application/json`) — before detection runs. Other fields on the same request are still fully scanned.
+Fields listed here are stripped from query params and the request body -  both form-encoded and JSON (`application/json`) -  before detection runs. Other fields on the same request are still fully scanned.
 
 ---
 
@@ -724,7 +724,7 @@ When `guard=none` (default), the package logs a warning once per day to remind y
 
 The guard **fails closed**: an unrecognised guard value (e.g. a typo) is denied with a 403 and a logged warning rather than silently granting access, and `guard=role` denies (with a warning) when the authenticated user model has no `hasRole()` method.
 
-> **Dashboard ↔ API note:** the built-in dashboard fetches its data from the API routes using the browser session cookie. If your API routes are protected with `auth:sanctum`, configure Sanctum stateful/SPA authentication (or point the dashboard at a cookie-authenticated guard) so those AJAX calls are authorised — otherwise the dashboard renders empty.
+> **Dashboard ↔ API note:** the built-in dashboard fetches its data from the API routes using the browser session cookie. If your API routes are protected with `auth:sanctum`, configure Sanctum stateful/SPA authentication (or point the dashboard at a cookie-authenticated guard) so those AJAX calls are authorised -  otherwise the dashboard renders empty.
 
 ---
 
@@ -738,7 +738,7 @@ Add your own detection regex patterns in `config/threat-detection.php`:
 ],
 ```
 
-**Example — detect a custom admin endpoint probe:**
+**Example -  detect a custom admin endpoint probe:**
 ```php
 '/\/my-admin-panel/i' => 'Custom Admin Panel Probe',
 ```
@@ -757,7 +757,7 @@ The threat level for each pattern is determined automatically by matching keywor
 
 If the label doesn't match any keyword, the threat defaults to `low` severity.
 
-Invalid regex patterns are automatically skipped and logged as warnings — they won't crash your application.
+Invalid regex patterns are automatically skipped and logged as warnings -  they won't crash your application.
 
 ---
 
@@ -785,14 +785,14 @@ $summary = ThreatDetection::getCorrelationSummary();
 
 ## Going to Production
 
-The package is passive by design — it never blocks, rejects, or alters a request, and the detection middleware wraps its whole body in `try/catch`, so a detection failure can never break your app. It ships with sensible defaults and needs no external services to run. Before you go live, this short checklist is worth a look:
+The package is passive by design -  it never blocks, rejects, or alters a request, and the detection middleware wraps its whole body in `try/catch`, so a detection failure can never break your app. It ships with sensible defaults and needs no external services to run. Before you go live, this short checklist is worth a look:
 
-1. **Protect the dashboard and API.** Both default to `guard = none` for a zero-config first run, and log a daily warning while unprotected. Before production, set a guard — `THREAT_DETECTION_DASHBOARD_GUARD` and `THREAT_DETECTION_API_GUARD` (`auth`, `role`, or `ip`). An unrecognised value or a `role` guard on a user model without `hasRole()` now **fails closed** (403), so a typo won't silently expose data. See [Dashboard Authentication](#dashboard-authentication).
-2. **Run the migrations** (`vendor:publish --tag=threat-detection-migrations && migrate`). Re-publishing is safe — already-published migrations are skipped.
-3. **Pick a detection mode.** `balanced` (default) suits most apps; use `relaxed` for content-heavy sites, `strict` for high-security surfaces. Tune with `content_paths`, `safe_fields`, and `min_confidence` — see [Reducing False Positives](#reducing-false-positives).
+1. **Protect the dashboard and API.** Both default to `guard = none` for a zero-config first run, and log a daily warning while unprotected. Before production, set a guard -  `THREAT_DETECTION_DASHBOARD_GUARD` and `THREAT_DETECTION_API_GUARD` (`auth`, `role`, or `ip`). An unrecognised value or a `role` guard on a user model without `hasRole()` now **fails closed** (403), so a typo won't silently expose data. See [Dashboard Authentication](#dashboard-authentication).
+2. **Run the migrations** (`vendor:publish --tag=threat-detection-migrations && migrate`). Re-publishing is safe -  already-published migrations are skipped.
+3. **Pick a detection mode.** `balanced` (default) suits most apps; use `relaxed` for content-heavy sites, `strict` for high-security surfaces. Tune with `content_paths`, `safe_fields`, and `min_confidence` -  see [Reducing False Positives](#reducing-false-positives).
 4. **Review the regional PII / custom patterns.** Defaults are India-centric (Aadhaar, PAN, IFSC) and the broad numeric patterns (e.g. bank-account) can match long numeric IDs outside auth routes. Replace or trim `custom_patterns` for your region and app, and add heavy-content routes to `auth_paths` / `content_paths`.
 5. **Turn on retention** if you expect volume: `THREAT_DETECTION_RETENTION=true` (auto-purges via the scheduler). Requires Laravel's scheduler (`schedule:run`) to be cron-driven.
-6. **Optional extras, all off by default:** Slack alerts (`THREAT_DETECTION_NOTIFICATIONS`), geo-enrichment (`php artisan threat-detection:enrich` — the only feature that makes an outbound call, to the free ip-api.com), and queued writes (`THREAT_DETECTION_QUEUE` — enable only if you already run a queue worker; otherwise writes are synchronous and need no Redis).
+6. **Optional extras, all off by default:** Slack alerts (`THREAT_DETECTION_NOTIFICATIONS`), geo-enrichment (`php artisan threat-detection:enrich` -  the only feature that makes an outbound call, to the free ip-api.com), and queued writes (`THREAT_DETECTION_QUEUE` -  enable only if you already run a queue worker; otherwise writes are synchronous and need no Redis).
 
 No Redis, no queue worker, and no outbound network calls are required for core detection and logging.
 
@@ -811,7 +811,7 @@ If specific form fields legitimately contain HTML, SQL keywords, or code, exclud
 'safe_fields' => ['content', 'body', 'html', 'description', 'code'],
 ```
 
-This is the simplest approach. The field is completely skipped — no detection runs on it. Use for CMS content editors, code snippet inputs, and rich text fields. See [Safe Fields](#safe-fields-false-positive-reduction) for details.
+This is the simplest approach. The field is completely skipped -  no detection runs on it. Use for CMS content editors, code snippet inputs, and rich text fields. See [Safe Fields](#safe-fields-false-positive-reduction) for details.
 
 ### Content Path Suppression
 
@@ -871,7 +871,7 @@ Threats below the confidence threshold for your detection mode are not logged (s
 | **CRLF / Header Injection** | URL-encoded CRLF (`%0d%0a`), LF injection, null byte injection |
 | **Protocol Attacks** | HTTP request smuggling (CL+TE), SSI injection |
 | **CVE Exploits** | Shellshock (CVE-2014-6271), Spring4Shell (CVE-2022-22965), PHPUnit RCE (CVE-2017-9841), Drupalgeddon, Log4Shell |
-| **Probe Tracking** | WordPress (`/wp-admin`, `/wp-login.php`), config files (`/.env`, `/.git`), database tools (`/phpmyadmin`), technology probes (`.asp`, `.jsp`), Spring actuator, Swagger/API docs — 50+ paths |
+| **Probe Tracking** | WordPress (`/wp-admin`, `/wp-login.php`), config files (`/.env`, `/.git`), database tools (`/phpmyadmin`), technology probes (`.asp`, `.jsp`), Spring actuator, Swagger/API docs -  50+ paths |
 | **Scanners** | SQLMap, Nikto, Nmap, Burp Suite, FeroxBuster, FFUF, XSStrike, Dalfox, Netsparker, Qualys, Nuclei, and 20+ others (53 total) |
 | **AI Scrapers** | GPTBot, ClaudeBot, ChatGPT, ByteSpider, Cohere, Common Crawl |
 | **Headless Browsers** | HeadlessChrome, PhantomJS, Selenium, Puppeteer, Playwright |
@@ -903,6 +903,6 @@ Contributions are welcome! Please submit a Pull Request.
 
 ## Credits
 
-- [Jay Anta](https://github.com/jay123anta) — author & maintainer
-- [David van der Tuijn](https://github.com/davidvandertuijn) — Laravel 13 support
+- [Jay Anta](https://github.com/jay123anta) -  author & maintainer
+- [David van der Tuijn](https://github.com/davidvandertuijn) -  Laravel 13 support
 - [All contributors](https://github.com/jay123anta/laravel-threat-detection/graphs/contributors)
