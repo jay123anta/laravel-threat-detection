@@ -824,6 +824,27 @@ Add your own detection regex patterns in `config/threat-detection.php`:
 '/\/my-admin-panel/i' => 'Custom Admin Panel Probe',
 ```
 
+### Array form (per-pattern options)
+
+Alongside the classic string form, a pattern's value can be an array for full control:
+
+```php
+'custom_patterns' => [
+    '/\b(?:\d[ -]?){13,19}\b/' => [
+        'label'     => 'Card Number Detected',   // required
+        'level'     => 'high',                   // low|medium|high — overrides keyword derivation
+        'contexts'  => ['query', 'body'],        // query|body|headers — default: all segments
+        'validator' => 'luhn',                   // post-match checksum, wins over pattern_validators
+    ],
+],
+```
+
+- **`level`** sets the threat level directly instead of deriving it from `threat_levels` keywords in the label.
+- **`contexts`** restricts scanning to specific request segments — e.g. a card pattern that only makes sense in the body stops matching digit runs in headers.
+- **`validator`** names an inline post-match check (see [Post-Match Validators](#post-match-validators-checksum-aware-false-positive-reduction)); it takes precedence over the `pattern_validators` label map.
+
+String and array entries mix freely in the same config. Malformed options **fail open** — the pattern still scans, unrestricted, and a warning is logged — so a config mistake can never silently disable or narrow a detection.
+
 > **Note:** Common probe paths like `/wp-login.php`, `/.env`, `/phpmyadmin` are now handled automatically by the [404 Probe Tracking](#404-probe-tracking) feature. You don't need custom patterns for those.
 
 The threat level for each pattern is determined automatically by matching keywords in the label against the `threat_levels` config:
