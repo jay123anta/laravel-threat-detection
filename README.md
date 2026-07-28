@@ -2,33 +2,74 @@
   <img src="https://img.shields.io/packagist/v/jayanta/laravel-threat-detection.svg?style=flat-square" alt="Latest Version">
   <img src="https://img.shields.io/github/actions/workflow/status/jay123anta/laravel-threat-detection/tests.yml?branch=main&style=flat-square&label=tests" alt="Tests">
   <img src="https://img.shields.io/packagist/dt/jayanta/laravel-threat-detection.svg?style=flat-square" alt="Total Downloads">
+  <img src="https://img.shields.io/packagist/php-v/jayanta/laravel-threat-detection?style=flat-square" alt="PHP Version">
   <img src="https://img.shields.io/packagist/l/jayanta/laravel-threat-detection.svg?style=flat-square" alt="License">
-  <img src="https://img.shields.io/php-version-support/jayanta/laravel-threat-detection?style=flat-square" alt="PHP Version">
 </p>
 
 # Laravel Threat Detection
 
-**Know who's attacking your Laravel app -  without changing a single line of application code.**
+**Passive intrusion detection for Laravel — see every SQL injection, XSS, scanner,
+and bot probe hitting your app, logged with full context. It's an IDS, not a WAF:
+it never blocks, filters, or modifies a request.**
 
 <p align="center">
-  <img src="docs/dashboard.png" alt="Threat Detection Dashboard -  stats, 7-day timeline, live threat log, top offending IPs and threats by country" width="100%">
+  <img src="art/dashboard.png" alt="Threat Detection Dashboard — stats, 7-day timeline, live threat log, top offending IPs, and threats by country" width="100%">
 </p>
 
-A middleware-based threat detection and logging system for Laravel. Drop it in, and it starts scanning every HTTP request for SQL injection, XSS, RCE, scanner bots, DDoS patterns, and 60+ other attack types -  logging everything to your database with full geo-enrichment and a built-in dashboard.
+Drop it into any Laravel 10–13 app and it starts scanning every HTTP request against
+175+ attack patterns, scoring each match by confidence and writing it to your database —
+with a built-in dashboard, Slack alerts, geo-enrichment, and fail2ban/blocklist exports.
+No request is ever blocked. Think security camera, not a lock: it shows you exactly who's
+probing your routes, how often, and with what techniques.
 
-> Extracted from a production application. Battle-tested with real traffic.
+> Extracted from a production app and battle-tested on real traffic. 213 tests, no runtime
+> dependencies beyond Laravel itself, and no internet connection required for detection.
 
-**Important:** This package **never blocks** any request. It only **logs** and **alerts**. Your application continues to handle every request normally, even when threats are detected.
+## Get started in under a minute
+
+```bash
+composer require jayanta/laravel-threat-detection
+php artisan vendor:publish --tag=threat-detection-migrations
+php artisan migrate
+```
+
+Then add the middleware to your `web` group (one line in `bootstrap/app.php` on Laravel 11+,
+or `app/Http/Kernel.php` on Laravel 10) — full snippet in [Quick Start](#quick-start) below.
+That's it; detection is live.
 
 ---
 
-## What This Is NOT
+## Where it fits: IDS vs WAF vs edge
 
-- **Not a WAF.** It does not block, filter, or modify any request. Use Cloudflare, mod_security, or a proper WAF for that.
-- **Not a replacement for secure coding.** Parameterized queries, input validation, output escaping -  those are your real defenses. This package assumes your code is already secure.
-- **Not a Cloudflare replacement.** If you can use Cloudflare or a similar edge service, use it. This provides application-level visibility that edge services don't -  you can see exactly what's hitting your routes, with full request context.
+This package is a **passive, application-level IDS** — it watches and records, it doesn't
+block. It's meant to sit *alongside* a WAF or edge service, not replace one. Each layer sees
+something the others can't:
 
-**What it IS:** A passive monitoring layer that sits alongside your existing security. Think of it as a security camera -  it doesn't lock the door, but it shows you who's trying to get in, how often, and what techniques they're using. That visibility helps you make informed decisions (IP blocking via fail2ban, rate limiting, geo-blocking).
+| | **This package** (app IDS) | **WAF** (mod_security, Cloudflare WAF) | **Edge / CDN** (Cloudflare) |
+|---|:---:|:---:|:---:|
+| Blocks malicious requests | ❌ logs only | ✅ | ✅ |
+| Full app context (exact route, decoded payload, authenticated user) | ✅ | ⚠️ partial | ❌ |
+| Built-in dashboard + threat log in your DB | ✅ | ⚠️ varies | ⚠️ edge only |
+| App-specific detections (e.g. Aadhaar / PAN / IFSC PII) | ✅ custom patterns | ❌ | ❌ |
+| Works offline / no external service | ✅ | ⚠️ depends | ❌ |
+| Stops traffic before it reaches your app | ❌ | ✅ edge | ✅ |
+| Setup | one `composer require` | medium–high | low–medium |
+| Cost | free, MIT | varies | free tier + paid |
+
+**The short version:** an edge/WAF is your lock on the door; this is the security camera
+*inside*, with the app context to tell you exactly what's being tried on which route, by
+whom, and how often. Use it to feed real decisions — fail2ban bans, rate limits,
+geo-blocking — with data your edge layer never sees.
+
+### What it deliberately is NOT
+
+- **Not a WAF.** It never blocks, filters, or modifies a request. Use Cloudflare,
+  mod_security, or a real WAF for enforcement.
+- **Not a replacement for secure coding.** Parameterized queries, input validation, and
+  output escaping are your actual defenses. This package assumes your code is already
+  secure and gives you *visibility*, not protection.
+- **Not an edge service.** If you can put Cloudflare in front, do — then add this for the
+  application-level detail edge services can't see.
 
 ---
 
