@@ -10,3 +10,20 @@ composer.lock
 .DS_Store
 *.log
 coverage
+# --- internal / not for publish ---
+# AI agent brief
+docs/agent-onboarding-prompt.md
+
+# marketing & release drafts (belong in GitHub Releases, not the repo)
+LAUNCH_CONTENT.md
+LARAVEL_NEWS_v1.4.0.md
+REDDIT_followup_v1.5.0.md
+RELEASE_v1.3.1.md
+RELEASE_v1.4.0.md
+
+# dev scratch & dashboard mockups
+harness.php
+dashboard_demo.html
+dashboard_shot.html
+dashboard.png
+dashboard_screenshot.png
