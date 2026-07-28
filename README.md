@@ -751,6 +751,35 @@ Fields listed here are stripped from query params and the request body -  both f
 
 For example, `search.query` exempts the value of `{"search": {"query": "..."}}` (a search box whose text legitimately contains words like `SELECT`), while a `query` field anywhere else in the request is still scanned. Everything not listed is scanned exactly as before.
 
+## Post-Match Validators (Checksum-Aware False Positive Reduction)
+
+A regex alone can't express every constraint: **any** 12-digit run matches the Aadhaar pattern, but a real Aadhaar number also passes the Verhoeff checksum. Map a pattern label (default or custom) to a named validator and a regex hit only counts as a detection when at least one matched value passes it:
+
+```php
+// config/threat-detection.php
+'pattern_validators' => [
+    'Aadhaar Number Detected' => 'verhoeff',   // shipped default
+],
+```
+
+Available validators:
+
+| Validator  | Checksum | Typical use |
+|------------|----------|-------------|
+| `verhoeff` | Verhoeff | Aadhaar numbers |
+| `luhn`     | Luhn     | Credit/debit card numbers |
+
+With the shipped mapping, timestamps, order ids and barcodes that happen to be 12 digits long are no longer logged as PII — while genuine Aadhaar numbers still are. If several values match and only one passes the checksum, the detection still fires: a real number among noise is still a leak.
+
+Pair a validator with your own pattern for checksum-gated card detection:
+
+```php
+'custom_patterns'    => ['/\b(?:\d[ -]?){13,19}\b/' => 'Card Number Detected'],
+'pattern_validators' => ['Card Number Detected' => 'luhn'],
+```
+
+An unknown validator name **fails open** — the match is counted unvalidated and a warning is logged once — so a typo can never silently disable a detection pattern. Configs published before this feature simply don't have the key and keep their exact current behaviour.
+
 ---
 
 ## Dashboard Authentication
