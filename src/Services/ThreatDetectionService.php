@@ -647,7 +647,7 @@ class ThreatDetectionService
                 if ($maxDetections > 0 && count($matches) >= $maxDetections) {
                     break 2;
                 }
-                if (@preg_match($regex, $segmentPayload)) {
+                if ($this->patternMatches($regex, $segmentPayload, $label)) {
                     $matches[] = [
                         'label' => $label,
                         'threat_level' => 'high',
@@ -679,7 +679,7 @@ class ThreatDetectionService
                     continue;
                 }
 
-                if (@preg_match($regex, $normalizedPayload)) {
+                if ($this->patternMatches($regex, $normalizedPayload, $label)) {
                     $matches[] = [
                         'label' => $label,
                         'threat_level' => $level,
@@ -708,7 +708,7 @@ class ThreatDetectionService
                     continue;
                 }
 
-                if (@preg_match($regex, $normalizedPayload)) {
+                if ($this->patternMatches($regex, $normalizedPayload, $label)) {
                     $matches[] = [
                         'label' => $label,
                         'threat_level' => $level,
@@ -720,6 +720,49 @@ class ThreatDetectionService
         }
 
         return $matches;
+    }
+
+    /** @var array<string, bool> Unknown validator names already warned about */
+    private static array $validatorWarned = [];
+
+    /**
+     * Post-match validation. A pattern label mapped to a named validator in
+     * config('threat-detection.pattern_validators') only counts as a match
+     * when at least one matched value passes that validator — e.g. a 12-digit
+     * run is only an Aadhaar number if its Verhoeff checksum holds. Labels
+     * without a validator keep the plain boolean regex check, so this costs
+     * nothing on the hot path unless explicitly configured.
+     */
+    private function patternMatches(string $regex, string $payload, string $label): bool
+    {
+        $validator = config('threat-detection.pattern_validators', [])[$label] ?? null;
+
+        if ($validator === null) {
+            return (bool) @preg_match($regex, $payload);
+        }
+
+        if (!PatternValidators::known($validator)) {
+            // Fail open on a typo — a misconfigured validator must never
+            // silently disable a detection pattern.
+            if (!isset(self::$validatorWarned[$validator])) {
+                Log::warning("Threat detection: unknown pattern validator '{$validator}' for '{$label}'; matches are counted unvalidated.");
+                self::$validatorWarned[$validator] = true;
+            }
+
+            return (bool) @preg_match($regex, $payload);
+        }
+
+        if (!@preg_match_all($regex, $payload, $found)) {
+            return false;
+        }
+
+        foreach ($found[0] as $value) {
+            if (PatternValidators::passes($validator, $value)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function isRecentlyLogged(string $ip, string $type): bool
@@ -965,7 +1008,7 @@ class ThreatDetectionService
         $matches = [];
 
         foreach ($this->getDefaultThreatPatterns() as $regex => $label) {
-            if (@preg_match($regex, $payload)) {
+            if ($this->patternMatches($regex, $payload, $label)) {
                 $matches[] = [$label, $this->getThreatLevelByType($label), $source];
             }
         }
@@ -984,7 +1027,7 @@ class ThreatDetectionService
         ];
 
         foreach ($this->getValidatedCustomPatterns() as $regex => $label) {
-            if (@preg_match($regex, $payload)) {
+            if ($this->patternMatches($regex, $payload, $label)) {
                 if ($isAuthPath && in_array($label, $authExcludePatterns)) {
                     continue;
                 }

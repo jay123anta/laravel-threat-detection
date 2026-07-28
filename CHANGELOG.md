@@ -6,6 +6,31 @@ All notable changes to `jayanta/laravel-threat-detection` will be documented in 
 
 ### Added
 
+- **Post-match validators (`pattern_validators`) — checksum-aware
+  false-positive reduction.** A regex alone can't express every constraint:
+  any 12-digit run matches the Aadhaar pattern, but a real Aadhaar number
+  also passes the Verhoeff checksum. A pattern label (default or custom) can
+  now be mapped to a named validator; a regex hit then only counts as a
+  detection when at least one matched value passes it:
+
+  ```php
+  'pattern_validators' => ['Aadhaar Number Detected' => 'verhoeff'],
+  ```
+
+  Ships with `verhoeff` (Aadhaar) and `luhn` (credit/debit card numbers); the
+  default config maps the Aadhaar pattern to `verhoeff`, so timestamps, order
+  ids and barcodes are no longer logged as PII while genuine numbers still
+  are. If several values match and only one passes, the detection still fires
+  (a real number among noise is still a leak). An unknown validator name
+  fails open with a one-time warning, so a typo can never silently disable a
+  pattern. Fully backward-compatible: configs published before this feature
+  don't have the key and keep their exact current behaviour. 14 new tests
+  (232 → 246).
+
+## [1.5.0] - 2026-07-28
+
+### Added
+
 - **`safe_paths` — path-aware false-positive control.** Like `safe_fields`, but
   matches by dot-notation *path* into the request (query or JSON/form body)
   instead of by field name anywhere. This is precise for nested JSON APIs: you
