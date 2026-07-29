@@ -27,6 +27,29 @@ All notable changes to `jayanta/laravel-threat-detection` will be documented in 
   don't have the key and keep their exact current behaviour. 14 new tests
   (232 → 246).
 
+- **Rich custom patterns — per-pattern `level`, `contexts` and `validator`.**
+  A `custom_patterns` entry can now be an array alongside the classic
+  `'regex' => 'Label'` string form:
+
+  ```php
+  '/\b(?:\d[ -]?){13,19}\b/' => [
+      'label'     => 'Card Number Detected',   // required
+      'level'     => 'high',                   // low|medium|high — overrides keyword derivation
+      'contexts'  => ['query', 'body'],        // query|body|headers — default: all segments
+      'validator' => 'luhn',                   // inline post-match checksum
+  ],
+  ```
+
+  `level` sets the threat level directly instead of deriving it from
+  `threat_levels` keywords in the label; `contexts` restricts a pattern to
+  specific request segments; `validator` names an inline post-match check and
+  takes precedence over the `pattern_validators` label map. String and array
+  entries mix freely, and malformed options fail open (scan unrestricted,
+  warn once) — a config mistake never silently disables or narrows a
+  detection. Fully backward-compatible: existing string-form configs are
+  normalized internally and behave exactly as before. 14 new tests
+  (246 → 260).
+
 ## [1.5.0] - 2026-07-28
 
 ### Added

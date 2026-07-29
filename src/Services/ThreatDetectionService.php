@@ -689,16 +689,22 @@ class ThreatDetectionService
                 }
             }
 
-            foreach ($this->getValidatedCustomPatterns() as $regex => $label) {
+            foreach ($this->getValidatedCustomPatterns() as $regex => $spec) {
                 if ($maxDetections > 0 && count($matches) >= $maxDetections) {
                     break 2;
                 }
+
+                $label = $spec['label'];
 
                 if ($isAuthPath && in_array($label, $authExcludePatterns)) {
                     continue;
                 }
 
-                $level = $this->getThreatLevelByType($label);
+                if ($spec['contexts'] !== null && !in_array($context, $spec['contexts'], true)) {
+                    continue;
+                }
+
+                $level = $spec['level'] ?? $this->getThreatLevelByType($label);
 
                 if ($mode === 'relaxed' && $level !== 'high') {
                     continue;
@@ -708,7 +714,7 @@ class ThreatDetectionService
                     continue;
                 }
 
-                if ($this->patternMatches($regex, $normalizedPayload, $label)) {
+                if ($this->patternMatches($regex, $normalizedPayload, $label, $spec['validator'])) {
                     $matches[] = [
                         'label' => $label,
                         'threat_level' => $level,
@@ -732,10 +738,13 @@ class ThreatDetectionService
      * run is only an Aadhaar number if its Verhoeff checksum holds. Labels
      * without a validator keep the plain boolean regex check, so this costs
      * nothing on the hot path unless explicitly configured.
+     *
+     * An array-form custom pattern can name its validator inline; that takes
+     * precedence over the pattern_validators label map.
      */
-    private function patternMatches(string $regex, string $payload, string $label): bool
+    private function patternMatches(string $regex, string $payload, string $label, ?string $inlineValidator = null): bool
     {
-        $validator = config('threat-detection.pattern_validators', [])[$label] ?? null;
+        $validator = $inlineValidator ?? config('threat-detection.pattern_validators', [])[$label] ?? null;
 
         if ($validator === null) {
             return (bool) @preg_match($regex, $payload);
@@ -981,9 +990,29 @@ class ThreatDetectionService
 
     private static ?array $validatedCustomPatterns = null;
 
+    /** Segment names a custom pattern's 'contexts' list may name. */
+    private const PATTERN_CONTEXTS = ['query', 'body', 'headers'];
+
     /**
-     * Returns custom patterns that have been validated once per process lifecycle.
-     * Invalid patterns are logged and skipped permanently.
+     * Returns custom patterns that have been validated once per process
+     * lifecycle, normalized to a spec array. Invalid patterns are logged and
+     * skipped permanently.
+     *
+     * Two config formats are accepted per pattern:
+     *
+     *   '/regex/i' => 'My Label'                       // simple
+     *   '/regex/i' => [                                // full control
+     *       'label'     => 'My Label',                 // required
+     *       'level'     => 'high',                     // low|medium|high
+     *       'contexts'  => ['query', 'body'],          // default: all segments
+     *       'validator' => 'luhn',                     // post-match checksum
+     *   ]
+     *
+     * Malformed options fail open (the pattern still scans, unrestricted)
+     * with a warning — a config mistake must never silently disable or
+     * narrow a detection.
+     *
+     * @return array<string, array{label: string, level: ?string, contexts: ?array, validator: ?string}>
      */
     private function getValidatedCustomPatterns(): array
     {
@@ -992,12 +1021,46 @@ class ThreatDetectionService
         }
 
         self::$validatedCustomPatterns = [];
-        foreach (config('threat-detection.custom_patterns', []) as $regex => $label) {
+        foreach (config('threat-detection.custom_patterns', []) as $regex => $entry) {
             if (@preg_match($regex, '') === false) {
                 Log::warning("Threat detection: invalid custom pattern skipped: {$regex}");
                 continue;
             }
-            self::$validatedCustomPatterns[$regex] = $label;
+
+            if (is_string($entry)) {
+                $entry = ['label' => $entry];
+            }
+
+            if (!is_array($entry) || !is_string($entry['label'] ?? null) || $entry['label'] === '') {
+                Log::warning("Threat detection: custom pattern without a label skipped: {$regex}");
+                continue;
+            }
+
+            $level = $entry['level'] ?? null;
+            if ($level !== null && !in_array($level, ['low', 'medium', 'high'], true)) {
+                Log::warning("Threat detection: custom pattern '{$entry['label']}' has unknown level '{$level}'; deriving from threat_levels keywords instead.");
+                $level = null;
+            }
+
+            $contexts = null;
+            if (is_array($entry['contexts'] ?? null) && $entry['contexts'] !== []) {
+                $contexts = array_values(array_intersect($entry['contexts'], self::PATTERN_CONTEXTS));
+                if ($unknown = array_diff($entry['contexts'], self::PATTERN_CONTEXTS)) {
+                    Log::warning("Threat detection: custom pattern '{$entry['label']}' names unknown contexts (" . implode(', ', $unknown) . '); valid contexts are ' . implode('|', self::PATTERN_CONTEXTS) . '.');
+                }
+                if ($contexts === []) {
+                    $contexts = null;
+                }
+            }
+
+            $validator = is_string($entry['validator'] ?? null) ? $entry['validator'] : null;
+
+            self::$validatedCustomPatterns[$regex] = [
+                'label' => $entry['label'],
+                'level' => $level,
+                'contexts' => $contexts,
+                'validator' => $validator,
+            ];
         }
 
         return self::$validatedCustomPatterns;
@@ -1026,13 +1089,16 @@ class ThreatDetectionService
             'API Key Exposure',
         ];
 
-        foreach ($this->getValidatedCustomPatterns() as $regex => $label) {
-            if ($this->patternMatches($regex, $payload, $label)) {
+        // Context restrictions don't apply here — this method scans a single
+        // opaque payload, so there is no segment to restrict by.
+        foreach ($this->getValidatedCustomPatterns() as $regex => $spec) {
+            $label = $spec['label'];
+            if ($this->patternMatches($regex, $payload, $label, $spec['validator'])) {
                 if ($isAuthPath && in_array($label, $authExcludePatterns)) {
                     continue;
                 }
 
-                $matches[] = [$label, $this->getThreatLevelByType($label), 'custom'];
+                $matches[] = [$label, $spec['level'] ?? $this->getThreatLevelByType($label), 'custom'];
             }
         }
 

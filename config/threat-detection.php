@@ -377,8 +377,21 @@ return [
     | Custom Patterns
     |--------------------------------------------------------------------------
     |
-    | Add your own regex patterns for threat detection.
-    | Format: 'regex_pattern' => 'Threat Label'
+    | Add your own regex patterns for threat detection. Two value formats are
+    | supported per pattern:
+    |
+    |   '/regex/i' => 'My Label',                        // simple
+    |   '/regex/i' => [                                  // full control
+    |       'label'     => 'My Label',                   // required
+    |       'level'     => 'high',                       // low|medium|high (default: derived from threat_levels keywords)
+    |       'contexts'  => ['query', 'body'],            // query|body|headers (default: all segments)
+    |       'validator' => 'luhn',                       // optional post-match checksum (see pattern_validators)
+    |   ],
+    |
+    | An inline 'validator' takes precedence over the pattern_validators label
+    | map. Malformed options fail open (the pattern still scans, unrestricted)
+    | with a logged warning — a config mistake never silently disables or
+    | narrows a detection.
     |
     */
     'custom_patterns' => [
