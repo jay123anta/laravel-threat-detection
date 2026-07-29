@@ -7,7 +7,6 @@ use Illuminate\Http\Request;
 use JayAnta\ThreatDetection\Services\ThreatDetectionService;
 use JayAnta\ThreatDetection\Services\ProbeDetectorService;
 use Illuminate\Support\Facades\Log;
-use Symfony\Component\HttpFoundation\IpUtils;
 
 class ThreatDetectionMiddleware
 {
@@ -29,8 +28,8 @@ class ThreatDetectionMiddleware
                 return $next($request);
             }
 
-            $ip = $request->ip();
-            if (IpUtils::checkIp($ip, config('threat-detection.whitelisted_ips', []))) {
+            $ip = (string) $request->ip();
+            if ($this->detector->isWhitelisted($ip)) {
                 return $next($request);
             }
 

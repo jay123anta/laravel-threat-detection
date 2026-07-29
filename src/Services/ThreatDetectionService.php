@@ -8,9 +8,11 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Notification;
+use JayAnta\ThreatDetection\Events\DdosThresholdExceeded;
 use JayAnta\ThreatDetection\Events\ThreatDetected;
 use JayAnta\ThreatDetection\Jobs\StoreThreatLog;
 use JayAnta\ThreatDetection\Notifications\ThreatAlertSlack;
+use Symfony\Component\HttpFoundation\IpUtils;
 
 class ThreatDetectionService
 {
@@ -27,6 +29,50 @@ class ThreatDetectionService
         $this->ddosWindowSeconds = config('threat-detection.ddos.window', 60);
         $this->confidenceScorer = $confidenceScorer ?? new ConfidenceScorer();
         $this->exclusionRuleService = $exclusionRuleService ?? new ExclusionRuleService();
+    }
+
+    /**
+     * Whether the IP is on the operator whitelist (exact or CIDR).
+     * Whitelisted clients are exempt from detection and from isBlocklisted().
+     */
+    public function isWhitelisted(string $ip): bool
+    {
+        return $this->ipMatches($ip, config('threat-detection.whitelisted_ips', []));
+    }
+
+    /**
+     * Whether the IP is on the static operator denylist (exact or CIDR).
+     *
+     * The package never acts on this itself — it exposes the decision so
+     * operators can enforce it in their own middleware (see the README
+     * recipe). The whitelist wins on overlap.
+     */
+    public function isBlocklisted(string $ip): bool
+    {
+        if ($this->isWhitelisted($ip)) {
+            return false;
+        }
+
+        return $this->ipMatches($ip, config('threat-detection.blocklisted_ips', []));
+    }
+
+    /**
+     * Whether the IP matches any entry (exact or CIDR) in the given list.
+     *
+     * Entries are trimmed before matching: IpUtils::checkIp() treats an entry
+     * with stray whitespace (" 1.2.3.4") as unparsable and silently never
+     * matches it. The shipped config trims on parse, but an application
+     * running a stale published copy of it would pass untrimmed entries here —
+     * and a whitelist that silently stopped matching must not take effect.
+     */
+    private function ipMatches(string $ip, mixed $list): bool
+    {
+        $entries = array_filter(array_map(
+            static fn($entry): string => is_string($entry) ? trim($entry) : '',
+            (array) $list
+        ), static fn(string $entry): bool => $entry !== '');
+
+        return $ip !== '' && $entries !== [] && IpUtils::checkIp($ip, array_values($entries));
     }
 
     public function detectAndLogFromRequest(Request $request): void
@@ -1162,6 +1208,34 @@ class ThreatDetectionService
         Cache::put("threat_logged:{$ip}:{$type}", true, now()->addMinutes(5));
     }
 
+    /**
+     * The IP's request count in the current DDoS window — a read-only peek at
+     * the counter the detection middleware maintains, so it never inflates
+     * the count it reports. Counts only requests that reached detection
+     * (skip_paths / whitelisted / disabled requests are never counted), and
+     * stays 0 on cache drivers where DDoS detection is disabled.
+     */
+    public function ddosRequestCount(string $ip): int
+    {
+        try {
+            return (int) Cache::get("ddos:$ip", 0);
+        } catch (\Throwable $e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Whether the IP is over the configured DDoS threshold right now.
+     *
+     * Read-only counterpart of the internal flood check, for operators who
+     * want to refuse over-threshold clients (e.g. a 429 with Retry-After)
+     * from their own middleware — the package itself never refuses.
+     */
+    public function isDdosThresholdExceeded(string $ip): bool
+    {
+        return $this->ddosRequestCount($ip) > $this->ddosThreshold;
+    }
+
     private static bool $ddosCacheWarned = false;
 
     private function isDdosSuspected(string $ip): bool
@@ -1217,6 +1291,17 @@ class ThreatDetectionService
         }
 
         $this->markAsLogged($ip, $type);
+
+        // Dispatched after the write, not before it. Same throttle as the log
+        // row, so a flood notifies listeners once per window rather than once
+        // per request — and a listener never fires for a threat that failed to
+        // record, which the pre-rebase ordering allowed.
+        DdosThresholdExceeded::dispatch(
+            $ip,
+            $this->ddosRequestCount($ip),
+            $this->ddosThreshold,
+            $this->ddosWindowSeconds
+        );
 
         Log::warning("[$level] DDoS Threat Detected: $ip exceeded threshold.");
     }

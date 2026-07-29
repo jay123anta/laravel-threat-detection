@@ -214,6 +214,31 @@ exclusion-rule change below.
 
 ### Added
 
+- **Operator-side decision helpers — the package still never blocks.**
+  New facade methods expose decisions so operators can enforce them in their
+  own middleware, same architecture as the fail2ban/blocklist exports (we
+  supply the intelligence, the operator supplies the refusal):
+  `ThreatDetection::isBlocklisted($ip)` reads a new static, operator-maintained
+  `blocklisted_ips` config list (`THREAT_DETECTION_BLOCKLISTED_IPS`; CIDR via
+  `IpUtils`; `whitelisted_ips` wins on overlap; nothing in the package ever
+  adds to it), and `ThreatDetection::isWhitelisted($ip)` exposes the existing
+  whitelist check. List entries are trimmed at match time, so a stale published
+  config with untrimmed entries still matches. The detection middleware now
+  routes its own whitelist check through the same helper (identical semantics,
+  single source of truth). A README recipe shows the minimal user-side
+  blocking middleware built on the helpers. Default `[]` — zero behaviour
+  change. Discussed in #4.
+
+- **`DdosThresholdExceeded` event + read-only flood counter helpers.**
+  Crossing `ddos.threshold` now dispatches a `DdosThresholdExceeded` event
+  (`$ipAddress`, `$requestCount`, `$threshold`, `$windowSeconds`), throttled
+  to once per IP per dedup window — same throttle as the log row, so a flood
+  can't drown listeners. `ThreatDetection::ddosRequestCount($ip)` and
+  `ThreatDetection::isDdosThresholdExceeded($ip)` peek at the counter without
+  incrementing it, so an operator middleware can return its own 429 with
+  `Retry-After` in a few lines (see README). Inert on cache drivers where
+  DDoS detection is disabled. Discussed in #4.
+
 - **`php artisan threat-detection:doctor`** — one command that checks whether
   detection is actually *working*, not merely installed.
 

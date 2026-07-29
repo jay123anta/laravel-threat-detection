@@ -287,6 +287,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Blocklisted IPs (Operator Denylist)
+    |--------------------------------------------------------------------------
+    |
+    | A static, operator-maintained denylist consumed by the
+    | ThreatDetection::isBlocklisted($ip) helper. Supports CIDR notation.
+    | The package itself never refuses a request based on this list —
+    | enforcement stays in your own middleware (see the README recipe).
+    | whitelisted_ips wins on overlap.
+    |
+    */
+    'blocklisted_ips' => array_filter(array_map('trim', explode(',', env('THREAT_DETECTION_BLOCKLISTED_IPS', '')))),
+
+    /*
+    |--------------------------------------------------------------------------
     | DDoS Protection
     |--------------------------------------------------------------------------
     |

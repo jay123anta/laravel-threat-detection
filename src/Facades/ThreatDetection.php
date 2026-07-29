@@ -14,6 +14,10 @@ use Illuminate\Support\Facades\Facade;
  * @method static array detectAttackCampaigns(int $hoursBack = 24)
  * @method static array detectRapidAttacks(int $minutesBack = 5, int $minThreshold = 10)
  * @method static array getCorrelationSummary()
+ * @method static bool isWhitelisted(string $ip)
+ * @method static bool isBlocklisted(string $ip)
+ * @method static int ddosRequestCount(string $ip)
+ * @method static bool isDdosThresholdExceeded(string $ip)
  *
  * @see \JayAnta\ThreatDetection\Services\ThreatDetectionService
  */
