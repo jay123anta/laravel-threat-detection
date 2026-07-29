@@ -207,4 +207,15 @@ class Phase7DashboardAuthTest extends TestCase
             ->get('/test-dashboard')
             ->assertStatus(403);
     }
+
+    #[Test]
+    public function ip_guard_with_empty_allowlist_denies_access(): void
+    {
+        config([
+            'threat-detection.dashboard.guard' => 'ip',
+            'threat-detection.dashboard.allowed_ips' => [],
+        ]);
+
+        $this->get('/test-dashboard')->assertForbidden();
+    }
 }

@@ -432,4 +432,23 @@ class Phase1SecurityPatternsTest extends TestCase
             'type' => '[middleware] Windows Net Command',
         ]);
     }
+
+    #[Test]
+    public function double_url_encoded_sql_injection_is_no_longer_missed(): void
+    {
+        // Fully char-encode the payload, then encode again. After Laravel's single
+        // query decode it is still %55%4E%49... — no visible keyword, so the old
+        // pre-screen skipped the whole segment. The normalizer recovers it; it must log.
+        $clear  = 'UNION SELECT password FROM users';
+        $single = implode('', array_map(fn($c) => '%' . strtoupper(bin2hex($c)), str_split($clear)));
+        $double = str_replace('%', '%25', $single);
+
+        $this->get('/phase1-test?q=' . $double);
+
+        $this->assertGreaterThan(
+            0,
+            \DB::table('threat_logs')->count(),
+            'A double-URL-encoded SQLi payload must be detected, not skipped by the pre-screen.'
+        );
+    }
 }

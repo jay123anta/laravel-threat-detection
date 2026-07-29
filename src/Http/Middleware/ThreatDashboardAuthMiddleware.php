@@ -57,7 +57,11 @@ class ThreatDashboardAuthMiddleware
 
         if ($guard === 'ip') {
             $allowedIps = config("threat-detection.{$context}.allowed_ips", []);
-            if (!empty($allowedIps) && !IpUtils::checkIp($request->ip(), $allowedIps)) {
+            if (empty($allowedIps)) {
+                Log::warning("Threat detection {$context} guard is 'ip' but no allowed_ips are configured. Denying access rather than granting it to everyone.");
+                abort(403, 'IP not allowed');
+            }
+            if (!IpUtils::checkIp($request->ip(), $allowedIps)) {
                 abort(403, 'IP not allowed');
             }
             return $next($request);

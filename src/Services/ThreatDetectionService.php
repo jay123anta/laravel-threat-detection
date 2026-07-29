@@ -407,6 +407,7 @@ class ThreatDetectionService
             'onload', 'onerror', '__proto__', 'document.', 'javascript:',
             'base64', '../', 'chmod', 'wget', 'curl ', '/bin/',
             'class.module', 'actuator', '%00', '%0d', '%0a', '%25', '%u',
+            '%', '\\',
             'char(', 'phar:', 'expect:', 'input:', '172.', '192.168',
             'redirect=', 'url=http', 'next=http', 'goto=http',
             'phpunit', '#post_render', '#pre_render', 'order by', '{{', '{%', '<%',
