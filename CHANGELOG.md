@@ -2,7 +2,14 @@
 
 All notable changes to `jayanta/laravel-threat-detection` will be documented in this file.
 
-## [Unreleased]
+## [1.6.0] - 2026-07-29
+
+> **Note for default-config users:** the shipped config now maps the Aadhaar
+> pattern to the `verhoeff` validator, so 12-digit runs that fail the checksum
+> (order ids, timestamps, barcodes) are no longer logged as PII. Genuine
+> Aadhaar numbers are still detected — a checksum-invalid number cannot be a
+> real Aadhaar number, so no true detections are lost. Published config files
+> are unaffected.
 
 ### Added
 
@@ -25,7 +32,7 @@ All notable changes to `jayanta/laravel-threat-detection` will be documented in 
   fails open with a one-time warning, so a typo can never silently disable a
   pattern. Fully backward-compatible: configs published before this feature
   don't have the key and keep their exact current behaviour. 14 new tests
-  (232 → 246).
+  (232 → 246). Contributed by [@davidvandertuijn](https://github.com/davidvandertuijn) in #2.
 
 - **Rich custom patterns — per-pattern `level`, `contexts` and `validator`.**
   A `custom_patterns` entry can now be an array alongside the classic
@@ -48,7 +55,7 @@ All notable changes to `jayanta/laravel-threat-detection` will be documented in 
   warn once) — a config mistake never silently disables or narrows a
   detection. Fully backward-compatible: existing string-form configs are
   normalized internally and behave exactly as before. 14 new tests
-  (246 → 260).
+  (246 → 260). Contributed by [@davidvandertuijn](https://github.com/davidvandertuijn) in #3.
 
 ## [1.5.0] - 2026-07-28
 
