@@ -501,6 +501,34 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Post-Match Validators (Checksum-Aware False Positive Reduction)
+    |--------------------------------------------------------------------------
+    |
+    | A regex alone can't express every constraint: any 12-digit run matches
+    | the Aadhaar pattern, but a real Aadhaar number also passes the Verhoeff
+    | checksum. Map a pattern label (default or custom) to a named validator
+    | and a regex hit only counts when at least one matched value passes it.
+    |
+    | Available validators:
+    |
+    |   'verhoeff'  Verhoeff checksum (Aadhaar numbers)
+    |   'luhn'      Luhn checksum (credit/debit card numbers)
+    |
+    | An unknown validator name fails open (the match still counts, with a
+    | warning logged once), so a typo can never silently disable a pattern.
+    |
+    | Example — only checksum-valid card numbers trip a custom card pattern:
+    |
+    |   'custom_patterns'    => ['/\b(?:\d[ -]?){13,19}\b/' => 'Card Number Detected'],
+    |   'pattern_validators' => ['Card Number Detected' => 'luhn'],
+    |
+    */
+    'pattern_validators' => [
+        'Aadhaar Number Detected' => 'verhoeff',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Web Dashboard
     |--------------------------------------------------------------------------
     |
