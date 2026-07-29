@@ -64,7 +64,10 @@ geo-blocking — with data your edge layer never sees.
 ### What it deliberately is NOT
 
 - **Not a WAF.** It never blocks, filters, or modifies a request. Use Cloudflare,
-  mod_security, or a real WAF for enforcement.
+  mod_security, or a real WAF for enforcement. (No edge layer to hand off to? The
+  [operator-side helpers](#acting-on-the-data-operator-side-blocking) expose the
+  package's decisions so you can write your own five-line blocking middleware —
+  the enforcement code stays yours, not the package's.)
 - **Not a replacement for secure coding.** Parameterized queries, input validation, and
   output escaping are your actual defenses. This package assumes your code is already
   secure and gives you *visibility*, not protection.
@@ -334,6 +337,11 @@ THREAT_DETECTION_MODE=balanced
 # Supports CIDR notation. Comma-separated.
 # THREAT_DETECTION_WHITELISTED_IPS=10.0.0.0/8,192.168.1.0/24
 
+# Static operator denylist read by ThreatDetection::isBlocklisted() (default: empty)
+# The package itself never blocks — see "Acting on the Data" for the
+# enforcement recipe. Supports CIDR. Whitelist wins on overlap.
+# THREAT_DETECTION_BLOCKLISTED_IPS=203.0.113.0/24,198.51.100.7
+
 # DDoS detection thresholds (defaults shown)
 # THREAT_DETECTION_DDOS_THRESHOLD=300
 # THREAT_DETECTION_DDOS_WINDOW=60
@@ -473,6 +481,28 @@ protected $listen = [
 ```
 
 The event carries `$threatLog` (full DB row array), `$ipAddress`, and `$threatLevel`. Use it to trigger custom actions -  send Telegram alerts, update a blocklist, feed a SIEM, etc.
+
+### DdosThresholdExceeded Event
+
+When a client crosses the configured DDoS threshold (`ddos.threshold` requests within
+`ddos.window` seconds), a `DdosThresholdExceeded` event is dispatched alongside the threat
+log entry:
+
+```php
+use JayAnta\ThreatDetection\Events\DdosThresholdExceeded;
+
+protected $listen = [
+    DdosThresholdExceeded::class => [
+        YourFloodListener::class,
+    ],
+];
+```
+
+The event carries `$ipAddress`, `$requestCount`, `$threshold`, and `$windowSeconds`. It is
+throttled to once per IP per dedup window (same throttle as the log row), so a flood can't
+drown your listeners. Use it for alerting or to feed an external ban store; to *refuse*
+over-threshold clients, use `ThreatDetection::isDdosThresholdExceeded($ip)` from your own
+middleware instead — see [Acting on the Data](#acting-on-the-data-operator-side-blocking).
 
 ---
 
@@ -702,6 +732,81 @@ php artisan threat-detection:export-blocklist --format=csv --since=7d
 
 ---
 
+## Acting on the Data (Operator-Side Blocking)
+
+The package never blocks a request — that's its identity, not a default. The exports above
+feed enforcement layers you already run (fail2ban, nginx, an edge WAF). But some deployments
+have no such layer to feed — shared hosting, PaaS, containers behind a load balancer you
+don't control. For those, the package exposes its *decisions* as helpers, and you write the
+enforcement middleware yourself. Same architecture as the exports: **we supply the
+intelligence, you supply the refusal.**
+
+```php
+// app/Http/Middleware/EnforceThreatDecisions.php
+namespace App\Http\Middleware;
+
+use Closure;
+use Illuminate\Http\Request;
+use JayAnta\ThreatDetection\Facades\ThreatDetection;
+
+class EnforceThreatDecisions
+{
+    public function handle(Request $request, Closure $next)
+    {
+        $ip = (string) $request->ip();
+
+        // Static operator denylist (config: blocklisted_ips).
+        // CIDR supported; whitelisted_ips wins on overlap.
+        if (ThreatDetection::isBlocklisted($ip)) {
+            abort(403);
+        }
+
+        // Volumetric flood: refuse over-threshold clients until the window resets.
+        if (ThreatDetection::isDdosThresholdExceeded($ip)) {
+            return response('Too Many Requests', 429, [
+                'Retry-After' => (string) config('threat-detection.ddos.window', 60),
+            ]);
+        }
+
+        return $next($request);
+    }
+}
+```
+
+Register it globally (before the detection middleware is fine — the helpers read config and
+cache, they don't depend on middleware order):
+
+```php
+// bootstrap/app.php (Laravel 11+)
+->withMiddleware(function ($middleware) {
+    $middleware->prepend(\App\Http\Middleware\EnforceThreatDecisions::class);
+})
+```
+
+The helpers:
+
+| Helper | Returns | Backed by |
+|---|---|---|
+| `ThreatDetection::isBlocklisted($ip)` | `bool` | `blocklisted_ips` config (CIDR via `IpUtils`; whitelist wins) |
+| `ThreatDetection::isWhitelisted($ip)` | `bool` | `whitelisted_ips` config |
+| `ThreatDetection::ddosRequestCount($ip)` | `int` | the flood counter the detection middleware maintains |
+| `ThreatDetection::isDdosThresholdExceeded($ip)` | `bool` | that counter vs `ddos.threshold` |
+
+Notes:
+
+- **The denylist is static and operator-maintained.** Nothing in the package ever adds to
+  it — it executes the same decision a fail2ban jail would ("I read the dashboard; this /24
+  is hostile"), just in-app.
+- The DDoS counter counts only requests that reached detection (`skip_paths`, whitelisted
+  IPs, and disabled environments are never counted), and stays at 0 on cache drivers where
+  DDoS detection is disabled (`file`, `database`, `null`).
+- When a client crosses the threshold, a [`DdosThresholdExceeded` event](#ddosthresholdexceeded-event)
+  is also dispatched — useful for alerting or feeding an external ban list. Don't `abort()`
+  from the listener, though: listeners run inside the detection middleware's fail-open
+  `try/catch`, so refusal belongs in your own middleware as above.
+
+---
+
 ## 404 Probe Tracking
 
 The package detects reconnaissance probes -  bots that hit known vulnerable paths like `/wp-admin`, `/.env`, or `/phpmyadmin` on your non-WordPress, non-phpMyAdmin site. These have no malicious payload; the path itself is the signal.
@@ -881,6 +986,12 @@ $campaigns = ThreatDetection::detectAttackCampaigns(24);
 
 // Get a summary of all correlation data
 $summary = ThreatDetection::getCorrelationSummary();
+
+// Operator-side decision helpers (see "Acting on the Data")
+$blocked = ThreatDetection::isBlocklisted('203.0.113.7');       // static denylist, CIDR, whitelist wins
+$trusted = ThreatDetection::isWhitelisted('10.0.0.5');
+$count   = ThreatDetection::ddosRequestCount('203.0.113.7');    // requests in the current DDoS window
+$flooded = ThreatDetection::isDdosThresholdExceeded('203.0.113.7');
 ```
 
 ---
