@@ -388,20 +388,46 @@ class ThreatDetectionService
             $parts[] = $queryString;
         }
 
-        // Multipart bodies are not readable from php://input, and file content
-        // is not worth scanning byte-for-byte; skip them.
-        if (!str_contains($request->header('Content-Type', ''), 'multipart/form-data')) {
-            try {
-                $body = (string) $request->getContent();
-            } catch (\Throwable $e) {
-                $body = '';
-            }
-            if ($body !== '') {
-                $parts[] = substr($body, 0, 8000);
-            }
+        $body = $this->rawBody($request);
+        if ($body !== '') {
+            $parts[] = $body;
         }
 
         return implode("\n", $parts);
+    }
+
+    /**
+     * Largest raw body worth buffering. Only the first 8 KB is ever scanned,
+     * so this exists purely to bound memory: getContent() materialises the
+     * whole stream, and for content types nothing else parses (text/plain,
+     * application/xml, octet-stream) this would otherwise be the first and
+     * only reader — turning a large upload into a memory spike on every
+     * request. A body over the cap is skipped; its decoded counterpart is
+     * still scanned by the query/body segments.
+     */
+    private const MAX_RAW_BODY_BYTES = 65536;
+
+    private function rawBody(Request $request): string
+    {
+        // Multipart bodies are not readable from php://input, and file content
+        // is not worth scanning byte-for-byte; skip them.
+        if (str_contains($request->header('Content-Type', ''), 'multipart/form-data')) {
+            return '';
+        }
+
+        // No declared length (chunked transfer) means no way to bound the read
+        // before making it, so decline rather than gamble.
+        $length = (int) ($request->server->get('CONTENT_LENGTH') ?: 0);
+
+        if ($length <= 0 || $length > self::MAX_RAW_BODY_BYTES) {
+            return '';
+        }
+
+        try {
+            return substr((string) $request->getContent(), 0, 8000);
+        } catch (\Throwable $e) {
+            return '';
+        }
     }
 
     /**

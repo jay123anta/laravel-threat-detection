@@ -58,6 +58,7 @@ class Phase13DetectionGapsTest extends TestCase
             Route::get('/clean/profile/page', fn() => response('OK', 200));
             Route::get('/.env', fn() => response('OK', 200));
             Route::get('/admin/users', fn() => response('OK', 200));
+            Route::post('/zz-raw-cap', fn() => response('OK', 200));
         });
 
         ThreatDetectionService::flushCaches();
@@ -280,6 +281,39 @@ class Phase13DetectionGapsTest extends TestCase
     public function single_encoded_null_byte_in_the_raw_query_string_is_detected(): void
     {
         $this->get('/gaps-test?file=image.php%00.jpg');
+
+        $this->assertDatabaseHas('threat_logs', ['type' => '[middleware] Null Byte Injection']);
+    }
+
+    /**
+     * The raw segment reads the body via getContent(), which materialises the
+     * whole stream. Bounding that read is the difference between scanning a
+     * request and letting one buffer an arbitrary amount of memory on every
+     * hit. Over the cap the raw segment declines; the decoded segments still
+     * scan the same request.
+     */
+    #[Test]
+    public function an_oversized_raw_body_is_not_buffered(): void
+    {
+        $huge = str_repeat('a', 70000) . '%00';
+
+        $this->call('POST', '/zz-raw-cap', [], [], [], [
+            'CONTENT_TYPE' => 'text/plain',
+            'CONTENT_LENGTH' => (string) strlen($huge),
+        ], $huge)->assertStatus(200);
+
+        $this->assertDatabaseMissing('threat_logs', ['type' => '[middleware] Null Byte Injection']);
+    }
+
+    #[Test]
+    public function a_body_under_the_cap_is_still_scanned_raw(): void
+    {
+        $body = 'file=image.php%00.jpg';
+
+        $this->call('POST', '/zz-raw-cap', [], [], [], [
+            'CONTENT_TYPE' => 'text/plain',
+            'CONTENT_LENGTH' => (string) strlen($body),
+        ], $body)->assertStatus(200);
 
         $this->assertDatabaseHas('threat_logs', ['type' => '[middleware] Null Byte Injection']);
     }
