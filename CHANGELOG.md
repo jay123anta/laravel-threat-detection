@@ -10,10 +10,14 @@ than patch, because the detection surface widens (a new `path` scanning
 context, a new `pii` category, new `context_weights` keys) and because of the
 exclusion-rule change below.
 
-> **Before upgrading, read these three.**
+> **Before upgrading, read these four.**
 >
-> **1. Exclusion rules now match the label exactly** (see Changed). This is the
-> only behaviour break in the release.
+> **1. Two things now require more privilege than before.** Marking a false
+> positive and deleting an exclusion rule are checked against the new
+> `api.write_guard`, which defaults to `role` — if your user model has no
+> `hasRole()`, set `THREAT_DETECTION_API_WRITE_GUARD=auth`. And exclusion rules
+> now match the pattern label exactly rather than by substring (see Changed).
+> Reading the log and the dashboard are unaffected by both.
 >
 > **2. If your app serves a bare `/admin`, `/test`, `/debug`, `/console`,
 > `/backup` or `/internal` route**, each will now log a low-severity entry per
@@ -45,6 +49,23 @@ exclusion-rule change below.
 > header is still not scanned (the v1.3.1 false-positive fix).
 
 ### Security
+
+- **Disabling a detection now requires elevated access.** Marking a threat as a
+  false positive and deleting an exclusion rule both silence a detection type
+  for everyone, but they sat behind the same authentication as reading the log
+  — so with the shipped `['api', 'auth:sanctum']` any authenticated user of the
+  host application could switch a detection off, with no authorization check
+  and no record of who did it.
+
+  Those two routes are now checked against a separate
+  `api.write_guard`, which defaults to `role`. Read endpoints and the dashboard
+  are untouched, so an upgrade does not take the dashboard away from an
+  existing install; only the two destructive endpoints tighten. It accepts the
+  same `none|auth|role|ip` values as `guard`, so set
+  `THREAT_DETECTION_API_WRITE_GUARD=auth` if your user model has no
+  `hasRole()`, or `=none` to restore the previous behaviour. The dashboard's
+  false-positive button explains a 403 rather than looking broken, and the
+  doctor reports an open write guard.
 
 - **Detected secrets are no longer stored in cleartext.** Detecting sensitive
   data caused that data to be written to the log verbatim: a profile form

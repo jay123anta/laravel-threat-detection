@@ -295,6 +295,13 @@ function threatDashboard() {
                 if (r.ok) {
                     const threat = this.threats.data.find(t => t.id === id);
                     if (threat) threat.is_false_positive = true;
+                } else if (r.status === 403) {
+                    // Disabling a detection is gated behind api.write_guard,
+                    // which is separate from the guard that let you view this
+                    // page. Say so, rather than looking like a broken button.
+                    alert('You do not have permission to disable a detection.\n\n'
+                        + 'This requires the role set in threat-detection.api.role, '
+                        + 'or a different THREAT_DETECTION_API_WRITE_GUARD setting.');
                 } else {
                     alert('Failed to mark as false positive.');
                 }

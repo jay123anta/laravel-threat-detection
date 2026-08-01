@@ -23,8 +23,13 @@ Route::prefix(config('threat-detection.api.prefix', 'api/threat-detection'))
         Route::get('/correlation', [ThreatLogController::class, 'correlation']);
         Route::get('/export', [ThreatLogController::class, 'export']);
 
-        Route::post('/threats/{id}/false-positive', [ThreatLogController::class, 'markFalsePositive']);
-
         Route::get('/exclusion-rules', [ThreatLogController::class, 'exclusionRules']);
-        Route::delete('/exclusion-rules/{id}', [ThreatLogController::class, 'deleteExclusionRule']);
+
+        // Writes switch detection OFF for everyone, which is a different
+        // privilege from reading the log. They are checked against
+        // api.write_guard ('role' by default) regardless of api.guard.
+        Route::middleware('threat-dashboard-auth:api,write')->group(function () {
+            Route::post('/threats/{id}/false-positive', [ThreatLogController::class, 'markFalsePositive']);
+            Route::delete('/exclusion-rules/{id}', [ThreatLogController::class, 'deleteExclusionRule']);
+        });
     });

@@ -287,6 +287,31 @@ class DoctorCommand extends Command
                 ? $this->fail($message, $fix)
                 : $this->warn2($message, $fix);
         }
+
+        $this->checkWriteGuard();
+    }
+
+    /**
+     * Marking a false positive and deleting an exclusion rule both switch a
+     * detection off for everyone. Reading the log and disabling it are
+     * different privileges.
+     */
+    private function checkWriteGuard(): void
+    {
+        if (!config('threat-detection.api.enabled', true)) {
+            return;
+        }
+
+        if (config('threat-detection.api.write_guard', 'role') === 'none') {
+            $this->warn2(
+                'Any authenticated user can disable a detection (write_guard is none)',
+                'Set THREAT_DETECTION_API_WRITE_GUARD to role, auth or ip.'
+            );
+
+            return;
+        }
+
+        $this->pass('Disabling a detection requires elevated access');
     }
 
     // ── output ──────────────────────────────────────────────────────────────

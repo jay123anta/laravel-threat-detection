@@ -649,6 +649,22 @@ return [
         'guard' => env('THREAT_DETECTION_API_GUARD', 'none'),  // none|auth|role|ip
         'role' => env('THREAT_DETECTION_API_ROLE', 'admin'),   // used when guard=role
         'allowed_ips' => array_filter(array_map('trim', explode(',', env('THREAT_DETECTION_API_IPS', '')))),
+
+        /*
+        | Guard for the two endpoints that switch detection OFF: marking a
+        | threat as a false positive, and deleting an exclusion rule. Both
+        | silence a detection type for everyone, which is a different
+        | privilege from reading the log — without this, any authenticated
+        | user of your application could disable a detection.
+        |
+        | Applied to those routes only, so reading and the dashboard keep
+        | working exactly as before. Accepts the same none|auth|role|ip values
+        | as `guard`; 'role' uses the `role` setting above.
+        |
+        | Set THREAT_DETECTION_API_WRITE_GUARD=auth if your user model has no
+        | hasRole(), or =none to restore the pre-1.7.0 behaviour.
+        */
+        'write_guard' => env('THREAT_DETECTION_API_WRITE_GUARD', 'role'),
     ],
 
     /*
