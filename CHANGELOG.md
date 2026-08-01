@@ -144,6 +144,25 @@ exclusion-rule change below.
 
 ### Added
 
+- **`php artisan threat-detection:doctor`** — one command that checks whether
+  detection is actually *working*, not merely installed.
+
+  Every check corresponds to a way this package has been seen to fail silently
+  on a real application, where the only symptom is an empty dashboard —
+  indistinguishable from "no attacks". It verifies detection is enabled for the
+  current environment; that `threat_logs` has every column the writer inserts
+  (a missing one discards **every** threat); that the dashboard/API columns and
+  the exclusion-rules table exist; that the middleware is genuinely wired to a
+  route or group; that a published config has not drifted behind this version;
+  that no custom pattern shadows a built-in one; that the cache driver can do
+  DDoS counting; and that neither the dashboard nor the API is exposed without
+  authentication.
+
+  Each finding prints the command or setting that fixes it. Exits non-zero only
+  on a real failure, so it drops straight into CI or a deploy step. One file,
+  no new dependencies. Run against the live app that prompted it, it
+  independently reported both bugs found by hand above.
+
 - `ThreatDetectionService::flushCaches()` and
   `ProbeDetectorService::flushCaches()` drop the process-lifetime pattern and
   probe-path caches, so a runtime config change takes effect (tests, Octane

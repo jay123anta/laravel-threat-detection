@@ -245,13 +245,44 @@ Each detected threat is written as a warning to `storage/logs/laravel.log`:
 
 ### Troubleshooting
 
+**Start here — one command answers most of this:**
+
+```bash
+php artisan threat-detection:doctor
+```
+
+It checks the things that make detection fail *silently* — where the dashboard
+stays empty, which looks identical to "no attacks" — and prints the exact fix
+for each. It exits non-zero on a real failure, so it is safe to run in CI or a
+deploy step.
+
+```
+  Threat Detection — health check
+
+  PASS  Detection is enabled for this environment
+  FAIL  'threat_logs' is missing confidence_label — EVERY threat is being discarded
+        Run: php artisan vendor:publish --tag=threat-detection-migrations && php artisan migrate
+  WARN  1 custom pattern(s) shadow a built-in: Localhost SSRF
+        Your copy runs instead of the maintained one, so later fixes to it never reach you.
+```
+
+What it covers: detection enabled for this environment; every column the writer
+needs (a missing one discards **every** threat); dashboard/API columns; the
+exclusion-rules table; whether the middleware is actually wired to a route or
+group; published config that predates this version; custom patterns shadowing
+built-in ones; a cache driver that cannot do DDoS counting; and a dashboard or
+API left open without authentication.
+
 **"I tested but `threat-detection:stats` shows zero threats" / "Threats are not stored in the database"**
 
-This is almost always because migrations were not published. The package detects threats but silently skips the DB write if the table doesn't exist (so your app keeps working). Check `storage/logs/laravel.log` for errors like `SQLSTATE: table threat_logs not found`.
+Run the doctor above first. The usual cause is migrations that were never
+published, or a `threat_logs` table created before confidence scoring was added
+— the package keeps your app working by swallowing the write error, so the only
+other clue is `SQLSTATE` lines in `storage/logs/laravel.log`.
 
 | Check | How to verify |
 |-------|---------------|
-| Migrations were **published** | Run `php artisan migrate:status` -  look for `create_threat_logs_table` and `create_threat_exclusion_rules_table`. If missing, you need to publish first (see below) |
+| Migrations were **published** | Run `php artisan migrate:status` -  look for `create_threat_logs_table`, `add_confidence_to_threat_logs_table` and `create_threat_exclusion_rules_table`. If missing, you need to publish first (see below) |
 | Migrations were **run** | Same command -  status should show `Ran`, not `Pending` |
 | Middleware is registered | Confirm `ThreatDetectionMiddleware` is in your `web` middleware group (see [Step 3](#3-register-the-middleware) above) |
 | IP is not whitelisted | If you added `THREAT_DETECTION_WHITELISTED_IPS` to `.env`, remove it during testing |
