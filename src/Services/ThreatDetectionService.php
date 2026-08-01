@@ -488,6 +488,12 @@ class ThreatDetectionService
             // substring at all and never reaches the regex stage.
             'aadhaar', 'aadhar', 'uidai', 'ifsc', 'account', 'acct', 'bank',
             'mobile', 'msisdn', 'beneficiary', 'kyc', '"pan"', 'pan_', 'pancard',
+            // Cloud-metadata and DNS-rebinding hosts. The 'ssrf' category has
+            // always listed these, but the pre-screen did not, so a body like
+            // {"callback":"http://169.254.169.254/..."} was dropped before the
+            // category check ever ran. Only field names containing 'url'/
+            // 'redirect'/'next' happened to get through.
+            '169.254', 'metadata.google', 'xip.io', 'nip.io', 'sslip.io', '::1',
         ];
 
         $lower = strtolower($payload);

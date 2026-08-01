@@ -317,7 +317,20 @@ return [
     | API Route Filtering
     |--------------------------------------------------------------------------
     |
-    | Configure filtering behavior for API routes.
+    | Drops threats at the listed severities on any route whose path contains
+    | "/api/". Intended to keep first-party API chatter out of the log.
+    |
+    | IMPORTANT: the default suppresses MEDIUM as well as low, and several
+    | attacks that are delivered mainly through API endpoints are classified
+    | medium — SSRF (including the AWS/GCP metadata endpoints), directory
+    | traversal, LFI protocol usage, command chain injection and open redirect.
+    | With the default in place those are detected and then discarded before
+    | being written.
+    |
+    | If your app is API-first, set this to ['low'] to keep medium-severity
+    | attacks visible while still suppressing routine low-severity noise:
+    |
+    |   'suppress_levels' => ['low'],
     |
     */
     'api_route_filtering' => [

@@ -2,21 +2,36 @@
 
 All notable changes to `jayanta/laravel-threat-detection` will be documented in this file.
 
-## [Unreleased]
+## [1.7.0] - 2026-08-01
 
-> **Note for existing users:** these are detection *gap* fixes — patterns that
-> were configured, matched their input, and still never fired. Expect more
-> entries than before, not fewer. If your app legitimately serves a bare
-> `/admin`, `/test`, `/debug`, `/console`, `/backup` or `/internal` route, it
-> will now produce a low-severity entry per IP every 5 minutes; add the route
-> to `skip_paths` or delete the pattern from your published config.
+Detection *gap* fixes: patterns that were configured, matched their input, and
+still never fired. **Expect more entries than before, not fewer.** Minor rather
+than patch, because the detection surface widens (a new `path` scanning
+context, a new `pii` category, new `context_weights` keys) and because of the
+exclusion-rule change below.
+
+> **Before upgrading, read these three.**
 >
-> Two guarantees from earlier releases are explicitly preserved and now have
-> regression tests: ordinary numeric data (timestamps, invoice numbers, SKUs)
-> is still never logged as PII (the v1.6.0 checksum work), and the
-> `Authorization` header is still not scanned (the v1.3.1 false-positive fix).
-> The one behaviour change to review before upgrading is the exclusion-rule
-> matching below.
+> **1. Exclusion rules now match the label exactly** (see Changed). This is the
+> only behaviour break in the release.
+>
+> **2. If your app serves a bare `/admin`, `/test`, `/debug`, `/console`,
+> `/backup` or `/internal` route**, each will now log a low-severity entry per
+> IP every 5 minutes. Delete the offending pattern from your published
+> `custom_patterns` — do **not** reach for `skip_paths`, which bypasses
+> scanning on that route entirely and would leave your admin panel, the
+> highest-value target in the app, completely unmonitored.
+>
+> **3. If your app is API-first**, consider
+> `'api_route_filtering.suppress_levels' => ['low']`. The default also
+> suppresses medium, which discards SSRF, directory traversal, LFI and open
+> redirect on `/api/` routes after detecting them. This is long-standing
+> behaviour, not new here, but the new flow test made it visible.
+>
+> Two guarantees from earlier releases are preserved and now have regression
+> tests: ordinary numeric data (timestamps, invoice numbers, SKUs) is still
+> never logged as PII (the v1.6.0 checksum work), and the `Authorization`
+> header is still not scanned (the v1.3.1 false-positive fix).
 
 ### Changed
 
@@ -84,6 +99,15 @@ All notable changes to `jayanta/laravel-threat-detection` will be documented in 
   the evasion patterns scan it, and a label already found in a decoded segment
   is not double-counted.
 
+- **Cloud-metadata SSRF was never detected unless the field happened to be
+  named `url`.** `169.254.169.254`, `metadata.google.internal` and the
+  `xip.io`/`nip.io`/`sslip.io` rebinding hosts are all listed in the `ssrf`
+  category, but none were in the pre-screen list, so a body such as
+  `{"callback":"http://169.254.169.254/latest/meta-data/"}` was dropped before
+  the category check ever ran — only payloads whose key contained `url`,
+  `redirect` or `next` got through, by accident. Added to the pre-screen.
+  Found by the new end-to-end flow test, not by any unit assert.
+
 - **CSV export sanitized only three of its free-text columns.**
   `action_taken`, `country_name`, `cloud_provider` and `created_at` bypassed
   the formula-injection guard.
@@ -98,6 +122,16 @@ All notable changes to `jayanta/laravel-threat-detection` will be documented in 
   `ProbeDetectorService::flushCaches()` drop the process-lifetime pattern and
   probe-path caches, so a runtime config change takes effect (tests, Octane
   reloads). The test suite previously reached in with reflection.
+
+- **End-to-end process-flow test** (`Phase14ProductionFlowTest`). Drives a
+  realistic storefront + admin + API route table through the middleware with
+  ordinary browser traffic, then with a 14-attack suite, and asserts on what
+  reaches `threat_logs`. It pins the shipped-config noise floor and the
+  shipped-config attack blind spot as explicit expected values, so either one
+  changing becomes a decision someone has to make rather than a surprise in
+  production. It also proves the documented tuning removes the noise without
+  costing any attack coverage. This is what surfaced the metadata-SSRF gap
+  above.
 
 - 20 regression tests covering the gaps above, with payloads that carry no
   incidental keyword. The earlier custom-pattern tests routed every body
