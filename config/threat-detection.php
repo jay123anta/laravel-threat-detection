@@ -351,6 +351,8 @@ return [
     |
     */
     'context_weights' => [
+        'path'    => 1.5,   // The URL path itself — nothing legitimate hides there
+        'raw'     => 1.5,   // Still-encoded request; only evasion patterns scan it
         'query'   => 1.5,   // Patterns in query strings are most suspicious
         'headers' => 1.3,   // Patterns in headers are suspicious
         'body'    => 1.0,   // POST body is baseline (often contains legitimate content)
@@ -422,6 +424,12 @@ return [
         '/phpinfo\(/i' => 'PHPInfo Function Call',
 
         // Path Traversal & Admin Access
+        //
+        // NOTE: these match the request path itself. Each is narrow — bare
+        // "/admin" matches, "/admin/users" does not — but if your app serves
+        // one of these routes legitimately you will see a low-severity entry
+        // per IP every 5 minutes. Add the route to skip_paths (above) to
+        // silence it, or delete the pattern here.
         '/\/admin\b(?![-\/])/i' => 'Admin Path Access Attempt',
         '/\/internal\b/i' => 'Internal Endpoint Probe',
         '/\/legacy\b/i' => 'Legacy System Access',

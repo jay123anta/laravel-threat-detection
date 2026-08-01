@@ -312,18 +312,22 @@ class ThreatLogController extends Controller
 
             $csvHeader = ['ID', 'Time', 'IP Address', 'URL', 'Type', 'Level', 'Confidence', 'False Positive', 'Action', 'Country', 'Cloud Provider'];
             $csvData = $logs->map(function ($log) {
+                // Every free-text cell goes through the sanitizer. Country and
+                // provider come from geo-enrichment and action_taken from the
+                // DB, so they are lower risk than url/type — but a partially
+                // sanitized export is a hole waiting to be found.
                 return [
                     $log->id,
-                    $log->created_at,
+                    $this->sanitizeCsvCell($log->created_at),
                     $this->sanitizeCsvCell($log->ip_address),
                     $this->sanitizeCsvCell($log->url),
                     $this->sanitizeCsvCell($log->type),
                     $log->threat_level,
                     ($log->confidence_score ?? 0) . '%',
                     ($log->is_false_positive ?? false) ? 'Yes' : 'No',
-                    $log->action_taken,
-                    $log->country_name ?? 'N/A',
-                    $log->cloud_provider ?? 'N/A',
+                    $this->sanitizeCsvCell($log->action_taken),
+                    $this->sanitizeCsvCell($log->country_name) ?: 'N/A',
+                    $this->sanitizeCsvCell($log->cloud_provider) ?: 'N/A',
                 ];
             })->toArray();
 

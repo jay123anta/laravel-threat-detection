@@ -4,6 +4,8 @@ namespace JayAnta\ThreatDetection\Tests;
 
 use Orchestra\Testbench\TestCase as OrchestraTestCase;
 use JayAnta\ThreatDetection\ThreatDetectionServiceProvider;
+use JayAnta\ThreatDetection\Services\ProbeDetectorService;
+use JayAnta\ThreatDetection\Services\ThreatDetectionService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
@@ -12,6 +14,26 @@ abstract class TestCase extends OrchestraTestCase
     protected function getPackageProviders($app): array
     {
         return [ThreatDetectionServiceProvider::class];
+    }
+
+    /**
+     * Pattern and probe-path caches live for the whole process, so one file's
+     * config overrides would otherwise leak into the next.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        ThreatDetectionService::flushCaches();
+        ProbeDetectorService::flushCaches();
+    }
+
+    protected function tearDown(): void
+    {
+        ThreatDetectionService::flushCaches();
+        ProbeDetectorService::flushCaches();
+
+        parent::tearDown();
     }
 
     protected function getEnvironmentSetUp($app): void

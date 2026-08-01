@@ -65,7 +65,10 @@ class ThreatDetectionService
         foreach ($contextMatches as $match) {
             $patternThreats[] = [$match['label'], $match['threat_level'], $match['source']];
             $weight = config('threat-detection.context_weights.' . $match['context'], 1.0);
-            $contextWeights[$match['label']] = $weight;
+            // Keep the most suspicious context a label was seen in. Plain
+            // assignment let a later low-weight segment (body, 1.0) erase the
+            // score bonus earned by an earlier high-weight one (query, 1.5).
+            $contextWeights[$match['label']] = max($contextWeights[$match['label']] ?? 0, $weight);
         }
 
         $allThreats = array_merge($probeThreats, $botThreats, $patternThreats);
@@ -211,6 +214,9 @@ class ThreatDetectionService
     /**
      * Build sanitized payload string from pre-built segments.
      * Reuses segments to avoid duplicate json_encode calls.
+     *
+     * 'path' and 'raw' are scanned but not logged here: the path is already in
+     * the url column, and raw is the same bytes as query/body before decoding.
      */
     private function buildSanitizedPayloadFromSegments(array $segments): string
     {
@@ -239,9 +245,28 @@ class ThreatDetectionService
 
     private function buildPayloadSegments(Request $request): array
     {
-        $segments = ['query' => '', 'body' => '', 'headers' => ''];
+        // 'raw' is built last and scanned last — see detectThreatPatternsWithContext().
+        $segments = ['path' => '', 'query' => '', 'body' => '', 'headers' => '', 'raw' => ''];
         $safeFields = config('threat-detection.safe_fields', []);
         $safePaths  = config('threat-detection.safe_paths', []);
+
+        // The request path itself. Roughly twenty shipped patterns are
+        // path-shaped (/.env, /.git/, /actuator, vendor/phpunit/phpunit,
+        // /users/<id>/delete); without this segment they could only ever match
+        // when the path fragment appeared inside a query or body *value*.
+        // safe_fields/safe_paths are field-oriented and do not apply here.
+        //
+        // Skipped when the probe tracker already flagged this request. Probe
+        // tracking (v1.3.0, path list extended in v1.3.1) is the package's
+        // first-class answer for known recon paths and reports a better label
+        // at a higher severity; scanning the path again would just add a
+        // second, weaker row for the same request. The pattern engine still
+        // covers everything the fixed probe list misses — a nested
+        // /deep/path/vendor/phpunit/... does not match the '/vendor/phpunit/*'
+        // probe entry, but does match the pattern.
+        if (!$request->attributes->get('threat-detection:probe')) {
+            $segments['path'] = '/' . ltrim($request->path(), '/');
+        }
 
         $queryData = $request->query();
         if (!empty($queryData)) {
@@ -292,7 +317,46 @@ class ThreatDetectionService
             $segments['headers'] = json_encode($headers, self::SEGMENT_JSON_FLAGS);
         }
 
+        $segments['raw'] = $this->buildRawSegment($request);
+
         return $segments;
+    }
+
+    /**
+     * The request as it arrived, still percent-encoded.
+     *
+     * The evasion patterns for %00, %0d%0a and %0a can only fire here: every
+     * other segment is built from $request->query()/post(), which Laravel has
+     * already URL-decoded, so a single-encoded null byte reaches them as a raw
+     * NUL and a single-encoded CRLF as real control characters — neither of
+     * which the literal "%00"/"%0d%0a" patterns can match.
+     */
+    private function buildRawSegment(Request $request): string
+    {
+        $parts = [];
+
+        $queryString = (string) ($request->server->get('QUERY_STRING') ?? '');
+        if ($queryString === '') {
+            $queryString = (string) ($request->getQueryString() ?? '');
+        }
+        if ($queryString !== '') {
+            $parts[] = $queryString;
+        }
+
+        // Multipart bodies are not readable from php://input, and file content
+        // is not worth scanning byte-for-byte; skip them.
+        if (!str_contains($request->header('Content-Type', ''), 'multipart/form-data')) {
+            try {
+                $body = (string) $request->getContent();
+            } catch (\Throwable $e) {
+                $body = '';
+            }
+            if ($body !== '') {
+                $parts[] = substr($body, 0, 8000);
+            }
+        }
+
+        return implode("\n", $parts);
     }
 
     /**
@@ -388,11 +452,15 @@ class ThreatDetectionService
     }
 
     /**
-     * Quick pre-screen: check if payload contains any suspicious substrings
-     * before running 175+ regex patterns. Skips ~90% of legitimate requests.
+     * Quick pre-screen: does the payload contain any substring that a
+     * keyword-based pattern could key off? A miss lets the caller skip the
+     * keyword-mapped patterns; it does NOT skip format-shaped ones.
      *
      * Uses keyword-based checks (not structural chars like quotes/brackets)
-     * to avoid false triggers on JSON payloads.
+     * to avoid false triggers on JSON payloads. Note that the list is
+     * deliberately fail-open and includes single characters ('@', '%', '(',
+     * '$'), so any body carrying an email address or a percent-encoded value
+     * passes it — treat it as a cheap filter, not a tight one.
      */
     private function hasSuspiciousCharacters(string $payload): bool
     {
@@ -415,6 +483,11 @@ class ThreatDetectionService
             'net user', 'net localgroup', '@', 'contains(', 'substring(',
             '2130706433', 'redirect":', 'url":"http', 'next":"http',
             'filesman', 'c99', 'r57', 'b374k',
+            // PII field-name words, mirroring the 'pii' category. Without these
+            // a clean body such as {"aadhaar":"..."} carries no suspect
+            // substring at all and never reaches the regex stage.
+            'aadhaar', 'aadhar', 'uidai', 'ifsc', 'account', 'acct', 'bank',
+            'mobile', 'msisdn', 'beneficiary', 'kyc', '"pan"', 'pan_', 'pancard',
         ];
 
         $lower = strtolower($payload);
@@ -445,7 +518,11 @@ class ThreatDetectionService
             'get_current_user', 'allow_url_include', '<?php', '/bin/', 'chmod',
             'c99', 'r57', 'b374k', 'wso', 'c100', 'filesman'],
         'path' => ['../', '..\\', '/etc/', 'passwd', 'win.ini', 'file://', 'php://', 'zip://',
-            'data://', 'glob://', 'phar://', 'expect://', 'input://'],
+            'data://', 'glob://', 'phar://', 'expect://', 'input://',
+            // Sensitive-file labels map here; without these keywords a probe of
+            // /.env or /.git/config activated no category and never ran.
+            '.env', '.git', '.ssh', '.aws', 'composer.', 'package.json', 'package-lock',
+            'web.config', '.htaccess', 'config.json', 'config.php', 'phpinfo'],
         'ssrf' => ['localhost', '127.0.0.1', '0.0.0.0', '::1', '169.254.', 'metadata.google',
             '10.', '172.', '192.168.', '0x7f', '2130706433', 'xip.io', 'nip.io', 'sslip.io',
             '017700000001'],
@@ -464,6 +541,16 @@ class ThreatDetectionService
             'return=http', 'goto=http', 'dest=http'],
         'misc' => ['coinhive', 'cryptonight', 'monero', '--inspect', 'xdebug', 'trace_id',
             'graphql', '__schema', '__type', 'swagger', 'api-docs'],
+        'endpoint' => ['/admin', '/internal', '/legacy', '/backup', '/test', '/debug',
+            '/console', '/user', '/users', '/v1/', '/v2/', '/v3/', 'limit='],
+        // Field-name words that accompany real PII. Deliberately narrow: one
+        // keyword activates the whole category, and the category contains bare
+        // digit-run patterns, so a loose word here (a plain 'pan', which is a
+        // substring of "company", "expand", "japan") would put every order id
+        // and epoch timestamp back in front of them.
+        'pii' => ['aadhaar', 'aadhar', 'uidai', 'ifsc', 'account', 'acct', 'bank',
+            'mobile', 'phone', 'msisdn', 'beneficiary', 'kyc',
+            '"pan"', 'pan_', 'pan-', 'pancard', 'pan card'],
     ];
 
     /**
@@ -492,14 +579,29 @@ class ThreatDetectionService
 
     /**
      * Check if a pattern's label belongs to a relevant category.
-     * Uses direct full-label lookup. Unknown labels always run (safe fallback).
+     *
+     * Uses direct full-label lookup. A label that is not in the map is
+     * "format-shaped" rather than keyword-shaped — a card number, an Aadhaar
+     * number or a user-defined reference code contains no attack keyword by
+     * definition, so no keyword pre-check can decide whether to run it. Those
+     * always run. Short-circuiting on an empty category set here would skip
+     * them too, which silently disabled every user-defined custom pattern.
      */
     private function isPatternRelevant(string $label, array $relevantCategories): bool
     {
-        if (empty($relevantCategories)) {
-            return false;
+        $this->primeLabelCategoryMap();
+
+        // Direct lookup — O(1), no ambiguity
+        if (isset(self::$labelCategoryMap[$label])) {
+            return isset($relevantCategories[self::$labelCategoryMap[$label]]);
         }
 
+        // Unknown (format-shaped) pattern — always run it
+        return true;
+    }
+
+    private function primeLabelCategoryMap(): void
+    {
         if (self::$labelCategoryMap === null) {
             // Direct full-label → category mapping. No substring ambiguity.
             self::$labelCategoryMap = [
@@ -571,10 +673,18 @@ class ThreatDetectionService
                 'Password Exposure' => 'token', 'API Key Exposure' => 'token',
                 'Access Token Leak' => 'token', 'Session ID Leak' => 'token',
                 'Bearer Token Detected' => 'token',
-                'Aadhaar Number Detected' => 'token', 'PAN Number Detected' => 'token',
-                'Bank Account Number Detected' => 'token', 'IFSC Code Detected' => 'token',
-                'Mobile Number Detected' => 'token', 'PHP Session Exposure' => 'token',
+                'PHP Session Exposure' => 'token',
                 'XDebug Session' => 'token', 'Trace ID Exposure' => 'misc',
+                // Regional PII keys off 'pii', not 'token'. The old mapping was
+                // the bug — 'token' keywords are credential words (bearer, csrf,
+                // api_key) that a bare Aadhaar or account number never contains,
+                // so these patterns almost never ran. They stay gated rather
+                // than always-run because the loose ones are bare digit runs:
+                // ungated, "Bank Account Number Detected" (9-18 digits, high
+                // severity, no checksum) fires on every timestamp and order id.
+                'Aadhaar Number Detected' => 'pii', 'PAN Number Detected' => 'pii',
+                'Bank Account Number Detected' => 'pii', 'IFSC Code Detected' => 'pii',
+                'Mobile Number Detected' => 'pii',
                 // Scanner
                 'Scanner Tool Detected' => 'scanner', 'Security Scanner Detected' => 'scanner',
                 'Port Scanner' => 'scanner', 'Scripted Request' => 'scanner',
@@ -595,24 +705,71 @@ class ThreatDetectionService
                 'Composer File Access' => 'path', 'Package File Access' => 'path',
                 'Git Directory Access Attempt' => 'path', 'SSH Directory Access Attempt' => 'path',
                 'AWS Credentials Access' => 'path', 'Server Config Access' => 'path',
-                // Endpoint probes (custom)
-                'Admin Path Access Attempt' => 'cve', 'Internal Endpoint Probe' => 'cve',
-                'Legacy System Access' => 'cve', 'Backup Directory Probe' => 'cve',
-                'Test Endpoint Probe' => 'cve', 'Debug Endpoint Probe' => 'cve',
-                'Console Access Attempt' => 'cve',
+                // Endpoint probes (custom) — these are path-shaped, so they key
+                // off the 'endpoint' category, not 'cve'. Mapping them to 'cve'
+                // gated them behind keywords ('phpunit', 'actuator', '(){') that
+                // a probe of /admin or /debug never contains.
+                'Admin Path Access Attempt' => 'endpoint', 'Internal Endpoint Probe' => 'endpoint',
+                'Legacy System Access' => 'endpoint', 'Backup Directory Probe' => 'endpoint',
+                'Test Endpoint Probe' => 'endpoint', 'Debug Endpoint Probe' => 'endpoint',
+                'Console Access Attempt' => 'endpoint',
                 // API
-                'API User Enumeration' => 'misc', 'API High Limit Request' => 'misc',
-                'User Deletion Attempt' => 'misc', 'Admin ID Enumeration' => 'misc',
+                'API User Enumeration' => 'endpoint', 'API High Limit Request' => 'endpoint',
+                'User Deletion Attempt' => 'endpoint', 'Admin ID Enumeration' => 'endpoint',
+                // Command-line downloaders (custom)
+                'Command Line Tool (curl)' => 'cmd', 'Command Line Tool (wget)' => 'cmd',
             ];
         }
+    }
 
-        // Direct lookup — O(1), no ambiguity
-        if (isset(self::$labelCategoryMap[$label])) {
-            return isset($relevantCategories[self::$labelCategoryMap[$label]]);
+    /** @var bool|null Whether any pattern in play is format-shaped (unmapped label) */
+    private static ?bool $hasAlwaysRunPatterns = null;
+
+    /**
+     * Whether any active pattern has an unmapped (format-shaped) label. When
+     * none do, a segment that fails the keyword pre-screen can be skipped
+     * outright, preserving the original fast path.
+     */
+    private function hasAlwaysRunPatterns(): bool
+    {
+        if (self::$hasAlwaysRunPatterns !== null) {
+            return self::$hasAlwaysRunPatterns;
         }
 
-        // Unknown pattern — always run it (safe fallback)
-        return true;
+        $this->primeLabelCategoryMap();
+
+        foreach ($this->getDefaultThreatPatterns() as $label) {
+            if (!isset(self::$labelCategoryMap[$label])) {
+                return self::$hasAlwaysRunPatterns = true;
+            }
+        }
+
+        foreach ($this->getValidatedCustomPatterns() as $spec) {
+            if (!isset(self::$labelCategoryMap[$spec['label']])) {
+                return self::$hasAlwaysRunPatterns = true;
+            }
+        }
+
+        return self::$hasAlwaysRunPatterns = false;
+    }
+
+    /**
+     * Drop every process-lifetime cache. Config changes (custom_patterns,
+     * threat_levels, probe paths) are read once and memoised for speed, so a
+     * runtime change — a test switching config, or a deploy under Octane —
+     * needs this to take effect.
+     */
+    public static function flushCaches(): void
+    {
+        self::$defaultPatterns = null;
+        self::$validatedCustomPatterns = null;
+        self::$labelCategoryMap = null;
+        self::$hasAlwaysRunPatterns = null;
+        self::$evasionPatterns = null;
+        self::$cachedScanners = null;
+        self::$cachedBots = null;
+        self::$threatLevelCache = [];
+        self::$validatorWarned = [];
     }
 
     public function detectThreatPatternsWithContext(
@@ -630,6 +787,11 @@ class ThreatDetectionService
             'Session ID Leak', 'Bearer Token Detected', 'Access Token Leak', 'API Key Exposure',
         ];
 
+        // Evasion labels already recorded this request. The 'raw' segment is the
+        // same data in a different encoding, not an independent occurrence, so
+        // it must not double-count a label the decoded segments already found.
+        $seenEvasionLabels = [];
+
         foreach ($segments as $context => $segmentPayload) {
             if (empty($segmentPayload)) {
                 continue;
@@ -638,23 +800,62 @@ class ThreatDetectionService
             // Cap payload to prevent ReDoS on large inputs
             $segmentPayload = substr($segmentPayload, 0, 8000);
 
-            // Early bailout: skip regex if payload has no suspicious characters
-            if (!$this->hasSuspiciousCharacters($segmentPayload)) {
+            // The still-encoded request. Only the evasion patterns run here —
+            // every other pattern would duplicate the decoded segments.
+            if ($context === 'raw') {
+                foreach ($this->getEvasionPatterns() as $regex => $label) {
+                    if ($maxDetections > 0 && count($matches) >= $maxDetections) {
+                        break 2;
+                    }
+                    if (isset($seenEvasionLabels[$label])) {
+                        continue;
+                    }
+                    if ($this->patternMatches($regex, $segmentPayload, $label)) {
+                        $seenEvasionLabels[$label] = true;
+                        $matches[] = [
+                            'label' => $label,
+                            'threat_level' => 'high',
+                            'source' => $source,
+                            'context' => $context,
+                        ];
+                    }
+                }
                 continue;
             }
 
-            // Evasion patterns run on raw payload
-            foreach ($this->getEvasionPatterns() as $regex => $label) {
-                if ($maxDetections > 0 && count($matches) >= $maxDetections) {
-                    break 2;
-                }
-                if ($this->patternMatches($regex, $segmentPayload, $label)) {
-                    $matches[] = [
-                        'label' => $label,
-                        'threat_level' => 'high',
-                        'source' => $source,
-                        'context' => $context,
-                    ];
+            // Keyword pre-screen. It gates the keyword-mapped patterns only:
+            // format-shaped patterns (PII, custom rules with no category) must
+            // still run, since a bare Aadhaar or card number contains no attack
+            // keyword by definition. With no such pattern in play the segment
+            // can be skipped outright, as before.
+            //
+            // The path is exempt: the pre-screen exists to keep large bodies off
+            // the regex engine, and a URL is a few dozen bytes. Screening it
+            // discarded the highest-signal segment there is — "/.env" and
+            // "/admin" contain no keyword from the list, which is precisely why
+            // they are worth matching.
+            $prescreened = $context === 'path'
+                || $this->hasSuspiciousCharacters($segmentPayload);
+
+            if (!$prescreened && !$this->hasAlwaysRunPatterns()) {
+                continue;
+            }
+
+            // Evasion patterns run on the un-normalized payload
+            if ($prescreened) {
+                foreach ($this->getEvasionPatterns() as $regex => $label) {
+                    if ($maxDetections > 0 && count($matches) >= $maxDetections) {
+                        break 2;
+                    }
+                    if ($this->patternMatches($regex, $segmentPayload, $label)) {
+                        $seenEvasionLabels[$label] = true;
+                        $matches[] = [
+                            'label' => $label,
+                            'threat_level' => 'high',
+                            'source' => $source,
+                            'context' => $context,
+                        ];
+                    }
                 }
             }
 
@@ -662,7 +863,7 @@ class ThreatDetectionService
 
             // Category-based lazy loading: only run regex for categories whose
             // keywords appear in the payload. Skips ~80% of patterns on average.
-            $relevantCategories = $this->getRelevantCategories($normalizedPayload);
+            $relevantCategories = $prescreened ? $this->getRelevantCategories($normalizedPayload) : [];
 
             foreach ($this->getDefaultThreatPatterns() as $regex => $label) {
                 if ($maxDetections > 0 && count($matches) >= $maxDetections) {
@@ -991,8 +1192,11 @@ class ThreatDetectionService
 
     private static ?array $validatedCustomPatterns = null;
 
-    /** Segment names a custom pattern's 'contexts' list may name. */
-    private const PATTERN_CONTEXTS = ['query', 'body', 'headers'];
+    /**
+     * Segment names a custom pattern's 'contexts' list may name. 'raw' is not
+     * offered: only the built-in evasion patterns scan that segment.
+     */
+    private const PATTERN_CONTEXTS = ['path', 'query', 'body', 'headers'];
 
     /**
      * Returns custom patterns that have been validated once per process

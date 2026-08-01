@@ -2,6 +2,131 @@
 
 All notable changes to `jayanta/laravel-threat-detection` will be documented in this file.
 
+## [Unreleased]
+
+> **Note for existing users:** these are detection *gap* fixes — patterns that
+> were configured, matched their input, and still never fired. Expect more
+> entries than before, not fewer. If your app legitimately serves a bare
+> `/admin`, `/test`, `/debug`, `/console`, `/backup` or `/internal` route, it
+> will now produce a low-severity entry per IP every 5 minutes; add the route
+> to `skip_paths` or delete the pattern from your published config.
+>
+> Two guarantees from earlier releases are explicitly preserved and now have
+> regression tests: ordinary numeric data (timestamps, invoice numbers, SKUs)
+> is still never logged as PII (the v1.6.0 checksum work), and the
+> `Authorization` header is still not scanned (the v1.3.1 false-positive fix).
+> The one behaviour change to review before upgrading is the exclusion-rule
+> matching below.
+
+### Changed
+
+- **Exclusion rules match the pattern label exactly, not by substring.** A rule
+  with `pattern_label` `SQL` previously disabled all nineteen SQL patterns, and
+  `Admin Path Access` also swallowed `Admin Path Access Attempt` — an unbounded
+  blast radius on a control whose whole job is to switch detections off. Rules
+  created through `markFalsePositive` have always stored the exact label and are
+  unaffected; only hand-inserted rows that relied on partial matching change
+  behaviour, and they change in the direction of re-enabling detection.
+
+### Fixed
+
+- **Custom patterns were silently disabled unless the payload happened to
+  contain an unrelated attack keyword.** `isPatternRelevant()` returned early
+  on an empty category set, before the "unknown label always runs" fallback it
+  documented. A user-defined pattern therefore only ran when the request also
+  carried a keyword from one of the fifteen built-in categories. The category
+  check now consults the label map first and unmapped (format-shaped) labels
+  always run, as documented.
+
+- **Shipped regional PII patterns (Aadhaar, PAN, Mobile, Bank Account, IFSC)
+  effectively never fired.** They were mapped to the `token` category, whose
+  keywords are all credential words (`bearer`, `csrf`, `api_key`, …) that a
+  bare Aadhaar or account number never contains. They now key off a new `pii`
+  category of field-name words (`aadhaar`, `ifsc`, `account`, `bank`, `mobile`,
+  …), which are also added to the pre-screen list so a clean
+  `{"aadhaar": "…"}` body reaches the regex stage at all.
+
+  They stay *gated* rather than always-run on purpose. Two of them are bare
+  digit runs — `Bank Account Number Detected` is `\d{9,18}` at **high**
+  severity with no checksum — so ungating them logged an ordinary checkout body
+  (`order_id`, `invoice_no`, `product_sku`) as two high-severity PII threats.
+  That is precisely the false-positive class v1.2.0 and v1.6.0 removed, and
+  there is now a test pinning it shut. The gate was never wrong here; the
+  keyword list was.
+
+- **The request path was never scanned by the pattern engine.** Only the query
+  string, body and headers were fed to it, so roughly twenty path-shaped
+  patterns (`/.env`, `/.git/`, `/actuator`, `vendor/phpunit/phpunit`,
+  `/users/<id>/delete`) could only match when the path fragment appeared inside
+  a query or body *value*. A `path` segment is now scanned, exempt from the
+  keyword pre-screen (a URL is a few dozen bytes, and `/.env` contains no
+  keyword by design). `path` is also selectable in a custom pattern's
+  `contexts` list, and has a `context_weights` entry.
+
+  This complements probe tracking rather than duplicating it: when the probe
+  tracker (v1.3.0, path list extended in v1.3.1) already flagged the request,
+  the path segment is skipped, so a hit on `/.env` still produces exactly one
+  row and keeps the stronger `[probe]` label. The pattern engine covers what
+  the fixed probe list misses — a nested `/deep/path/vendor/phpunit/…` does not
+  match the `/vendor/phpunit/*` probe entry, but does match the pattern.
+
+- **Sensitive-file and endpoint-probe labels were mapped to categories whose
+  keywords they can never contain** — `Environment File Access` sat behind the
+  `path` category (`../`, `/etc/`, `passwd`), and `/admin`, `/debug`, `/console`
+  probes behind `cve` (`phpunit`, `actuator`). The `path` category gained the
+  relevant file-name keywords and a new `endpoint` category covers the probes.
+
+- **The `%00`, `%0d%0a` and `%0a` evasion patterns only matched double-encoded
+  input.** They ran against segments built from `$request->query()`/`post()`,
+  which Laravel has already URL-decoded, so a real single-encoded null byte
+  arrived as a raw NUL and a single-encoded CRLF as actual control characters.
+  A `raw` segment now carries the still-encoded query string and body; only
+  the evasion patterns scan it, and a label already found in a decoded segment
+  is not double-counted.
+
+- **CSV export sanitized only three of its free-text columns.**
+  `action_taken`, `country_name`, `cloud_provider` and `created_at` bypassed
+  the formula-injection guard.
+
+- **Context weighting lost the most suspicious context.** A label matching in
+  both the query (weight 1.5) and the body (1.0) kept whichever segment was
+  scanned last, erasing the score bonus; the highest weight is now kept.
+
+### Added
+
+- `ThreatDetectionService::flushCaches()` and
+  `ProbeDetectorService::flushCaches()` drop the process-lifetime pattern and
+  probe-path caches, so a runtime config change takes effect (tests, Octane
+  reloads). The test suite previously reached in with reflection.
+
+- 20 regression tests covering the gaps above, with payloads that carry no
+  incidental keyword. The earlier custom-pattern tests routed every body
+  through a helper that appended an email address and a `password` field —
+  which is what made the two bugs above invisible. Four of the new tests guard
+  the other direction, pinning the earlier false-positive fixes (no PII on
+  numeric data, no `Authorization` scanning, no SQL-comment revival, no
+  duplicate probe rows) so a future coverage fix cannot quietly undo them
+  (262 → 282 tests).
+
+## [1.6.1] - 2026-07-29
+
+Two defensive fixes. No breaking changes; both are covered by regression tests.
+
+### Fixed
+
+- **The `ip` dashboard/API guard failed open on an empty allow-list.** Setting
+  `guard = ip` without populating `allowed_ips` (an unset
+  `THREAT_DETECTION_DASHBOARD_IPS`, or one that trimmed to nothing) passed the
+  `IpUtils::checkIp()` check for every caller, publishing the security
+  dashboard to the internet. It now logs a warning and returns 403 — the same
+  fail-closed treatment v1.3.1 gave the `role` and unknown-guard branches.
+
+- **Fully encoded payloads slipped past the pre-screen.** A payload encoded end
+  to end (`%55%4E%49%4F%4E…` for `UNION…`) contains no readable keyword, so the
+  early bailout skipped the segment before the normalizer could decode it. The
+  pre-screen now also treats a bare `%` and a backslash as suspicious, so
+  percent- and escape-encoded payloads reach the normalization stage.
+
 ## [1.6.0] - 2026-07-29
 
 > **Note for default-config users:** the shipped config now maps the Aadhaar
