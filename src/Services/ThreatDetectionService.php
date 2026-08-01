@@ -98,7 +98,16 @@ class ThreatDetectionService
         $batchLogData = [];
         $notificationQueue = [];
         $seenTypes = [];   // within-request dedup; cache mark deferred until after a successful write
-        $truncatedPayload = substr($payload, 0, 2000);
+
+        // Detection is finished; from here on we are deciding what to *keep*.
+        // Mask the values of any sensitive pattern that fired, so the log does
+        // not become a second cleartext copy of the data it just warned about.
+        // The URL matters as much as the body — a PAN in a query string lands
+        // in the url column otherwise.
+        $sensitive = $this->sensitiveLabelsAmong($allThreats);
+        $truncatedPayload = $this->redact(substr($payload, 0, 2000), $sensitive);
+        $storedUrl = $this->redact($url, $sensitive);
+
         $now = now();
         $userId = Auth::id();
 
@@ -132,7 +141,7 @@ class ThreatDetectionService
 
             $logData = [
                 'ip_address' => $ip,
-                'url' => $url,
+                'url' => $storedUrl,
                 'user_agent' => $userAgent,
                 'type' => $type,
                 'payload' => $truncatedPayload,
@@ -156,7 +165,7 @@ class ThreatDetectionService
 
             // Sanitize log output to prevent log injection via newlines/control chars
             $safeType = str_replace(["\n", "\r", "\t"], ' ', $type);
-            $safeUrl = str_replace(["\n", "\r", "\t"], ' ', $url);
+            $safeUrl = str_replace(["\n", "\r", "\t"], ' ', $storedUrl);
             Log::warning("[{$level}] Threat Detected: [{$safeType}] from {$ip} ({$safeUrl}) [confidence: {$confidence['score']}%]");
 
             // Dispatch event so users can hook in with custom listeners
@@ -170,7 +179,7 @@ class ThreatDetectionService
                     'webhook_url' => config('threat-detection.notifications.slack_webhook'),
                     'alert_data' => [
                         'ip_address' => $ip,
-                        'url' => $url,
+                        'url' => $storedUrl,
                         'type' => $batchLogData[0]['type'],
                         'threat_level' => $batchLogData[0]['threat_level'],
                         'action_taken' => 'logged',
@@ -203,10 +212,98 @@ class ThreatDetectionService
                 $this->markTypesLogged($ip, array_keys($seenTypes));
 
                 if (!empty($notificationQueue)) {
-                    $this->sendNotifications($ip, $url, $batchLogData[0]['type'], $batchLogData[0]['threat_level'], $userAgent);
+                    $this->sendNotifications($ip, $storedUrl, $batchLogData[0]['type'], $batchLogData[0]['threat_level'], $userAgent);
                 }
             }
         }
+    }
+
+    /**
+     * Which of the labels that fired this request are marked as sensitive.
+     *
+     * @param array $threats [label, level, sourceTag] tuples
+     * @return string[]
+     */
+    private function sensitiveLabelsAmong(array $threats): array
+    {
+        if (!config('threat-detection.redact.enabled', true)) {
+            return [];
+        }
+
+        $sensitive = config('threat-detection.redact.labels', []);
+
+        if (empty($sensitive) || empty($threats)) {
+            return [];
+        }
+
+        return array_values(array_unique(array_intersect(array_column($threats, 0), $sensitive)));
+    }
+
+    /**
+     * Mask the values matched by the given labels' patterns.
+     *
+     * Runs each label's own regex over the text and replaces what it matches.
+     * That keeps the mask aligned with what the detector actually considers
+     * sensitive: a label added to redact.labels by a user, with a custom
+     * pattern behind it, is redacted on the same terms as a shipped one.
+     *
+     * Nothing is scanned here that has not already been detected — this runs
+     * on at most a 2 KB payload and only when a sensitive label fired.
+     */
+    private function redact(string $text, array $sensitiveLabels): string
+    {
+        if ($sensitiveLabels === [] || $text === '') {
+            return $text;
+        }
+
+        $mask = (string) config('threat-detection.redact.mask', '[REDACTED]');
+
+        foreach ($this->regexesForLabels($sensitiveLabels) as $regex) {
+            $masked = @preg_replace($regex, $mask, $text);
+
+            // preg_replace returns null on failure (bad pattern, backtrack
+            // limit). Keeping the unmasked text would defeat the point, so
+            // treat a failure as "cannot prove this is clean" and drop it.
+            if ($masked === null) {
+                return $mask;
+            }
+
+            $text = $masked;
+        }
+
+        return $text;
+    }
+
+    /** @var array<string, string[]>|null label => regexes, built once */
+    private static ?array $labelRegexMap = null;
+
+    /**
+     * @param string[] $labels
+     * @return string[]
+     */
+    private function regexesForLabels(array $labels): array
+    {
+        if (self::$labelRegexMap === null) {
+            self::$labelRegexMap = [];
+
+            foreach ($this->getDefaultThreatPatterns() as $regex => $label) {
+                self::$labelRegexMap[$label][] = $regex;
+            }
+
+            foreach ($this->getValidatedCustomPatterns() as $regex => $spec) {
+                self::$labelRegexMap[$spec['label']][] = $regex;
+            }
+        }
+
+        $out = [];
+
+        foreach ($labels as $label) {
+            foreach (self::$labelRegexMap[$label] ?? [] as $regex) {
+                $out[] = $regex;
+            }
+        }
+
+        return $out;
     }
 
     /** @var bool Whether a write failure has already been explained this process */
@@ -848,6 +945,7 @@ class ThreatDetectionService
         self::$threatLevelCache = [];
         self::$validatorWarned = [];
         self::$writeFailureWarned = false;
+        self::$labelRegexMap = null;
     }
 
     public function detectThreatPatternsWithContext(

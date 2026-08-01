@@ -563,6 +563,53 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Redaction (Do Not Store What You Detect)
+    |--------------------------------------------------------------------------
+    |
+    | Without this, detecting sensitive data causes that data to be written to
+    | the log in cleartext: an Aadhaar number, a PAN, a bank account or a
+    | password is matched, and the request payload containing it — plus the URL
+    | if it was in the query string — is stored verbatim and kept for the whole
+    | retention period. The detector becomes a second, concentrated copy of
+    | exactly what it warns you about, readable by anyone with dashboard or
+    | database access.
+    |
+    | When a pattern whose label is listed below fires, the value it matched is
+    | masked in the stored payload and URL. Detection is unaffected — it has
+    | already happened by then — so you still get the alert, the endpoint and
+    | the attacking IP, without the secondary store.
+    |
+    | This does not replace safe_fields / safe_paths. Those stop a field being
+    | *scanned* at all; this lets you keep scanning and stop storing.
+    |
+    */
+    'redact' => [
+        'enabled' => env('THREAT_DETECTION_REDACT', true),
+
+        'mask' => '[REDACTED]',
+
+        // Labels whose matched value must never be written to the log.
+        'labels' => [
+            // Regional PII
+            'Aadhaar Number Detected',
+            'PAN Number Detected',
+            'Mobile Number Detected',
+            'Bank Account Number Detected',
+            'IFSC Code Detected',
+            // Credentials and session material
+            'Password Exposure',
+            'API Key Exposure',
+            'Access Token Leak',
+            'Bearer Token Detected',
+            'Session ID Leak',
+            'JWT Token Found',
+            'CSRF Token Reference',
+            'PHP Session Exposure',
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Web Dashboard
     |--------------------------------------------------------------------------
     |
@@ -576,6 +623,11 @@ return [
         'guard' => env('THREAT_DETECTION_DASHBOARD_GUARD', 'none'),  // none|auth|role|ip
         'role' => env('THREAT_DETECTION_DASHBOARD_ROLE', 'admin'),   // used when guard=role
         'allowed_ips' => array_filter(array_map('trim', explode(',', env('THREAT_DETECTION_DASHBOARD_IPS', '')))),
+
+        // Send Content-Security-Policy, X-Frame-Options, X-Content-Type-Options
+        // and Referrer-Policy with the dashboard. Turn off only if you have
+        // published and customised the view to load assets from other origins.
+        'security_headers' => true,
     ],
 
     /*

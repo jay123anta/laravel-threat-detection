@@ -44,6 +44,44 @@ exclusion-rule change below.
 > never logged as PII (the v1.6.0 checksum work), and the `Authorization`
 > header is still not scanned (the v1.3.1 false-positive fix).
 
+### Security
+
+- **Detected secrets are no longer stored in cleartext.** Detecting sensitive
+  data caused that data to be written to the log verbatim: a profile form
+  carrying a mobile number, PAN and bank account tripped three PII patterns and
+  each of the three rows stored the whole body, kept for the full retention
+  period and readable by anyone with dashboard or database access. A PAN in a
+  query string landed in the `url` column too. The detector had become a
+  second, concentrated copy of exactly the data it exists to warn about.
+
+  When a pattern listed in the new `redact.labels` fires, the value it matched
+  is now masked in the stored payload *and* URL. Detection is unaffected — it
+  has already happened by then — so the alert, endpoint, field names and
+  attacking IP all survive; only the value goes. Attack payloads are left
+  intact, since those are evidence rather than secrets. On by default for the
+  regional PII and credential labels; set `THREAT_DETECTION_REDACT=false` to
+  restore the old behaviour.
+
+  This does not replace `safe_fields`/`safe_paths`: those stop a field being
+  *scanned*, this lets you keep scanning and stop storing.
+
+- **Dashboard assets are pinned with Subresource Integrity.** Tailwind, Alpine
+  and Chart.js were loaded from CDNs on floating version ranges
+  (`cdn.tailwindcss.com`, `alpinejs@3.x.x`, `chart.js@4`) with no integrity
+  hashes, so a CDN compromise or a malicious release would have executed
+  arbitrary JavaScript in an authenticated admin's session, on the page that
+  displays your security data. Now pinned to exact versions with `sha384`
+  hashes and `crossorigin`, with a test that fails if a script tag ever loses
+  its hash or regains a floating range.
+
+- **The dashboard sends security headers.** `Content-Security-Policy`,
+  `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` and
+  `Referrer-Policy: no-referrer`. Alpine needs `unsafe-inline`/`unsafe-eval`,
+  so script-src is an origin allow-list rather than a strict policy; the clause
+  that earns its keep is `connect-src 'self'`, which stops a compromised script
+  shipping your threat data to another origin. Disable with
+  `dashboard.security_headers => false` if you have customised the view.
+
 ### Changed
 
 - **Exclusion rules match the pattern label exactly, not by substring.** A rule
