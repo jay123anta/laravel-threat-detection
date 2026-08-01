@@ -193,7 +193,12 @@ class ThreatDetectionService
             } else {
                 // A failing insert throws here and is caught by the middleware;
                 // in that case the types are NOT marked and will be retried.
-                DB::table(config('threat-detection.table_name', 'threat_logs'))->insert($batchLogData);
+                try {
+                    DB::table(config('threat-detection.table_name', 'threat_logs'))->insert($batchLogData);
+                } catch (\Throwable $e) {
+                    $this->reportWriteFailure($e);
+                    throw $e;
+                }
 
                 $this->markTypesLogged($ip, array_keys($seenTypes));
 
@@ -202,6 +207,46 @@ class ThreatDetectionService
                 }
             }
         }
+    }
+
+    /** @var bool Whether a write failure has already been explained this process */
+    private static bool $writeFailureWarned = false;
+
+    /**
+     * Explain a failed write once, in words an operator can act on.
+     *
+     * A failed insert is invisible from the outside: the middleware swallows it
+     * to keep the detector passive, so the dashboard simply stays empty — which
+     * reads as "no threats" rather than "nothing is being recorded". The most
+     * common cause is an out-of-date table: confidence scoring (v1.2.0) and
+     * false-positive tracking added columns in a separate migration, and an
+     * app that upgraded the package without publishing and running it drops
+     * every single detection while logging only a raw SQL error.
+     */
+    private function reportWriteFailure(\Throwable $e): void
+    {
+        if (self::$writeFailureWarned) {
+            return;
+        }
+        self::$writeFailureWarned = true;
+
+        $message = $e->getMessage();
+        $table = config('threat-detection.table_name', 'threat_logs');
+
+        if (preg_match('/(no column named|has no column|unknown column|column not found|no such column)/i', $message)) {
+            Log::error(
+                "Threat detection: the '{$table}' table is missing a column, so NO threats are being recorded. "
+                . 'Run: php artisan vendor:publish --tag=threat-detection-migrations && php artisan migrate. '
+                . "Original error: {$message}"
+            );
+
+            return;
+        }
+
+        Log::error(
+            "Threat detection: writing to '{$table}' failed, so threats are not being recorded. "
+            . "Original error: {$message}"
+        );
     }
 
     private function markTypesLogged(string $ip, array $types): void
@@ -776,6 +821,7 @@ class ThreatDetectionService
         self::$cachedBots = null;
         self::$threatLevelCache = [];
         self::$validatorWarned = [];
+        self::$writeFailureWarned = false;
     }
 
     public function detectThreatPatternsWithContext(
@@ -1023,21 +1069,30 @@ class ThreatDetectionService
         $level = 'high';
 
         if ($this->isRecentlyLogged($ip, $type)) return;
-        $this->markAsLogged($ip, $type);
 
-        DB::table(config('threat-detection.table_name', 'threat_logs'))->insert([
-            'ip_address' => $ip,
-            'url' => $url,
-            'user_agent' => $userAgent,
-            'type' => $type,
-            'payload' => 'Request frequency exceeded threshold',
-            'threat_level' => $level,
-            'confidence_score' => 90,
-            'confidence_label' => 'very_high',
-            'user_id' => Auth::id(),
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        // Mark only after the write succeeds. v1.3.1 made this change for the
+        // main detection path but not for this one, so a failed DDoS insert
+        // still muted the flood for five minutes.
+        try {
+            DB::table(config('threat-detection.table_name', 'threat_logs'))->insert([
+                'ip_address' => $ip,
+                'url' => $url,
+                'user_agent' => $userAgent,
+                'type' => $type,
+                'payload' => 'Request frequency exceeded threshold',
+                'threat_level' => $level,
+                'confidence_score' => 90,
+                'confidence_label' => 'very_high',
+                'user_id' => Auth::id(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            $this->reportWriteFailure($e);
+            throw $e;
+        }
+
+        $this->markAsLogged($ip, $type);
 
         Log::warning("[$level] DDoS Threat Detected: $ip exceeded threshold.");
     }

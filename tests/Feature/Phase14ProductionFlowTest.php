@@ -2,9 +2,12 @@
 
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
 use JayAnta\ThreatDetection\Services\ProbeDetectorService;
 use JayAnta\ThreatDetection\Services\ThreatDetectionService;
 use JayAnta\ThreatDetection\Tests\TestCase;
@@ -333,6 +336,49 @@ class Phase14ProductionFlowTest extends TestCase
         $this->assertDatabaseHas('threat_logs', [
             'type' => '[middleware] SQL Injection UNION',
         ]);
+    }
+
+    // ────────────────────────────────────────────
+    //  Stale schema after a package upgrade
+    // ────────────────────────────────────────────
+
+    /**
+     * Found on a live Laravel 10 app running this package: its threat_logs
+     * table predated confidence scoring, so every insert failed on the missing
+     * confidence_label column. The middleware swallows the exception to stay
+     * passive, so the operator saw an empty dashboard — indistinguishable from
+     * "no attacks" — while every single detection was discarded.
+     *
+     * The write failure must say what happened and what to run.
+     */
+    #[Test]
+    public function a_stale_threat_logs_table_reports_an_actionable_error(): void
+    {
+        Schema::dropIfExists('threat_logs');
+        Schema::create('threat_logs', function (Blueprint $table) {
+            // The pre-v1.2.0 shape: no confidence_score / confidence_label.
+            $table->id();
+            $table->string('ip_address');
+            $table->text('url');
+            $table->text('user_agent')->nullable();
+            $table->text('type');
+            $table->text('payload')->nullable();
+            $table->string('threat_level')->default('medium');
+            $table->string('action_taken')->default('logged');
+            $table->unsignedBigInteger('user_id')->nullable();
+            $table->timestamps();
+        });
+
+        Log::spy();
+
+        $this->get('/search?q=' . urlencode("' UNION SELECT password FROM users--"))
+            ->assertStatus(200);
+
+        Log::shouldHaveReceived('error')
+            ->withArgs(fn($message) => str_contains($message, 'NO threats are being recorded')
+                && str_contains($message, 'vendor:publish --tag=threat-detection-migrations')
+                && str_contains($message, 'artisan migrate'))
+            ->atLeast()->once();
     }
 
     /** The passive-IDS contract holds across the whole flow. */

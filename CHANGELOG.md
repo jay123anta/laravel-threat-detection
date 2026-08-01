@@ -22,7 +22,18 @@ exclusion-rule change below.
 > scanning on that route entirely and would leave your admin panel, the
 > highest-value target in the app, completely unmonitored.
 >
-> **3. If your app is API-first**, consider
+> **3. Re-publish your config, or at least diff it.** `mergeConfigFrom` merges
+> only top-level keys, and your published file wins outright for any key it
+> defines. A config published before v1.3.1 therefore keeps its own
+> `custom_patterns` and `threat_levels` — so none of v1.3.1's pattern or
+> severity corrections have ever reached you. Verified on a live app: its
+> published `Localhost SSRF` pattern still lacked the `(?<!\d)` guard and was
+> logging `Chrome/120.0.0.0` in the user-agent as SSRF, the exact false
+> positive v1.3.1 fixed. Run
+> `php artisan vendor:publish --tag=threat-detection-config --force` after
+> backing up your customisations, or hand-merge the two files.
+>
+> **4. If your app is API-first**, consider
 > `'api_route_filtering.suppress_levels' => ['low']`. The default also
 > suppresses medium, which discards SSRF, directory traversal, LFI and open
 > redirect on `/api/` routes after detecting them. This is long-standing
@@ -98,6 +109,21 @@ exclusion-rule change below.
   A `raw` segment now carries the still-encoded query string and body; only
   the evasion patterns scan it, and a label already found in a decoded segment
   is not double-counted.
+
+- **A stale `threat_logs` table silently discarded every detection.** An app
+  that upgraded the package without publishing and running
+  `add_confidence_to_threat_logs_table` has no `confidence_score` /
+  `confidence_label` columns, so every insert failed. The middleware swallows
+  the exception to stay passive, so the dashboard just stayed empty — which
+  reads as "no attacks", not "nothing is being recorded" — while `laravel.log`
+  filled with raw SQL errors. Write failures are now explained once, in words
+  that name the cause and the two commands that fix it. Found by running the
+  package against a live Laravel 10 application, where it was discarding
+  100% of detections.
+
+- **A failed DDoS insert muted the flood for five minutes.** v1.3.1 moved the
+  dedup mark to after a successful write for the main detection path but not
+  for `logDdosThreat()`, which still marked first.
 
 - **Cloud-metadata SSRF was never detected unless the field happened to be
   named `url`.** `169.254.169.254`, `metadata.google.internal` and the
