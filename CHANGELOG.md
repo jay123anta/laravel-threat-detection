@@ -67,6 +67,17 @@ exclusion-rule change below.
   false-positive button explains a 403 rather than looking broken, and the
   doctor reports an open write guard.
 
+- **Geo enrichment discloses its cleartext transport.** `threat-detection:enrich`
+  sends the attacking IPs it looks up to a third party over plain HTTP, where
+  an on-path observer can read them and forge the replies. The endpoint moves
+  to `enrichment.endpoint` so it can be pointed at an HTTPS provider, and the
+  command now states which provider it is about to contact and how many
+  addresses it will send. The default stays HTTP deliberately: ip-api.com's
+  free tier answers 403 over HTTPS, so defaulting to `https://` would break
+  enrichment for every free-tier user — and silently, since a failed lookup is
+  swallowed as best-effort. Enrichment remains opt-in; nothing is sent unless
+  you run the command.
+
 - **Detected secrets are no longer stored in cleartext.** Detecting sensitive
   data caused that data to be written to the log verbatim: a profile form
   carrying a mobile number, PAN and bank account tripped three PII patterns and

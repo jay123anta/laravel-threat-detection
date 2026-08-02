@@ -669,6 +669,32 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Geo Enrichment
+    |--------------------------------------------------------------------------
+    |
+    | Used only by `php artisan threat-detection:enrich`, which is opt-in —
+    | nothing leaves your server unless you run it.
+    |
+    | Be aware of two things when you do. The attacking IP addresses being
+    | looked up are disclosed to a third party, and the default endpoint is
+    | cleartext HTTP, so an on-path observer can read those addresses and forge
+    | the replies. The default is HTTP because ip-api.com's free tier answers
+    | 403 over HTTPS; defaulting to https:// would break enrichment for every
+    | free-tier user, and silently, since a failed lookup is treated as
+    | best-effort.
+    |
+    | If you hold an ip-api key, or use another provider returning the same
+    | field names (countryCode, country, city, isp, org), point this at it:
+    |
+    |   THREAT_DETECTION_GEO_ENDPOINT=https://pro.ip-api.com/json
+    |
+    */
+    'enrichment' => [
+        'endpoint' => env('THREAT_DETECTION_GEO_ENDPOINT', 'http://ip-api.com/json'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Retention Policy (Auto-Purge)
     |--------------------------------------------------------------------------
     |
