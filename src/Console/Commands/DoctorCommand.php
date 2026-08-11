@@ -94,7 +94,7 @@ class DoctorCommand extends Command
             return;
         }
 
-        $missing = array_diff(self::WRITE_COLUMNS, Schema::getColumnListing($table));
+        $missing = $this->missingColumns($table, self::WRITE_COLUMNS);
 
         if ($missing !== []) {
             $this->fail(
@@ -116,7 +116,7 @@ class DoctorCommand extends Command
             return;
         }
 
-        $missing = array_diff(self::READ_COLUMNS, Schema::getColumnListing($table));
+        $missing = $this->missingColumns($table, self::READ_COLUMNS);
 
         if ($missing !== []) {
             $this->warn2(
@@ -365,6 +365,37 @@ class DoctorCommand extends Command
     private function migrateHint(): string
     {
         return 'Run: php artisan vendor:publish --tag=threat-detection-migrations && php artisan migrate';
+    }
+
+    /**
+     * Columns from $wanted that the table does not have.
+     *
+     * Uses hasColumn() per column rather than getColumnListing(), which the
+     * schema builder has been reshaping across recent Laravel versions
+     * (getColumns() is the newer form). hasColumn() has been stable since
+     * forever and this package supports Laravel 10 through 13. It costs one
+     * query per column, which is nothing for a diagnostic run by hand.
+     *
+     * @param  string[] $wanted
+     * @return string[]
+     */
+    private function missingColumns(string $table, array $wanted): array
+    {
+        $missing = [];
+
+        foreach ($wanted as $column) {
+            try {
+                if (!Schema::hasColumn($table, $column)) {
+                    $missing[] = $column;
+                }
+            } catch (\Throwable $e) {
+                // Cannot inspect the column: report it rather than claim it is
+                // present, since claiming present is the dangerous direction.
+                $missing[] = $column;
+            }
+        }
+
+        return $missing;
     }
 
     private function tableExists(string $table): bool
