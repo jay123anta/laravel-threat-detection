@@ -61,7 +61,7 @@ class DoctorCommand extends Command
     private function checkEnabled(): void
     {
         if (!config('threat-detection.enabled', true)) {
-            $this->fail('Detection is disabled', 'Set THREAT_DETECTION_ENABLED=true in your .env.');
+            $this->reportFailure('Detection is disabled', 'Set THREAT_DETECTION_ENABLED=true in your .env.');
 
             return;
         }
@@ -70,7 +70,7 @@ class DoctorCommand extends Command
         $current = $this->laravel->environment();
 
         if (!empty($envs) && !in_array($current, $envs, true)) {
-            $this->fail(
+            $this->reportFailure(
                 "Detection is off in this environment ('{$current}')",
                 "Add '{$current}' to enabled_environments, or set it to null to run everywhere."
             );
@@ -78,7 +78,7 @@ class DoctorCommand extends Command
             return;
         }
 
-        $this->pass('Detection is enabled for this environment');
+        $this->reportPass('Detection is enabled for this environment');
     }
 
     private function checkWriteSchema(): void
@@ -86,7 +86,7 @@ class DoctorCommand extends Command
         $table = config('threat-detection.table_name', 'threat_logs');
 
         if (!$this->tableExists($table)) {
-            $this->fail(
+            $this->reportFailure(
                 "The '{$table}' table does not exist — nothing can be recorded",
                 $this->migrateHint()
             );
@@ -97,7 +97,7 @@ class DoctorCommand extends Command
         $missing = $this->missingColumns($table, self::WRITE_COLUMNS);
 
         if ($missing !== []) {
-            $this->fail(
+            $this->reportFailure(
                 "'{$table}' is missing " . implode(', ', $missing) . ' — EVERY threat is being discarded',
                 $this->migrateHint()
             );
@@ -105,7 +105,7 @@ class DoctorCommand extends Command
             return;
         }
 
-        $this->pass("'{$table}' has every column the writer needs");
+        $this->reportPass("'{$table}' has every column the writer needs");
     }
 
     private function checkReadSchema(): void
@@ -119,7 +119,7 @@ class DoctorCommand extends Command
         $missing = $this->missingColumns($table, self::READ_COLUMNS);
 
         if ($missing !== []) {
-            $this->warn2(
+            $this->reportWarning(
                 "'{$table}' is missing " . implode(', ', $missing) . ' — the dashboard and API will error',
                 $this->migrateHint()
             );
@@ -127,13 +127,13 @@ class DoctorCommand extends Command
             return;
         }
 
-        $this->pass('Dashboard and API columns are present');
+        $this->reportPass('Dashboard and API columns are present');
     }
 
     private function checkExclusionTable(): void
     {
         if (!$this->tableExists('threat_exclusion_rules')) {
-            $this->warn2(
+            $this->reportWarning(
                 "No 'threat_exclusion_rules' table — marking a threat as a false positive will fail",
                 $this->migrateHint()
             );
@@ -141,13 +141,13 @@ class DoctorCommand extends Command
             return;
         }
 
-        $this->pass('False-positive exclusion rules table is present');
+        $this->reportPass('False-positive exclusion rules table is present');
     }
 
     private function checkMiddleware(): void
     {
         if (!$this->middlewareIsActive()) {
-            $this->fail(
+            $this->reportFailure(
                 'The detection middleware is not applied to any route — no request is being scanned',
                 "Add \\JayAnta\\ThreatDetection\\Http\\Middleware\\ThreatDetectionMiddleware::class to your 'web'"
                 . " and 'api' middleware groups, or apply the 'threat-detect' alias to specific routes."
@@ -156,7 +156,7 @@ class DoctorCommand extends Command
             return;
         }
 
-        $this->pass('Detection middleware is wired up');
+        $this->reportPass('Detection middleware is wired up');
     }
 
     /**
@@ -169,7 +169,7 @@ class DoctorCommand extends Command
         $published = config_path('threat-detection.php');
 
         if (!file_exists($published)) {
-            $this->pass('Using package config defaults (nothing published)');
+            $this->reportPass('Using package config defaults (nothing published)');
 
             return;
         }
@@ -178,7 +178,7 @@ class DoctorCommand extends Command
         $ours = @include __DIR__ . '/../../../config/threat-detection.php';
 
         if (!is_array($theirs) || !is_array($ours)) {
-            $this->warn2('Could not read the published config for comparison', 'Check ' . $published . ' returns an array.');
+            $this->reportWarning('Could not read the published config for comparison', 'Check ' . $published . ' returns an array.');
 
             return;
         }
@@ -187,20 +187,20 @@ class DoctorCommand extends Command
         $obsolete = array_diff(array_keys($theirs), array_keys($ours));
 
         if ($missing === [] && $obsolete === []) {
-            $this->pass('Published config matches this version');
+            $this->reportPass('Published config matches this version');
 
             return;
         }
 
         if ($missing !== []) {
-            $this->warn2(
+            $this->reportWarning(
                 'Published config predates ' . count($missing) . ' option(s): ' . implode(', ', $missing),
                 'Those run on package defaults. Re-publish with --force after backing up, or hand-merge.'
             );
         }
 
         if ($obsolete !== []) {
-            $this->warn2(
+            $this->reportWarning(
                 'Published config defines ' . count($obsolete) . ' option(s) this version ignores: ' . implode(', ', $obsolete),
                 'Harmless, but a sign the file is old — see the note above.'
             );
@@ -230,12 +230,12 @@ class DoctorCommand extends Command
         }
 
         if ($shadowed === []) {
-            $this->pass('No custom pattern shadows a built-in one');
+            $this->reportPass('No custom pattern shadows a built-in one');
 
             return;
         }
 
-        $this->warn2(
+        $this->reportWarning(
             count($shadowed) . ' custom pattern(s) shadow a built-in: ' . implode(', ', array_unique($shadowed)),
             'Your copy runs instead of the maintained one, so later fixes to it never reach you. '
             . 'Delete these from custom_patterns unless you meant to override them.'
@@ -247,7 +247,7 @@ class DoctorCommand extends Command
         $driver = config('cache.default');
 
         if (in_array($driver, ['file', 'database', 'null'], true)) {
-            $this->warn2(
+            $this->reportWarning(
                 "DDoS detection is off — cache driver '{$driver}' has no atomic increment",
                 'Switch CACHE_DRIVER to redis or memcached. Pattern detection is unaffected.'
             );
@@ -255,7 +255,7 @@ class DoctorCommand extends Command
             return;
         }
 
-        $this->pass("Cache driver '{$driver}' supports DDoS counting");
+        $this->reportPass("Cache driver '{$driver}' supports DDoS counting");
     }
 
     private function checkDashboardExposure(): void
@@ -274,7 +274,7 @@ class DoctorCommand extends Command
             );
 
             if ($authed) {
-                $this->pass(ucfirst($surface) . ' is behind authentication');
+                $this->reportPass(ucfirst($surface) . ' is behind authentication');
 
                 continue;
             }
@@ -284,8 +284,8 @@ class DoctorCommand extends Command
                 . " or add an auth middleware to threat-detection.{$surface}.middleware.";
 
             $this->laravel->environment('production')
-                ? $this->fail($message, $fix)
-                : $this->warn2($message, $fix);
+                ? $this->reportFailure($message, $fix)
+                : $this->reportWarning($message, $fix);
         }
 
         $this->checkWriteGuard();
@@ -303,7 +303,7 @@ class DoctorCommand extends Command
         }
 
         if (config('threat-detection.api.write_guard', 'role') === 'none') {
-            $this->warn2(
+            $this->reportWarning(
                 'Any authenticated user can disable a detection (write_guard is none)',
                 'Set THREAT_DETECTION_API_WRITE_GUARD to role, auth or ip.'
             );
@@ -311,24 +311,32 @@ class DoctorCommand extends Command
             return;
         }
 
-        $this->pass('Disabling a detection requires elevated access');
+        $this->reportPass('Disabling a detection requires elevated access');
     }
 
     // ── output ──────────────────────────────────────────────────────────────
 
-    private function pass(string $title): void
+    /*
+     * Named report* deliberately. Illuminate\Console\Command already defines
+     * public warn() and, since Laravel 11, public fail() — and PHP will not
+     * let a subclass narrow an inherited method's visibility, so a private
+     * fail() here is a fatal error on Laravel 11+ rather than a warning.
+     * Prefixing keeps every reporter clear of that namespace for good.
+     */
+
+    private function reportPass(string $title): void
     {
         $this->line("  <fg=green>PASS</>  {$title}");
     }
 
-    private function warn2(string $title, string $fix): void
+    private function reportWarning(string $title, string $fix): void
     {
         $this->warnings++;
         $this->line("  <fg=yellow>WARN</>  {$title}");
         $this->line("        <fg=gray>{$fix}</>");
     }
 
-    private function fail(string $title, string $fix): void
+    private function reportFailure(string $title, string $fix): void
     {
         $this->failures++;
         $this->line("  <fg=red>FAIL</>  {$title}");
