@@ -2,6 +2,280 @@
 
 All notable changes to `jayanta/laravel-threat-detection` will be documented in this file.
 
+## [1.7.0] - 2026-08-01
+
+Detection *gap* fixes: patterns that were configured, matched their input, and
+still never fired. **Expect more entries than before, not fewer.** Minor rather
+than patch, because the detection surface widens (a new `path` scanning
+context, a new `pii` category, new `context_weights` keys) and because of the
+exclusion-rule change below.
+
+> **Before upgrading, read these four.**
+>
+> **1. Two things now require more privilege than before.** Marking a false
+> positive and deleting an exclusion rule are checked against the new
+> `api.write_guard`, which defaults to `role` — if your user model has no
+> `hasRole()`, set `THREAT_DETECTION_API_WRITE_GUARD=auth`. And exclusion rules
+> now match the pattern label exactly rather than by substring (see Changed).
+> Reading the log and the dashboard are unaffected by both.
+>
+> **2. If your app serves a bare `/admin`, `/test`, `/debug`, `/console`,
+> `/backup` or `/internal` route**, each will now log a low-severity entry per
+> IP every 5 minutes. Delete the offending pattern from your published
+> `custom_patterns` — do **not** reach for `skip_paths`, which bypasses
+> scanning on that route entirely and would leave your admin panel, the
+> highest-value target in the app, completely unmonitored.
+>
+> **3. Re-publish your config, or at least diff it.** `mergeConfigFrom` merges
+> only top-level keys, and your published file wins outright for any key it
+> defines. A config published before v1.3.1 therefore keeps its own
+> `custom_patterns` and `threat_levels` — so none of v1.3.1's pattern or
+> severity corrections have ever reached you. Verified on a live app: its
+> published `Localhost SSRF` pattern still lacked the `(?<!\d)` guard and was
+> logging `Chrome/120.0.0.0` in the user-agent as SSRF, the exact false
+> positive v1.3.1 fixed. Run
+> `php artisan vendor:publish --tag=threat-detection-config --force` after
+> backing up your customisations, or hand-merge the two files.
+>
+> **4. If your app is API-first**, consider
+> `'api_route_filtering.suppress_levels' => ['low']`. The default also
+> suppresses medium, which discards SSRF, directory traversal, LFI and open
+> redirect on `/api/` routes after detecting them. This is long-standing
+> behaviour, not new here, but the new flow test made it visible.
+>
+> Two guarantees from earlier releases are preserved and now have regression
+> tests: ordinary numeric data (timestamps, invoice numbers, SKUs) is still
+> never logged as PII (the v1.6.0 checksum work), and the `Authorization`
+> header is still not scanned (the v1.3.1 false-positive fix).
+
+### Security
+
+- **Disabling a detection now requires elevated access.** Marking a threat as a
+  false positive and deleting an exclusion rule both silence a detection type
+  for everyone, but they sat behind the same authentication as reading the log
+  — so with the shipped `['api', 'auth:sanctum']` any authenticated user of the
+  host application could switch a detection off, with no authorization check
+  and no record of who did it.
+
+  Those two routes are now checked against a separate
+  `api.write_guard`, which defaults to `role`. Read endpoints and the dashboard
+  are untouched, so an upgrade does not take the dashboard away from an
+  existing install; only the two destructive endpoints tighten. It accepts the
+  same `none|auth|role|ip` values as `guard`, so set
+  `THREAT_DETECTION_API_WRITE_GUARD=auth` if your user model has no
+  `hasRole()`, or `=none` to restore the previous behaviour. The dashboard's
+  false-positive button explains a 403 rather than looking broken, and the
+  doctor reports an open write guard.
+
+- **Geo enrichment discloses its cleartext transport.** `threat-detection:enrich`
+  sends the attacking IPs it looks up to a third party over plain HTTP, where
+  an on-path observer can read them and forge the replies. The endpoint moves
+  to `enrichment.endpoint` so it can be pointed at an HTTPS provider, and the
+  command now states which provider it is about to contact and how many
+  addresses it will send. The default stays HTTP deliberately: ip-api.com's
+  free tier answers 403 over HTTPS, so defaulting to `https://` would break
+  enrichment for every free-tier user — and silently, since a failed lookup is
+  swallowed as best-effort. Enrichment remains opt-in; nothing is sent unless
+  you run the command.
+
+- **Detected secrets are no longer stored in cleartext.** Detecting sensitive
+  data caused that data to be written to the log verbatim: a profile form
+  carrying a mobile number, PAN and bank account tripped three PII patterns and
+  each of the three rows stored the whole body, kept for the full retention
+  period and readable by anyone with dashboard or database access. A PAN in a
+  query string landed in the `url` column too. The detector had become a
+  second, concentrated copy of exactly the data it exists to warn about.
+
+  When a pattern listed in the new `redact.labels` fires, the value it matched
+  is now masked in the stored payload *and* URL. Detection is unaffected — it
+  has already happened by then — so the alert, endpoint, field names and
+  attacking IP all survive; only the value goes. Attack payloads are left
+  intact, since those are evidence rather than secrets. On by default for the
+  regional PII and credential labels; set `THREAT_DETECTION_REDACT=false` to
+  restore the old behaviour.
+
+  This does not replace `safe_fields`/`safe_paths`: those stop a field being
+  *scanned*, this lets you keep scanning and stop storing.
+
+- **Dashboard assets are pinned with Subresource Integrity.** Tailwind, Alpine
+  and Chart.js were loaded from CDNs on floating version ranges
+  (`cdn.tailwindcss.com`, `alpinejs@3.x.x`, `chart.js@4`) with no integrity
+  hashes, so a CDN compromise or a malicious release would have executed
+  arbitrary JavaScript in an authenticated admin's session, on the page that
+  displays your security data. Now pinned to exact versions with `sha384`
+  hashes and `crossorigin`, with a test that fails if a script tag ever loses
+  its hash or regains a floating range.
+
+- **The dashboard sends security headers.** `Content-Security-Policy`,
+  `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` and
+  `Referrer-Policy: no-referrer`. Alpine needs `unsafe-inline`/`unsafe-eval`,
+  so script-src is an origin allow-list rather than a strict policy; the clause
+  that earns its keep is `connect-src 'self'`, which stops a compromised script
+  shipping your threat data to another origin. Disable with
+  `dashboard.security_headers => false` if you have customised the view.
+
+### Changed
+
+- **Exclusion rules match the pattern label exactly, not by substring.** A rule
+  with `pattern_label` `SQL` previously disabled all nineteen SQL patterns, and
+  `Admin Path Access` also swallowed `Admin Path Access Attempt` — an unbounded
+  blast radius on a control whose whole job is to switch detections off. Rules
+  created through `markFalsePositive` have always stored the exact label and are
+  unaffected; only hand-inserted rows that relied on partial matching change
+  behaviour, and they change in the direction of re-enabling detection.
+
+### Fixed
+
+- **Custom patterns were silently disabled unless the payload happened to
+  contain an unrelated attack keyword.** `isPatternRelevant()` returned early
+  on an empty category set, before the "unknown label always runs" fallback it
+  documented. A user-defined pattern therefore only ran when the request also
+  carried a keyword from one of the fifteen built-in categories. The category
+  check now consults the label map first and unmapped (format-shaped) labels
+  always run, as documented.
+
+- **Shipped regional PII patterns (Aadhaar, PAN, Mobile, Bank Account, IFSC)
+  effectively never fired.** They were mapped to the `token` category, whose
+  keywords are all credential words (`bearer`, `csrf`, `api_key`, …) that a
+  bare Aadhaar or account number never contains. They now key off a new `pii`
+  category of field-name words (`aadhaar`, `ifsc`, `account`, `bank`, `mobile`,
+  …), which are also added to the pre-screen list so a clean
+  `{"aadhaar": "…"}` body reaches the regex stage at all.
+
+  They stay *gated* rather than always-run on purpose. Two of them are bare
+  digit runs — `Bank Account Number Detected` is `\d{9,18}` at **high**
+  severity with no checksum — so ungating them logged an ordinary checkout body
+  (`order_id`, `invoice_no`, `product_sku`) as two high-severity PII threats.
+  That is precisely the false-positive class v1.2.0 and v1.6.0 removed, and
+  there is now a test pinning it shut. The gate was never wrong here; the
+  keyword list was.
+
+- **The request path was never scanned by the pattern engine.** Only the query
+  string, body and headers were fed to it, so roughly twenty path-shaped
+  patterns (`/.env`, `/.git/`, `/actuator`, `vendor/phpunit/phpunit`,
+  `/users/<id>/delete`) could only match when the path fragment appeared inside
+  a query or body *value*. A `path` segment is now scanned, exempt from the
+  keyword pre-screen (a URL is a few dozen bytes, and `/.env` contains no
+  keyword by design). `path` is also selectable in a custom pattern's
+  `contexts` list, and has a `context_weights` entry.
+
+  This complements probe tracking rather than duplicating it: when the probe
+  tracker (v1.3.0, path list extended in v1.3.1) already flagged the request,
+  the path segment is skipped, so a hit on `/.env` still produces exactly one
+  row and keeps the stronger `[probe]` label. The pattern engine covers what
+  the fixed probe list misses — a nested `/deep/path/vendor/phpunit/…` does not
+  match the `/vendor/phpunit/*` probe entry, but does match the pattern.
+
+- **Sensitive-file and endpoint-probe labels were mapped to categories whose
+  keywords they can never contain** — `Environment File Access` sat behind the
+  `path` category (`../`, `/etc/`, `passwd`), and `/admin`, `/debug`, `/console`
+  probes behind `cve` (`phpunit`, `actuator`). The `path` category gained the
+  relevant file-name keywords and a new `endpoint` category covers the probes.
+
+- **The `%00`, `%0d%0a` and `%0a` evasion patterns only matched double-encoded
+  input.** They ran against segments built from `$request->query()`/`post()`,
+  which Laravel has already URL-decoded, so a real single-encoded null byte
+  arrived as a raw NUL and a single-encoded CRLF as actual control characters.
+  A `raw` segment now carries the still-encoded query string and body; only
+  the evasion patterns scan it, and a label already found in a decoded segment
+  is not double-counted.
+
+- **A stale `threat_logs` table silently discarded every detection.** An app
+  that upgraded the package without publishing and running
+  `add_confidence_to_threat_logs_table` has no `confidence_score` /
+  `confidence_label` columns, so every insert failed. The middleware swallows
+  the exception to stay passive, so the dashboard just stayed empty — which
+  reads as "no attacks", not "nothing is being recorded" — while `laravel.log`
+  filled with raw SQL errors. Write failures are now explained once, in words
+  that name the cause and the two commands that fix it. Found by running the
+  package against a live Laravel 10 application, where it was discarding
+  100% of detections.
+
+- **A failed DDoS insert muted the flood for five minutes.** v1.3.1 moved the
+  dedup mark to after a successful write for the main detection path but not
+  for `logDdosThreat()`, which still marked first.
+
+- **Cloud-metadata SSRF was never detected unless the field happened to be
+  named `url`.** `169.254.169.254`, `metadata.google.internal` and the
+  `xip.io`/`nip.io`/`sslip.io` rebinding hosts are all listed in the `ssrf`
+  category, but none were in the pre-screen list, so a body such as
+  `{"callback":"http://169.254.169.254/latest/meta-data/"}` was dropped before
+  the category check ever ran — only payloads whose key contained `url`,
+  `redirect` or `next` got through, by accident. Added to the pre-screen.
+  Found by the new end-to-end flow test, not by any unit assert.
+
+- **CSV export sanitized only three of its free-text columns.**
+  `action_taken`, `country_name`, `cloud_provider` and `created_at` bypassed
+  the formula-injection guard.
+
+- **Context weighting lost the most suspicious context.** A label matching in
+  both the query (weight 1.5) and the body (1.0) kept whichever segment was
+  scanned last, erasing the score bonus; the highest weight is now kept.
+
+### Added
+
+- **`php artisan threat-detection:doctor`** — one command that checks whether
+  detection is actually *working*, not merely installed.
+
+  Every check corresponds to a way this package has been seen to fail silently
+  on a real application, where the only symptom is an empty dashboard —
+  indistinguishable from "no attacks". It verifies detection is enabled for the
+  current environment; that `threat_logs` has every column the writer inserts
+  (a missing one discards **every** threat); that the dashboard/API columns and
+  the exclusion-rules table exist; that the middleware is genuinely wired to a
+  route or group; that a published config has not drifted behind this version;
+  that no custom pattern shadows a built-in one; that the cache driver can do
+  DDoS counting; and that neither the dashboard nor the API is exposed without
+  authentication.
+
+  Each finding prints the command or setting that fixes it. Exits non-zero only
+  on a real failure, so it drops straight into CI or a deploy step. One file,
+  no new dependencies. Run against the live app that prompted it, it
+  independently reported both bugs found by hand above.
+
+- `ThreatDetectionService::flushCaches()` and
+  `ProbeDetectorService::flushCaches()` drop the process-lifetime pattern and
+  probe-path caches, so a runtime config change takes effect (tests, Octane
+  reloads). The test suite previously reached in with reflection.
+
+- **End-to-end process-flow test** (`Phase14ProductionFlowTest`). Drives a
+  realistic storefront + admin + API route table through the middleware with
+  ordinary browser traffic, then with a 14-attack suite, and asserts on what
+  reaches `threat_logs`. It pins the shipped-config noise floor and the
+  shipped-config attack blind spot as explicit expected values, so either one
+  changing becomes a decision someone has to make rather than a surprise in
+  production. It also proves the documented tuning removes the noise without
+  costing any attack coverage. This is what surfaced the metadata-SSRF gap
+  above.
+
+- 20 regression tests covering the gaps above, with payloads that carry no
+  incidental keyword. The earlier custom-pattern tests routed every body
+  through a helper that appended an email address and a `password` field —
+  which is what made the two bugs above invisible. Four of the new tests guard
+  the other direction, pinning the earlier false-positive fixes (no PII on
+  numeric data, no `Authorization` scanning, no SQL-comment revival, no
+  duplicate probe rows) so a future coverage fix cannot quietly undo them
+  (262 → 282 tests).
+
+## [1.6.1] - 2026-07-29
+
+Two defensive fixes. No breaking changes; both are covered by regression tests.
+
+### Fixed
+
+- **The `ip` dashboard/API guard failed open on an empty allow-list.** Setting
+  `guard = ip` without populating `allowed_ips` (an unset
+  `THREAT_DETECTION_DASHBOARD_IPS`, or one that trimmed to nothing) passed the
+  `IpUtils::checkIp()` check for every caller, publishing the security
+  dashboard to the internet. It now logs a warning and returns 403 — the same
+  fail-closed treatment v1.3.1 gave the `role` and unknown-guard branches.
+
+- **Fully encoded payloads slipped past the pre-screen.** A payload encoded end
+  to end (`%55%4E%49%4F%4E…` for `UNION…`) contains no readable keyword, so the
+  early bailout skipped the segment before the normalizer could decode it. The
+  pre-screen now also treats a bare `%` and a backslash as suspicious, so
+  percent- and escape-encoded payloads reach the normalization stage.
+
 ## [1.6.0] - 2026-07-29
 
 > **Note for default-config users:** the shipped config now maps the Aadhaar

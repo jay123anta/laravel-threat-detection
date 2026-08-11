@@ -5,9 +5,29 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Threat Detection Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+
+    {{--
+        Pinned to exact versions with Subresource Integrity.
+
+        These were floating ranges (cdn.tailwindcss.com, alpinejs@3.x.x,
+        chart.js@4) with no integrity hashes, which meant a CDN compromise or a
+        malicious release would execute arbitrary JavaScript in the session of
+        an authenticated admin — on the page that displays this application's
+        security data. With SRI the browser refuses to run a script whose
+        content does not match the hash.
+
+        Upgrading a version means recomputing its hash, e.g.:
+          curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A
+    --}}
+    <script src="https://cdn.tailwindcss.com/3.4.16"
+            integrity="sha384-mS5Uq7sE90lgbBDN8xgf34ibEgbZo4gB3tfLY40ZRle+M188BQw8onzNHg6GUZaA"
+            crossorigin="anonymous"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"
+            integrity="sha384-9Ax3MmS9AClxJyd5/zafcXXjxmwFhZCdsT6HJoJjarvCaAkJlk5QDzjLJm+Wdx5F"
+            crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"
+            integrity="sha384-vsrfeLOOY6KuIYKDlmVH5UiBmgIdB1oEf7p01YgWHuqmOHfZr374+odEv96n9tNC"
+            crossorigin="anonymous"></script>
     @stack('head')
 </head>
 <body class="bg-gray-900 text-gray-100 min-h-screen">

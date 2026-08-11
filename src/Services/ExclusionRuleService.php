@@ -118,8 +118,19 @@ class ExclusionRuleService
         }
     }
 
+    /**
+     * Match on the label portion of a "[source] Label" type, exactly.
+     *
+     * Substring matching here gave a rule an unbounded blast radius: a row with
+     * pattern_label 'SQL' would silently disable all nineteen SQL patterns, and
+     * 'Admin Path Access' would also swallow 'Admin Path Access Attempt'.
+     * createFromThreat() has always stored the exact label, so this is a
+     * tightening, not a behaviour change, for rules the package created itself.
+     */
     private function labelMatches(string $ruleLabel, string $threatType): bool
     {
-        return str_contains($threatType, $ruleLabel);
+        $label = preg_match('/^\[.*?\]\s*(.+)$/', $threatType, $m) ? $m[1] : $threatType;
+
+        return $label === $ruleLabel;
     }
 }

@@ -13,6 +13,12 @@ class ApiEndpointTest extends TestCase
         parent::setUp();
         $this->createThreatLogsTable();
         $this->createExclusionRulesTable();
+
+        // These tests cover what the endpoints *do*. Since 1.7.0 the two write
+        // endpoints sit behind api.write_guard ('role' by default), so without
+        // this they would all assert 403 and stop testing their own subject.
+        // The guard itself is covered by Phase17WriteGuardTest.
+        config(['threat-detection.api.write_guard' => 'none']);
     }
 
     private function seedThreats(int $count = 5): void

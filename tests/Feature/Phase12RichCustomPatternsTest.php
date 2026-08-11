@@ -70,8 +70,7 @@ class Phase12RichCustomPatternsTest extends TestCase
 
     private function resetCustomPatternCache(): void
     {
-        $property = new \ReflectionProperty(ThreatDetectionService::class, 'validatedCustomPatterns');
-        $property->setValue(null, null);
+        ThreatDetectionService::flushCaches();
     }
 
     /** A body that passes the pre-screen and activates the token category. */

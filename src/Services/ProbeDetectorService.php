@@ -64,4 +64,14 @@ class ProbeDetectorService
             }
         }
     }
+
+    /**
+     * Drop the memoised path index so a runtime change to
+     * probe_tracking.paths takes effect (tests, Octane reloads).
+     */
+    public static function flushCaches(): void
+    {
+        self::$exactPaths = null;
+        self::$wildcardPaths = null;
+    }
 }

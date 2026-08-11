@@ -45,6 +45,29 @@ class EnrichThreatLogsCommand extends Command
         'Vultr'        => ['45.32.', '45.63.', '45.76.', '45.77.', '149.28.', '108.61.', '95.179.'],
     ];
 
+    /**
+     * Geo provider base URL.
+     *
+     * The default is cleartext HTTP because ip-api.com's free tier answers 403
+     * over HTTPS — switching the default to https:// would break enrichment for
+     * every free-tier user, and silently, since a failed lookup is swallowed as
+     * best-effort. Two things follow that operators should know: the attacking
+     * IPs you look up are disclosed to a third party, and they travel
+     * unencrypted, so an on-path observer can read them and forge the answers.
+     *
+     * Set THREAT_DETECTION_GEO_ENDPOINT to the HTTPS endpoint if you hold an
+     * ip-api key, or to any other provider returning the same field names.
+     * Enrichment is opt-in either way: nothing is sent unless you run this
+     * command.
+     */
+    protected function endpoint(): string
+    {
+        return (string) config(
+            'threat-detection.enrichment.endpoint',
+            'http://ip-api.com/json'
+        );
+    }
+
     public function handle(): int
     {
         $days = (int) $this->option('days');
@@ -66,7 +89,13 @@ class EnrichThreatLogsCommand extends Command
             return 0;
         }
 
+        $endpoint = $this->endpoint();
+
         $this->info("Enriching {$ips->count()} unique IPs from the last {$days} days...");
+        $this->line("  Provider: {$endpoint}");
+        $this->line("  {$ips->count()} address(es) will be sent to this third party."
+            . (str_starts_with($endpoint, 'http://') ? ' Note: over cleartext HTTP.' : ''));
+
         $bar = $this->output->createProgressBar($ips->count());
 
         foreach ($ips as $ip) {
@@ -127,7 +156,9 @@ class EnrichThreatLogsCommand extends Command
                 return [];
             }
 
-            $response = Http::timeout(3)->get("http://ip-api.com/json/{$ip}?fields=countryCode,country,city,isp,org");
+            $response = Http::timeout(3)->get(
+                rtrim($this->endpoint(), '/') . "/{$ip}?fields=countryCode,country,city,isp,org"
+            );
 
             if ($response->successful()) {
                 $data = $response->json();

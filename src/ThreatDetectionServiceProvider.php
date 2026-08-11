@@ -15,6 +15,7 @@ use JayAnta\ThreatDetection\Console\Commands\ThreatStatsCommand;
 use JayAnta\ThreatDetection\Console\Commands\PurgeThreatLogsCommand;
 use JayAnta\ThreatDetection\Console\Commands\ExportFail2banCommand;
 use JayAnta\ThreatDetection\Console\Commands\ExportBlocklistCommand;
+use JayAnta\ThreatDetection\Console\Commands\DoctorCommand;
 
 class ThreatDetectionServiceProvider extends ServiceProvider
 {
@@ -156,6 +157,7 @@ class ThreatDetectionServiceProvider extends ServiceProvider
                 PurgeThreatLogsCommand::class,
                 ExportFail2banCommand::class,
                 ExportBlocklistCommand::class,
+                DoctorCommand::class,
             ]);
         }
     }

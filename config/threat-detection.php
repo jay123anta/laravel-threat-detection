@@ -317,7 +317,20 @@ return [
     | API Route Filtering
     |--------------------------------------------------------------------------
     |
-    | Configure filtering behavior for API routes.
+    | Drops threats at the listed severities on any route whose path contains
+    | "/api/". Intended to keep first-party API chatter out of the log.
+    |
+    | IMPORTANT: the default suppresses MEDIUM as well as low, and several
+    | attacks that are delivered mainly through API endpoints are classified
+    | medium — SSRF (including the AWS/GCP metadata endpoints), directory
+    | traversal, LFI protocol usage, command chain injection and open redirect.
+    | With the default in place those are detected and then discarded before
+    | being written.
+    |
+    | If your app is API-first, set this to ['low'] to keep medium-severity
+    | attacks visible while still suppressing routine low-severity noise:
+    |
+    |   'suppress_levels' => ['low'],
     |
     */
     'api_route_filtering' => [
@@ -351,6 +364,8 @@ return [
     |
     */
     'context_weights' => [
+        'path'    => 1.5,   // The URL path itself — nothing legitimate hides there
+        'raw'     => 1.5,   // Still-encoded request; only evasion patterns scan it
         'query'   => 1.5,   // Patterns in query strings are most suspicious
         'headers' => 1.3,   // Patterns in headers are suspicious
         'body'    => 1.0,   // POST body is baseline (often contains legitimate content)
@@ -422,6 +437,12 @@ return [
         '/phpinfo\(/i' => 'PHPInfo Function Call',
 
         // Path Traversal & Admin Access
+        //
+        // NOTE: these match the request path itself. Each is narrow — bare
+        // "/admin" matches, "/admin/users" does not — but if your app serves
+        // one of these routes legitimately you will see a low-severity entry
+        // per IP every 5 minutes. Add the route to skip_paths (above) to
+        // silence it, or delete the pattern here.
         '/\/admin\b(?![-\/])/i' => 'Admin Path Access Attempt',
         '/\/internal\b/i' => 'Internal Endpoint Probe',
         '/\/legacy\b/i' => 'Legacy System Access',
@@ -542,6 +563,53 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Redaction (Do Not Store What You Detect)
+    |--------------------------------------------------------------------------
+    |
+    | Without this, detecting sensitive data causes that data to be written to
+    | the log in cleartext: an Aadhaar number, a PAN, a bank account or a
+    | password is matched, and the request payload containing it — plus the URL
+    | if it was in the query string — is stored verbatim and kept for the whole
+    | retention period. The detector becomes a second, concentrated copy of
+    | exactly what it warns you about, readable by anyone with dashboard or
+    | database access.
+    |
+    | When a pattern whose label is listed below fires, the value it matched is
+    | masked in the stored payload and URL. Detection is unaffected — it has
+    | already happened by then — so you still get the alert, the endpoint and
+    | the attacking IP, without the secondary store.
+    |
+    | This does not replace safe_fields / safe_paths. Those stop a field being
+    | *scanned* at all; this lets you keep scanning and stop storing.
+    |
+    */
+    'redact' => [
+        'enabled' => env('THREAT_DETECTION_REDACT', true),
+
+        'mask' => '[REDACTED]',
+
+        // Labels whose matched value must never be written to the log.
+        'labels' => [
+            // Regional PII
+            'Aadhaar Number Detected',
+            'PAN Number Detected',
+            'Mobile Number Detected',
+            'Bank Account Number Detected',
+            'IFSC Code Detected',
+            // Credentials and session material
+            'Password Exposure',
+            'API Key Exposure',
+            'Access Token Leak',
+            'Bearer Token Detected',
+            'Session ID Leak',
+            'JWT Token Found',
+            'CSRF Token Reference',
+            'PHP Session Exposure',
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Web Dashboard
     |--------------------------------------------------------------------------
     |
@@ -555,6 +623,11 @@ return [
         'guard' => env('THREAT_DETECTION_DASHBOARD_GUARD', 'none'),  // none|auth|role|ip
         'role' => env('THREAT_DETECTION_DASHBOARD_ROLE', 'admin'),   // used when guard=role
         'allowed_ips' => array_filter(array_map('trim', explode(',', env('THREAT_DETECTION_DASHBOARD_IPS', '')))),
+
+        // Send Content-Security-Policy, X-Frame-Options, X-Content-Type-Options
+        // and Referrer-Policy with the dashboard. Turn off only if you have
+        // published and customised the view to load assets from other origins.
+        'security_headers' => true,
     ],
 
     /*
@@ -576,6 +649,48 @@ return [
         'guard' => env('THREAT_DETECTION_API_GUARD', 'none'),  // none|auth|role|ip
         'role' => env('THREAT_DETECTION_API_ROLE', 'admin'),   // used when guard=role
         'allowed_ips' => array_filter(array_map('trim', explode(',', env('THREAT_DETECTION_API_IPS', '')))),
+
+        /*
+        | Guard for the two endpoints that switch detection OFF: marking a
+        | threat as a false positive, and deleting an exclusion rule. Both
+        | silence a detection type for everyone, which is a different
+        | privilege from reading the log — without this, any authenticated
+        | user of your application could disable a detection.
+        |
+        | Applied to those routes only, so reading and the dashboard keep
+        | working exactly as before. Accepts the same none|auth|role|ip values
+        | as `guard`; 'role' uses the `role` setting above.
+        |
+        | Set THREAT_DETECTION_API_WRITE_GUARD=auth if your user model has no
+        | hasRole(), or =none to restore the pre-1.7.0 behaviour.
+        */
+        'write_guard' => env('THREAT_DETECTION_API_WRITE_GUARD', 'role'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Geo Enrichment
+    |--------------------------------------------------------------------------
+    |
+    | Used only by `php artisan threat-detection:enrich`, which is opt-in —
+    | nothing leaves your server unless you run it.
+    |
+    | Be aware of two things when you do. The attacking IP addresses being
+    | looked up are disclosed to a third party, and the default endpoint is
+    | cleartext HTTP, so an on-path observer can read those addresses and forge
+    | the replies. The default is HTTP because ip-api.com's free tier answers
+    | 403 over HTTPS; defaulting to https:// would break enrichment for every
+    | free-tier user, and silently, since a failed lookup is treated as
+    | best-effort.
+    |
+    | If you hold an ip-api key, or use another provider returning the same
+    | field names (countryCode, country, city, isp, org), point this at it:
+    |
+    |   THREAT_DETECTION_GEO_ENDPOINT=https://pro.ip-api.com/json
+    |
+    */
+    'enrichment' => [
+        'endpoint' => env('THREAT_DETECTION_GEO_ENDPOINT', 'http://ip-api.com/json'),
     ],
 
     /*

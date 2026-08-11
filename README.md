@@ -37,6 +37,10 @@ Then add the middleware to your `web` group (one line in `bootstrap/app.php` on 
 or `app/Http/Kernel.php` on Laravel 10) — full snippet in [Quick Start](#quick-start) below.
 That's it; detection is live.
 
+```bash
+php artisan threat-detection:doctor   # confirms it is actually recording
+```
+
 ---
 
 ## Where it fits: IDS vs WAF vs edge
@@ -245,28 +249,48 @@ Each detected threat is written as a warning to `storage/logs/laravel.log`:
 
 ### Troubleshooting
 
+**Start here — one command answers most of this:**
+
+```bash
+php artisan threat-detection:doctor
+```
+
+It checks the things that make detection fail *silently* — where the dashboard
+stays empty, which looks identical to "no attacks" — and prints the exact fix
+for each. It exits non-zero on a real failure, so it is safe to run in CI or a
+deploy step.
+
+```
+  Threat Detection — health check
+
+  PASS  Detection is enabled for this environment
+  FAIL  'threat_logs' is missing confidence_label — EVERY threat is being discarded
+        Run: php artisan vendor:publish --tag=threat-detection-migrations && php artisan migrate
+  WARN  1 custom pattern(s) shadow a built-in: Localhost SSRF
+        Your copy runs instead of the maintained one, so later fixes to it never reach you.
+```
+
+What it covers: detection enabled for this environment; every column the writer
+needs (a missing one discards **every** threat); dashboard/API columns; the
+exclusion-rules table; whether the middleware is actually wired to a route or
+group; published config that predates this version; custom patterns shadowing
+built-in ones; a cache driver that cannot do DDoS counting; and a dashboard or
+API left open without authentication.
+
 **"I tested but `threat-detection:stats` shows zero threats" / "Threats are not stored in the database"**
 
-This is almost always because migrations were not published. The package detects threats but silently skips the DB write if the table doesn't exist (so your app keeps working). Check `storage/logs/laravel.log` for errors like `SQLSTATE: table threat_logs not found`.
+If the doctor passed, the install is fine and the problem is the test request
+itself. Three things it cannot check for you:
 
 | Check | How to verify |
 |-------|---------------|
-| Migrations were **published** | Run `php artisan migrate:status` -  look for `create_threat_logs_table` and `create_threat_exclusion_rules_table`. If missing, you need to publish first (see below) |
-| Migrations were **run** | Same command -  status should show `Ran`, not `Pending` |
-| Middleware is registered | Confirm `ThreatDetectionMiddleware` is in your `web` middleware group (see [Step 3](#3-register-the-middleware) above) |
 | IP is not whitelisted | If you added `THREAT_DETECTION_WHITELISTED_IPS` to `.env`, remove it during testing |
-| Environment is enabled | Default enabled environments: `production`, `staging`, `local`. Check `APP_ENV` in `.env` |
-| Used an existing route | The test URL must match a real route (e.g., `/`). |
+| Used an existing route | The test URL must match a real route (e.g., `/`). A 404 means the middleware never ran |
 | Dedup cache | Same IP + same attack type is cached for 5 minutes -  try a different attack type |
 
-**"`threat-detection:stats` throws a database error" / "`threat_exclusion_rules` table not found"**
-
-The tables don't exist yet. You need to **publish** the migrations first, then run them:
-```bash
-php artisan vendor:publish --tag=threat-detection-migrations
-php artisan migrate
-```
-> **Note:** Running `php artisan migrate` alone is not enough -  the migration files are inside the package and need to be published to your app's `database/migrations/` folder first.
+> Running `php artisan migrate` alone is never enough: the migration files live
+> inside the package and must be published to your app's `database/migrations/`
+> first. The doctor prints the exact command when this is the problem.
 
 **"API returns 401 Unauthorized"**
 
@@ -532,33 +556,18 @@ THREAT_DETECTION_DASHBOARD=true
 
 Visit: `http://your-app.test/threat-detection`
 
-### Dashboard authentication
+### Getting in during local development
 
-The dashboard uses `['web', 'auth']` middleware by default -  users must be logged in.
+The dashboard uses `['web', 'auth']` middleware by default, so users must be logged in. If your app has no authentication yet, restrict it to your own machine instead:
 
-**If your app does not have authentication set up yet** (e.g., during local development), you have two options:
-
-**Option 1 -  Use the built-in auth guard (recommended):**
 ```env
-# In your .env file:
 THREAT_DETECTION_DASHBOARD_GUARD=ip
 THREAT_DETECTION_DASHBOARD_IPS=127.0.0.1
 ```
-This restricts the dashboard to your local machine only. Other guard options: `auth` (login required), `role` (role-based), `none` (no auth -  for local dev only). See [Dashboard Authentication](#dashboard-authentication) for all options.
 
-**Option 2 -  Remove auth middleware:**
-```php
-// config/threat-detection.php
-'dashboard' => [
-    'enabled' => true,
-    'path' => 'threat-detection',
-    'middleware' => ['web'],  // temporarily remove 'auth'
-],
-```
+All guard options, and the separate guard on the endpoints that disable detections, are covered in [Dashboard and API Authentication](#dashboard-and-api-authentication).
 
-> Restore authentication before deploying to production.
-
-**If the dashboard shows empty data**, make sure the API endpoints are accessible. The dashboard fetches data from the API. See [API Authentication](#api-authentication) for details.
+> **If the dashboard shows empty data**, the page loaded but its API calls did not. See [API Authentication](#api-authentication).
 
 ---
 
@@ -680,6 +689,10 @@ useEffect(() => {
 ## Artisan Commands
 
 ```bash
+# Check that detection is installed, wired up and actually recording.
+# Exits non-zero on a real failure, so it works in CI or a deploy step.
+php artisan threat-detection:doctor
+
 # View threat stats summary in the terminal
 php artisan threat-detection:stats
 
@@ -782,7 +795,34 @@ An unknown validator name **fails open** — the match is counted unvalidated an
 
 ---
 
-## Dashboard Authentication
+## Redaction (Detecting Is Not Storing)
+
+Detecting sensitive data used to mean storing it. A profile form carrying a mobile number, PAN and bank account would trip three PII patterns, and each of the three rows written kept the whole request body verbatim -  retained for the full retention period, readable by anyone with dashboard or database access. A value in a query string landed in the `url` column too. The detector became a second, concentrated copy of exactly what it warns you about.
+
+**On by default since v1.7.0.** When a pattern whose label is listed fires, the value it matched is masked in the stored payload and URL:
+
+```
+BODY: {"name":"Jane Doe","mobile":"[REDACTED]","pan":"[REDACTED]","bank_account":"[REDACTED]"}
+```
+
+The alert, the endpoint, the field names and the attacking IP all survive -  only the value goes. Redaction runs *after* detection, so nothing is missed.
+
+```php
+// config/threat-detection.php
+'redact' => [
+    'enabled' => env('THREAT_DETECTION_REDACT', true),
+    'mask'    => '[REDACTED]',
+    'labels'  => ['Aadhaar Number Detected', 'PAN Number Detected', /* ... */],
+],
+```
+
+Attack payloads are deliberately left intact -  an injection string is evidence, not a secret, and masking it would destroy the investigation. Only labels you list are touched.
+
+> This does not replace [Safe Fields](#safe-fields-false-positive-reduction). Those stop a field being **scanned**; redaction lets you keep scanning and stop **storing**. Set `THREAT_DETECTION_REDACT=false` if you need full payloads for forensics.
+
+---
+
+## Dashboard and API Authentication
 
 The dashboard and API support configurable auth guards via `.env`:
 
@@ -804,6 +844,19 @@ The same options are available for API routes with `THREAT_DETECTION_API_GUARD`.
 When `guard=none` (default), the package logs a warning once per day to remind you to configure authentication.
 
 The guard **fails closed**: an unrecognised guard value (e.g. a typo) is denied with a 403 and a logged warning rather than silently granting access, and `guard=role` denies (with a warning) when the authenticated user model has no `hasRole()` method.
+
+### Disabling a detection needs more than read access
+
+Marking a threat as a false positive and deleting an exclusion rule both silence a detection type for everyone, which is a different privilege from reading the log. Those two endpoints are checked against a separate guard:
+
+```env
+# Options: none, auth, role, ip. Default: role
+THREAT_DETECTION_API_WRITE_GUARD=role
+```
+
+It applies to those routes only, so reading and the dashboard behave exactly as `THREAT_DETECTION_API_GUARD` says. Without it, any authenticated user of your application could switch a detection off.
+
+If your user model has no `hasRole()`, use `=auth`. To restore the pre-1.7.0 behaviour where any authenticated user could disable detections, use `=none` -  `threat-detection:doctor` will warn while that is set.
 
 > **Dashboard ↔ API note:** the built-in dashboard fetches its data from the API routes using the browser session cookie. If your API routes are protected with `auth:sanctum`, configure Sanctum stateful/SPA authentication (or point the dashboard at a cookie-authenticated guard) so those AJAX calls are authorised -  otherwise the dashboard renders empty.
 
@@ -889,7 +942,7 @@ $summary = ThreatDetection::getCorrelationSummary();
 
 The package is passive by design -  it never blocks, rejects, or alters a request, and the detection middleware wraps its whole body in `try/catch`, so a detection failure can never break your app. It ships with sensible defaults and needs no external services to run. Before you go live, this short checklist is worth a look:
 
-1. **Protect the dashboard and API.** Both default to `guard = none` for a zero-config first run, and log a daily warning while unprotected. Before production, set a guard -  `THREAT_DETECTION_DASHBOARD_GUARD` and `THREAT_DETECTION_API_GUARD` (`auth`, `role`, or `ip`). An unrecognised value or a `role` guard on a user model without `hasRole()` now **fails closed** (403), so a typo won't silently expose data. See [Dashboard Authentication](#dashboard-authentication).
+1. **Protect the dashboard and API.** Both default to `guard = none` for a zero-config first run, and log a daily warning while unprotected. Before production, set a guard -  `THREAT_DETECTION_DASHBOARD_GUARD` and `THREAT_DETECTION_API_GUARD` (`auth`, `role`, or `ip`). An unrecognised value or a `role` guard on a user model without `hasRole()` now **fails closed** (403), so a typo won't silently expose data. Disabling a detection is gated separately by `THREAT_DETECTION_API_WRITE_GUARD`, which defaults to `role`. See [Dashboard and API Authentication](#dashboard-and-api-authentication).
 2. **Run the migrations** (`vendor:publish --tag=threat-detection-migrations && migrate`). Re-publishing is safe -  already-published migrations are skipped.
 3. **Pick a detection mode.** `balanced` (default) suits most apps; use `relaxed` for content-heavy sites, `strict` for high-security surfaces. Tune with `content_paths`, `safe_fields`, and `min_confidence` -  see [Reducing False Positives](#reducing-false-positives).
 4. **Review the regional PII / custom patterns.** Defaults are India-centric (Aadhaar, PAN, IFSC) and the broad numeric patterns (e.g. bank-account) can match long numeric IDs outside auth routes. Replace or trim `custom_patterns` for your region and app, and add heavy-content routes to `auth_paths` / `content_paths`.
@@ -904,16 +957,11 @@ No Redis, no queue worker, and no outbound network calls are required for core d
 
 The package provides multiple tools to reduce false positives. Use whichever fits your situation:
 
-### Safe Fields
+### Safe Fields and Safe Paths
 
-If specific form fields legitimately contain HTML, SQL keywords, or code, exclude them from scanning entirely:
+Exclude a field from scanning entirely, either by name everywhere (`safe_fields`) or by dot-notation path for nested JSON (`safe_paths`). The simplest approach, and the bluntest -  the field is skipped, so no detection runs on it at all.
 
-```php
-// config/threat-detection.php
-'safe_fields' => ['content', 'body', 'html', 'description', 'code'],
-```
-
-This is the simplest approach. The field is completely skipped -  no detection runs on it. Use for CMS content editors, code snippet inputs, and rich text fields. See [Safe Fields](#safe-fields-false-positive-reduction) for details.
+Full details and examples: [Safe Fields](#safe-fields-false-positive-reduction).
 
 ### Content Path Suppression
 
