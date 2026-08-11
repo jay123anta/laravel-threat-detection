@@ -56,6 +56,25 @@ jobs:
         run: |
           composer require "illuminate/support:${{ matrix.laravel }}" "illuminate/http:${{ matrix.laravel }}" "illuminate/routing:${{ matrix.laravel }}" "illuminate/database:${{ matrix.laravel }}" "illuminate/cache:${{ matrix.laravel }}" "illuminate/console:${{ matrix.laravel }}" "illuminate/events:${{ matrix.laravel }}" "illuminate/bus:${{ matrix.laravel }}" "illuminate/queue:${{ matrix.laravel }}" "illuminate/notifications:${{ matrix.laravel }}" --no-interaction --no-update
 
+      # EOL legs only. Composer 2.10 refuses to install *any* Laravel 10.x or
+      # 11.x release, because every one of them carries an unpatched advisory
+      # and advisory blocking is now on by default — the install fails outright
+      # rather than warning. That is correct behaviour for a real project and
+      # exactly why these two majors left the matrix in v1.4.0.
+      #
+      # We opt out here and nowhere else. composer.json still claims ^10.0 and
+      # ^11.0, and untested support is not support: a fatal on every Laravel
+      # 11+ install once reached PR stage precisely because nothing exercised
+      # that range. The container is ephemeral, handles no data and ships
+      # nothing, so installing a vulnerable framework to run a test suite costs
+      # nothing — while leaving those users untested costs them.
+      #
+      # The blocking legs keep advisory protection. Users on these versions are
+      # warned at runtime by threat-detection:doctor.
+      - name: Allow advisory-blocked install (EOL legs only)
+        if: matrix.eol
+        run: composer config policy.advisories.block false
+
       - name: Install dependencies
         run: composer update --prefer-dist --no-interaction --no-progress
 
