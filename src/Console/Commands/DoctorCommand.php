@@ -43,6 +43,7 @@ class DoctorCommand extends Command
         $this->line('  <fg=white;options=bold>Threat Detection — health check</>');
         $this->newLine();
 
+        $this->checkFrameworkSupport();
         $this->checkEnabled();
         $this->checkWriteSchema();
         $this->checkReadSchema();
@@ -57,6 +58,44 @@ class DoctorCommand extends Command
     }
 
     // ── checks ──────────────────────────────────────────────────────────────
+
+    /**
+     * Laravel majors that no longer receive security patches.
+     *
+     * Under-reporting is the safe direction here: a major missing from this
+     * list is simply not flagged. Extend it as releases age.
+     */
+    private const EOL_LARAVEL_MAJORS = [9, 10, 11];
+
+    /**
+     * An intrusion detector that notices the framework underneath it is
+     * unpatched and says nothing is failing at its job.
+     *
+     * This package still supports and tests Laravel 10 and 11, because the
+     * people stuck on an old framework are the ones who need detection most,
+     * and dropping them would reduce protection rather than add any. But
+     * running detection on an unpatched framework is treating the symptom:
+     * upgrading closes whole classes of vulnerability that no amount of
+     * request scanning can.
+     */
+    private function checkFrameworkSupport(): void
+    {
+        $version = $this->laravel->version();
+        $major = (int) $version;
+
+        if (in_array($major, self::EOL_LARAVEL_MAJORS, true)) {
+            $this->reportWarning(
+                "Laravel {$version} no longer receives security patches",
+                'This package runs fine on it and is tested against it, but the framework '
+                . 'beneath it is unpatched. Upgrading is worth more than anything this '
+                . 'package can detect for you. Check with: composer audit'
+            );
+
+            return;
+        }
+
+        $this->reportPass("Laravel {$version} is a supported release");
+    }
 
     private function checkEnabled(): void
     {

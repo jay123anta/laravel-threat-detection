@@ -23,8 +23,24 @@ jobs:
           # Laravel 13 requires PHP 8.3+.
           - php: 8.2
             laravel: 13.*
+        include:
+          # composer.json claims ^10.0 and ^11.0, so they get tested. Both are
+          # end of life for security patches, so their advisories must not gate
+          # a merge — these legs report but do not block.
+          #
+          # Testing what we claim is not optional: a fatal that broke every
+          # Laravel 11+ install once reached PR stage precisely because the
+          # matrix jumped 10 to 12.
+          - php: 8.2
+            laravel: 10.*
+            eol: true
+          - php: 8.2
+            laravel: 11.*
+            eol: true
 
-    name: PHP ${{ matrix.php }} / Laravel ${{ matrix.laravel }}
+    name: PHP ${{ matrix.php }} / Laravel ${{ matrix.laravel }}${{ matrix.eol && ' (EOL, non-blocking)' || '' }}
+
+    continue-on-error: ${{ matrix.eol == true }}
 
     steps:
       - uses: actions/checkout@v4

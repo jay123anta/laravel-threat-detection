@@ -42,13 +42,33 @@ class Phase15DoctorCommandTest extends TestCase
 
     // ── healthy install ─────────────────────────────────────────────────────
 
+    /**
+     * Asserts no *failures* rather than a literal "All checks passed", because
+     * some checks are properties of the environment the suite happens to run
+     * in. The framework-support check warns on Laravel 10 and 11, which this
+     * package still supports and CI still tests, so an exact-summary assertion
+     * would pass on the Laravel 12/13 legs and fail on the others.
+     */
     #[Test]
-    public function a_healthy_install_passes_everything(): void
+    public function a_healthy_install_reports_no_failures(): void
     {
         $this->healthySchema();
 
+        $this->artisan('threat-detection:doctor')->assertExitCode(0);
+    }
+
+    #[Test]
+    public function it_reports_on_the_framework_version(): void
+    {
+        $this->healthySchema();
+
+        $major = (int) $this->app->version();
+        $expected = in_array($major, [9, 10, 11], true)
+            ? 'no longer receives security patches'
+            : 'is a supported release';
+
         $this->artisan('threat-detection:doctor')
-            ->expectsOutputToContain('All checks passed.')
+            ->expectsOutputToContain($expected)
             ->assertExitCode(0);
     }
 
