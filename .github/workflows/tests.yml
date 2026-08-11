@@ -1,8 +1,12 @@
 name: Tests
 
 on:
+  # Every branch, not just main. A branch could previously be pushed and
+  # reviewed for days with no CI at all, because nothing ran until a pull
+  # request was opened — which is how a fatal that broke the package on every
+  # Laravel 11+ install reached PR stage unnoticed. Runs take ~30s.
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
     branches: [main]
 
