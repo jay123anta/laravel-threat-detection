@@ -2,7 +2,7 @@
 
 All notable changes to `jayanta/laravel-threat-detection` will be documented in this file.
 
-## [1.7.0] - 2026-08-01
+## [1.7.0] - 2026-08-12
 
 Detection *gap* fixes: patterns that were configured, matched their input, and
 still never fired. **Expect more entries than before, not fewer.** Minor rather
