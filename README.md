@@ -786,6 +786,23 @@ class EnforceThreatDecisions
 }
 ```
 
+> **Before you enforce on IP, configure `TrustProxies`.**
+>
+> Everything above keys off `$request->ip()`. Behind a load balancer, CDN or
+> reverse proxy, that returns the *client* IP only when Laravel is told which
+> proxies to trust. If it isn't, two things break at once: every request
+> appears to come from the proxy, so a denylist entry blocks all of your
+> traffic or none of it — and worse, if the app trusts a forwarded header it
+> should not, an attacker sets `X-Forwarded-For` and walks straight through
+> the blocklist.
+>
+> This matters more here than for `whitelisted_ips`. A wrong whitelist match
+> only means the package scans a request it might have skipped: it fails safe.
+> A denylist used to refuse traffic fails *open* — you believe an address is
+> blocked when it is not. Check `app/Http/Middleware/TrustProxies.php` (or the
+> `trustProxies` call in `bootstrap/app.php` on Laravel 11+) before relying on
+> either helper for enforcement.
+
 Register it globally (before the detection middleware is fine — the helpers read config and
 cache, they don't depend on middleware order):
 

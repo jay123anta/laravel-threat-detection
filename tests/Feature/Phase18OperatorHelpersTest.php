@@ -20,7 +20,7 @@ use JayAnta\ThreatDetection\Facades\ThreatDetection;
  * at match time, and the DdosThresholdExceeded event is throttled to once
  * per window.
  */
-class Phase13OperatorHelpersTest extends TestCase
+class Phase18OperatorHelpersTest extends TestCase
 {
     protected function setUp(): void
     {
