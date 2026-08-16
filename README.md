@@ -17,12 +17,12 @@ it never blocks, filters, or modifies a request.**
 </p>
 
 Drop it into any Laravel 10–13 app and it starts scanning every HTTP request against
-175+ attack patterns, scoring each match by confidence and writing it to your database —
+150+ attack patterns, scoring each match by confidence and writing it to your database —
 with a built-in dashboard, Slack alerts, geo-enrichment, and fail2ban/blocklist exports.
 No request is ever blocked. Think security camera, not a lock: it shows you exactly who's
 probing your routes, how often, and with what techniques.
 
-> Extracted from a production app and battle-tested on real traffic. 213 tests, no runtime
+> Extracted from a production app and battle-tested on real traffic. 335 tests, no runtime
 > dependencies beyond Laravel itself, and no internet connection required for detection.
 
 ## Get started in under a minute
@@ -78,6 +78,23 @@ geo-blocking — with data your edge layer never sees.
 - **Not an edge service.** If you can put Cloudflare in front, do — then add this for the
   application-level detail edge services can't see.
 
+### So what do you actually do with it?
+
+The most common question about a detector that never blocks. Four answers, in
+increasing order of effort:
+
+| You want to | Use | Effort |
+|---|---|---|
+| See what's hitting you | The [dashboard](#dashboard) or `threat-detection:stats` | none, it's already running |
+| Ban repeat offenders at the firewall | [`threat-detection:export-fail2ban`](#artisan-commands) — pipe to a cron | one line |
+| Deny at the web server | [`threat-detection:export-blocklist`](#artisan-commands) → nginx/apache directives | one line |
+| Refuse requests in-app | [Operator-side helpers](#acting-on-the-data-operator-side-blocking) — `isBlocklisted()`, `isDdosThresholdExceeded()` | ~10 lines of your own middleware |
+| React in real time | The [`ThreatDetected` event](#threatdetected-event) — Telegram, SIEM, PagerDuty | a listener |
+
+The package supplies the intelligence; you supply the refusal. That split is
+deliberate — enforcement code that lives in your app is code you can read,
+test and turn off, and it means a detection bug can never take your site down.
+
 ---
 
 ## Requirements
@@ -94,7 +111,7 @@ geo-blocking — with data your edge layer never sees.
 ## How It Works
 
 1. A middleware scans every incoming HTTP request
-2. The request is checked against 175+ regex patterns covering SQL injection, XSS, RCE, file traversal, SSRF, LDAP, XPath, SSTI, and more
+2. The request is checked against 158 regex patterns covering SQL injection, XSS, RCE, file traversal, SSRF, LDAP, XPath, SSTI, and more
 3. If a threat pattern matches, a record is written to your `threat_logs` database table with the IP, URL, threat type, severity level, and a confidence score
 4. Optionally, a Slack alert is sent for high-severity threats
 5. The request proceeds normally -  **nothing is blocked**
@@ -310,8 +327,8 @@ php artisan route:clear
 
 ## Features
 
-- **175+ Detection Patterns** -  SQL injection (UNION, DDL, DML, file ops), XSS (script, SVG, CSS expression), RCE, directory traversal, SSRF, XXE, Log4Shell, NoSQL injection, command injection (Linux + Windows), LDAP injection, XPath injection, SSTI, CRLF injection, Java deserialization, and more
-- **53 Bot/Scanner Signatures** -  SQLMap, Nikto, Nmap, Burp Suite, FeroxBuster, FFUF, XSStrike, Dalfox, Netsparker, and 20+ other security scanners
+- **150+ Detection Patterns** -  SQL injection (UNION, DDL, DML, file ops), XSS (script, SVG, CSS expression), RCE, directory traversal, SSRF, XXE, Log4Shell, NoSQL injection, command injection (Linux + Windows), LDAP injection, XPath injection, SSTI, CRLF injection, Java deserialization, and more
+- **83 Bot/Scanner Signatures** -  SQLMap, Nikto, Nmap, Burp Suite, FeroxBuster, FFUF, XSStrike, Dalfox, Netsparker, and 70+ other scanner and bot signatures
 - **AI Scraper Detection** -  GPTBot, ClaudeBot, ByteSpider, Common Crawl, and other AI training bots
 - **Headless Browser Detection** -  HeadlessChrome, PhantomJS, Selenium, Puppeteer, Playwright
 - **404 Probe Tracking** -  Detects reconnaissance probes hitting known vulnerable paths (`/wp-admin`, `/.env`, `/phpmyadmin`, `/actuator`, etc.) with 50+ default probe paths
@@ -1167,7 +1184,7 @@ Threats below the confidence threshold for your detection mode are not logged (s
 composer test
 ```
 
-The package includes 213 tests (640 assertions) covering detection patterns, middleware behavior, API endpoints, confidence scoring, exclusion rules, DDoS detection, evasion resistance, CVE patterns, LDAP/XPath/SSTI injection, bot/scanner detection, probe tracking, export commands, dashboard auth, safe fields, performance optimizations, and full-cycle HTTP-to-DB verification.
+The package includes 335 tests (856 assertions) covering detection patterns, middleware behavior, API endpoints, confidence scoring, exclusion rules, DDoS detection, evasion resistance, CVE patterns, LDAP/XPath/SSTI injection, bot/scanner detection, probe tracking, export commands, dashboard auth, safe fields, performance optimizations, and full-cycle HTTP-to-DB verification.
 
 ---
 
