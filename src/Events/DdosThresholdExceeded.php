@@ -23,6 +23,5 @@ class DdosThresholdExceeded
         public readonly int $requestCount,
         public readonly int $threshold,
         public readonly int $windowSeconds,
-    ) {
-    }
+    ) {}
 }

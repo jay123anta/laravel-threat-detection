@@ -1,0 +1,43 @@
+name: Feature request
+description: Suggest a detection, integration or improvement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Worth knowing before you write: this package is a **passive IDS**. It
+        never blocks, filters or modifies a request, and that isn't a gap to be
+        filled — it's what keeps a detection bug from taking your site down.
+        Requests to make it block will become helpers that expose the decision
+        so you can enforce it in your own middleware.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you hitting?
+      description: The situation, not the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like it to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: pattern
+    attributes:
+      label: If this is a new detection pattern
+      description: >
+        A sample payload it should match, and — just as important — a sample of
+        ordinary traffic it must NOT match.
+      render: text
+
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Would you like to submit a PR?
+      options:
+        - label: I'd be willing to work on this

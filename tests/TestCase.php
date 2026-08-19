@@ -2,12 +2,12 @@
 
 namespace JayAnta\ThreatDetection\Tests;
 
-use Orchestra\Testbench\TestCase as OrchestraTestCase;
-use JayAnta\ThreatDetection\ThreatDetectionServiceProvider;
-use JayAnta\ThreatDetection\Services\ProbeDetectorService;
-use JayAnta\ThreatDetection\Services\ThreatDetectionService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use JayAnta\ThreatDetection\Services\ProbeDetectorService;
+use JayAnta\ThreatDetection\Services\ThreatDetectionService;
+use JayAnta\ThreatDetection\ThreatDetectionServiceProvider;
+use Orchestra\Testbench\TestCase as OrchestraTestCase;
 
 abstract class TestCase extends OrchestraTestCase
 {

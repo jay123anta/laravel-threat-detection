@@ -2,12 +2,12 @@
 
 namespace JayAnta\ThreatDetection\Tests\Unit;
 
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use JayAnta\ThreatDetection\Http\Middleware\ThreatDetectionMiddleware;
 use JayAnta\ThreatDetection\Services\ThreatDetectionService;
 use JayAnta\ThreatDetection\Tests\TestCase;
 use PHPUnit\Framework\Attributes\Test;
-use Illuminate\Http\Request;
-use Illuminate\Http\Response;
 
 class MiddlewareTest extends TestCase
 {
@@ -31,7 +31,7 @@ class MiddlewareTest extends TestCase
 
         $middleware = $this->app->make(ThreatDetectionMiddleware::class);
 
-        return $middleware->handle($request, fn($req) => new Response('OK', 200));
+        return $middleware->handle($request, fn ($req) => new Response('OK', 200));
     }
 
     #[Test]

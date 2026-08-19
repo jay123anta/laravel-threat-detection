@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/jay123anta/laravel-threat-detection/security/advisories/new
+    about: Report privately. Please do not open a public issue.
+  - name: Question or idea
+    url: https://github.com/jay123anta/laravel-threat-detection/discussions
+    about: Ask a question or discuss an idea.

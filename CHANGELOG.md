@@ -263,7 +263,7 @@ exclusion-rule change below.
   probe-path caches, so a runtime config change takes effect (tests, Octane
   reloads). The test suite previously reached in with reflection.
 
-- **End-to-end process-flow test** (`Phase14ProductionFlowTest`). Drives a
+- **End-to-end process-flow test** (`ProductionFlowTest`). Drives a
   realistic storefront + admin + API route table through the middleware with
   ordinary browser traffic, then with a 14-attack suite, and asserts on what
   reaches `threat_logs`. It pins the shipped-config noise floor and the

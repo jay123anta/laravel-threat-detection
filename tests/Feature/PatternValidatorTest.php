@@ -2,12 +2,12 @@
 
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
-use JayAnta\ThreatDetection\Tests\TestCase;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Route;
 use JayAnta\ThreatDetection\Services\PatternValidators;
 use JayAnta\ThreatDetection\Services\ThreatDetectionService;
+use JayAnta\ThreatDetection\Tests\TestCase;
 use PHPUnit\Framework\Attributes\Test;
-use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Cache;
 
 /**
  * Post-match validators (pattern_validators).
@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\Cache;
  * one-digit alteration of a valid number is guaranteed invalid.
  * Luhn test vectors: 4111111111111111 is the classic valid test card number.
  */
-class Phase11ValidatorsTest extends TestCase
+class PatternValidatorTest extends TestCase
 {
     protected function setUp(): void
     {
@@ -50,7 +50,7 @@ class Phase11ValidatorsTest extends TestCase
             'cache.default' => 'array',
         ]);
 
-        Route::middleware('threat-detect')->post('/phase11-test', fn() => response('OK', 200));
+        Route::middleware('threat-detect')->post('/phase11-test', fn () => response('OK', 200));
 
         $this->resetCustomPatternCache();
     }

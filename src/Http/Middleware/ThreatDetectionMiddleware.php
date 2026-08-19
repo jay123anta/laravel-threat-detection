@@ -4,13 +4,14 @@ namespace JayAnta\ThreatDetection\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use JayAnta\ThreatDetection\Services\ThreatDetectionService;
-use JayAnta\ThreatDetection\Services\ProbeDetectorService;
 use Illuminate\Support\Facades\Log;
+use JayAnta\ThreatDetection\Services\ProbeDetectorService;
+use JayAnta\ThreatDetection\Services\ThreatDetectionService;
 
 class ThreatDetectionMiddleware
 {
     protected ThreatDetectionService $detector;
+
     protected ProbeDetectorService $probeDetector;
 
     public function __construct(ThreatDetectionService $detector, ProbeDetectorService $probeDetector)

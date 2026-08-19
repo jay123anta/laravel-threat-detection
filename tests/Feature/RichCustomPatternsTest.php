@@ -2,11 +2,11 @@
 
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
-use JayAnta\ThreatDetection\Tests\TestCase;
-use JayAnta\ThreatDetection\Services\ThreatDetectionService;
-use PHPUnit\Framework\Attributes\Test;
-use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Route;
+use JayAnta\ThreatDetection\Services\ThreatDetectionService;
+use JayAnta\ThreatDetection\Tests\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 
 /**
  * Rich custom patterns (array form).
@@ -26,7 +26,7 @@ use Illuminate\Support\Facades\Cache;
  * pre-screen) and a "password" field (activates the token category so
  * custom patterns run) — mirroring a real credential/PII leak.
  */
-class Phase12RichCustomPatternsTest extends TestCase
+class RichCustomPatternsTest extends TestCase
 {
     protected function setUp(): void
     {
@@ -53,7 +53,7 @@ class Phase12RichCustomPatternsTest extends TestCase
             'cache.default' => 'array',
         ]);
 
-        Route::middleware('threat-detect')->post('/phase12-test', fn() => response('OK', 200));
+        Route::middleware('threat-detect')->post('/phase12-test', fn () => response('OK', 200));
 
         $this->resetCustomPatternCache();
     }

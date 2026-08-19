@@ -2,11 +2,11 @@
 
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
-use JayAnta\ThreatDetection\Tests\TestCase;
-use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Cache;
+use JayAnta\ThreatDetection\Tests\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 
 /**
  * Phase 3 v1.3.0: Full-cycle tests for expanded bot/scanner detection.
@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Cache;
  * Tests new security scanners, AI scrapers, headless browsers,
  * and aggressive crawlers added to user-agent detection.
  */
-class Phase3BotDetectionTest extends TestCase
+class BotAndScannerDetectionTest extends TestCase
 {
     protected function setUp(): void
     {
@@ -38,7 +38,7 @@ class Phase3BotDetectionTest extends TestCase
         ]);
 
         Route::middleware('threat-detect')->group(function () {
-            Route::get('/bot-test', fn() => response('OK', 200));
+            Route::get('/bot-test', fn () => response('OK', 200));
         });
     }
 

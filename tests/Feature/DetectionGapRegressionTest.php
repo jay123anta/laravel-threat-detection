@@ -21,7 +21,7 @@ use PHPUnit\Framework\Attributes\Test;
  * and activate a category, so the tests passed while the same pattern failed on
  * a realistic request. Nothing below carries a value it does not need.
  */
-class Phase13DetectionGapsTest extends TestCase
+class DetectionGapRegressionTest extends TestCase
 {
     protected function setUp(): void
     {
@@ -51,14 +51,14 @@ class Phase13DetectionGapsTest extends TestCase
         ]);
 
         Route::middleware('threat-detect')->group(function () {
-            Route::get('/gaps-test', fn() => response('OK', 200));
-            Route::post('/gaps-test', fn() => response('OK', 200));
-            Route::get('/deep/path/vendor/phpunit/phpunit/eval-stdin.php', fn() => response('OK', 200));
-            Route::get('/actuator/env', fn() => response('OK', 200));
-            Route::get('/clean/profile/page', fn() => response('OK', 200));
-            Route::get('/.env', fn() => response('OK', 200));
-            Route::get('/admin/users', fn() => response('OK', 200));
-            Route::post('/zz-raw-cap', fn() => response('OK', 200));
+            Route::get('/gaps-test', fn () => response('OK', 200));
+            Route::post('/gaps-test', fn () => response('OK', 200));
+            Route::get('/deep/path/vendor/phpunit/phpunit/eval-stdin.php', fn () => response('OK', 200));
+            Route::get('/actuator/env', fn () => response('OK', 200));
+            Route::get('/clean/profile/page', fn () => response('OK', 200));
+            Route::get('/.env', fn () => response('OK', 200));
+            Route::get('/admin/users', fn () => response('OK', 200));
+            Route::post('/zz-raw-cap', fn () => response('OK', 200));
         });
 
         ThreatDetectionService::flushCaches();
@@ -166,8 +166,8 @@ class Phase13DetectionGapsTest extends TestCase
     public function ordinary_numeric_data_is_never_logged_as_pii(): void
     {
         $this->postJson('/gaps-test', [
-            'order_id'    => '1735689600000',   // ms epoch timestamp
-            'invoice_no'  => '987654321',       // 9-digit invoice
+            'order_id' => '1735689600000',   // ms epoch timestamp
+            'invoice_no' => '987654321',       // 9-digit invoice
             'product_sku' => '600123456789',    // 12-digit SKU
             'total_paise' => '4999900',
         ]);
@@ -412,7 +412,7 @@ class Phase13DetectionGapsTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $service = new ExclusionRuleService();
+        $service = new ExclusionRuleService;
         $service->clearCache();
 
         $this->assertFalse(

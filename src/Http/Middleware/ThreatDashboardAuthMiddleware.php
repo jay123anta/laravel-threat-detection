@@ -14,8 +14,8 @@ class ThreatDashboardAuthMiddleware
     /**
      * Handle dashboard/API auth based on configurable guard.
      *
-     * @param string      $context 'dashboard' or 'api'
-     * @param string|null $mode    'write' to use the stricter write_guard
+     * @param  string  $context  'dashboard' or 'api'
+     * @param  string|null  $mode  'write' to use the stricter write_guard
      *
      * Reading threat data and *switching detection off* are different
      * privileges. Marking a false positive or deleting an exclusion rule
@@ -43,6 +43,7 @@ class ThreatDashboardAuthMiddleware
                 Log::warning("Threat detection {$what} accessible without authentication. Set {$envVar} in your .env.");
                 Cache::put($cacheKey, true, now()->addDay());
             }
+
             return $next($request);
         }
 
@@ -50,6 +51,7 @@ class ThreatDashboardAuthMiddleware
             if (!Auth::check()) {
                 abort(403, 'Unauthorized');
             }
+
             return $next($request);
         }
 
@@ -70,6 +72,7 @@ class ThreatDashboardAuthMiddleware
             if (!$user->hasRole($role)) {
                 abort(403, 'Insufficient permissions');
             }
+
             return $next($request);
         }
 
@@ -82,6 +85,7 @@ class ThreatDashboardAuthMiddleware
             if (!IpUtils::checkIp($request->ip(), $allowedIps)) {
                 abort(403, 'IP not allowed');
             }
+
             return $next($request);
         }
 

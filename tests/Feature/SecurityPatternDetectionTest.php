@@ -2,11 +2,10 @@
 
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Route;
 use JayAnta\ThreatDetection\Tests\TestCase;
 use PHPUnit\Framework\Attributes\Test;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Cache;
 
 /**
  * Phase 1 v1.3.0: Full-cycle tests for new security patterns.
@@ -18,7 +17,7 @@ use Illuminate\Support\Facades\Cache;
  * Each test sends a real HTTP request through the threat-detect middleware,
  * writes to the database, and asserts on the actual rows.
  */
-class Phase1SecurityPatternsTest extends TestCase
+class SecurityPatternDetectionTest extends TestCase
 {
     protected function setUp(): void
     {
@@ -42,8 +41,8 @@ class Phase1SecurityPatternsTest extends TestCase
         ]);
 
         Route::middleware('threat-detect')->group(function () {
-            Route::get('/phase1-test', fn() => response('OK', 200));
-            Route::post('/phase1-test', fn() => response('OK', 200));
+            Route::get('/phase1-test', fn () => response('OK', 200));
+            Route::post('/phase1-test', fn () => response('OK', 200));
         });
     }
 
@@ -60,7 +59,7 @@ class Phase1SecurityPatternsTest extends TestCase
     #[Test]
     public function full_cycle_crlf_injection_is_detected(): void
     {
-        $this->call('POST', '/phase1-test', ['input' => "value%0d%0aSet-Cookie: hacked=true"]);
+        $this->call('POST', '/phase1-test', ['input' => 'value%0d%0aSet-Cookie: hacked=true']);
 
         $this->assertDatabaseHas('threat_logs', [
             'type' => '[middleware] CRLF Injection',
@@ -71,7 +70,7 @@ class Phase1SecurityPatternsTest extends TestCase
     #[Test]
     public function full_cycle_lf_injection_is_detected(): void
     {
-        $this->call('POST', '/phase1-test', ['input' => "header%0aX-Injected: yes"]);
+        $this->call('POST', '/phase1-test', ['input' => 'header%0aX-Injected: yes']);
 
         $this->assertDatabaseHas('threat_logs', [
             'type' => '[middleware] LF Injection',
@@ -85,7 +84,7 @@ class Phase1SecurityPatternsTest extends TestCase
     #[Test]
     public function full_cycle_null_byte_injection_is_detected(): void
     {
-        $this->call('POST', '/phase1-test', ['file' => "image.php%00.jpg"]);
+        $this->call('POST', '/phase1-test', ['file' => 'image.php%00.jpg']);
 
         $this->assertDatabaseHas('threat_logs', [
             'type' => '[middleware] Null Byte Injection',
@@ -439,8 +438,8 @@ class Phase1SecurityPatternsTest extends TestCase
         // Fully char-encode the payload, then encode again. After Laravel's single
         // query decode it is still %55%4E%49... — no visible keyword, so the old
         // pre-screen skipped the whole segment. The normalizer recovers it; it must log.
-        $clear  = 'UNION SELECT password FROM users';
-        $single = implode('', array_map(fn($c) => '%' . strtoupper(bin2hex($c)), str_split($clear)));
+        $clear = 'UNION SELECT password FROM users';
+        $single = implode('', array_map(fn ($c) => '%' . strtoupper(bin2hex($c)), str_split($clear)));
         $double = str_replace('%', '%25', $single);
 
         $this->get('/phase1-test?q=' . $double);

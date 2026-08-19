@@ -2,6 +2,7 @@
 
 namespace JayAnta\ThreatDetection\Notifications;
 
+use Illuminate\Notifications\Messages\SlackMessage;
 use Illuminate\Notifications\Notification;
 
 class ThreatAlertSlack extends Notification
@@ -15,7 +16,7 @@ class ThreatAlertSlack extends Notification
 
     public function via($notifiable): array
     {
-        if (class_exists(\Illuminate\Notifications\Messages\SlackMessage::class)) {
+        if (class_exists(SlackMessage::class)) {
             return ['slack'];
         }
 
@@ -28,17 +29,17 @@ class ThreatAlertSlack extends Notification
         $log = $this->log;
         $sanitizedUrl = $this->sanitizeUrl($log['url'] ?? 'N/A');
 
-        return (new \Illuminate\Notifications\Messages\SlackMessage)
+        return (new SlackMessage)
             ->from(config('threat-detection.notifications.slack_username', 'ThreatBot'))
             ->to(config('threat-detection.notifications.slack_channel', '#threat-alerts'))
             ->warning()
             ->content('@here *Threat Detected*')
             ->attachment(function ($attachment) use ($log, $sanitizedUrl) {
                 $attachment->fields([
-                    'IP'     => $log['ip_address'] ?? 'N/A',
-                    'URL'    => $sanitizedUrl,
-                    'Type'   => $log['type'] ?? 'Unknown',
-                    'Level'  => ucfirst($log['threat_level'] ?? 'low'),
+                    'IP' => $log['ip_address'] ?? 'N/A',
+                    'URL' => $sanitizedUrl,
+                    'Type' => $log['type'] ?? 'Unknown',
+                    'Level' => ucfirst($log['threat_level'] ?? 'low'),
                     'Action' => $log['action_taken'] ?? 'N/A',
                 ]);
             });
@@ -73,6 +74,7 @@ class ThreatAlertSlack extends Notification
     private function sanitizeUrl(string $url): string
     {
         $sanitized = preg_replace('/^https?:\/\//i', 'hxxp://', $url);
+
         return str_replace('.', '[.]', $sanitized);
     }
 }

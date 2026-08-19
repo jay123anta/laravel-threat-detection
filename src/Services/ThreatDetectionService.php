@@ -3,10 +3,12 @@
 namespace JayAnta\ThreatDetection\Services;
 
 use Illuminate\Http\Request;
+use Illuminate\Notifications\Messages\SlackMessage;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use JayAnta\ThreatDetection\Events\DdosThresholdExceeded;
 use JayAnta\ThreatDetection\Events\ThreatDetected;
@@ -17,8 +19,11 @@ use Symfony\Component\HttpFoundation\IpUtils;
 class ThreatDetectionService
 {
     protected int $ddosThreshold;
+
     protected int $ddosWindowSeconds;
+
     protected ConfidenceScorer $confidenceScorer;
+
     protected ExclusionRuleService $exclusionRuleService;
 
     public function __construct(
@@ -27,8 +32,8 @@ class ThreatDetectionService
     ) {
         $this->ddosThreshold = config('threat-detection.ddos.threshold', 100);
         $this->ddosWindowSeconds = config('threat-detection.ddos.window', 60);
-        $this->confidenceScorer = $confidenceScorer ?? new ConfidenceScorer();
-        $this->exclusionRuleService = $exclusionRuleService ?? new ExclusionRuleService();
+        $this->confidenceScorer = $confidenceScorer ?? new ConfidenceScorer;
+        $this->exclusionRuleService = $exclusionRuleService ?? new ExclusionRuleService;
     }
 
     /**
@@ -68,9 +73,9 @@ class ThreatDetectionService
     private function ipMatches(string $ip, mixed $list): bool
     {
         $entries = array_filter(array_map(
-            static fn($entry): string => is_string($entry) ? trim($entry) : '',
+            static fn ($entry): string => is_string($entry) ? trim($entry) : '',
             (array) $list
-        ), static fn(string $entry): bool => $entry !== '');
+        ), static fn (string $entry): bool => $entry !== '');
 
         return $ip !== '' && $entries !== [] && IpUtils::checkIp($ip, array_values($entries));
     }
@@ -267,7 +272,7 @@ class ThreatDetectionService
     /**
      * Which of the labels that fired this request are marked as sensitive.
      *
-     * @param array $threats [label, level, sourceTag] tuples
+     * @param  array  $threats  [label, level, sourceTag] tuples
      * @return string[]
      */
     private function sensitiveLabelsAmong(array $threats): array
@@ -324,7 +329,7 @@ class ThreatDetectionService
     private static ?array $labelRegexMap = null;
 
     /**
-     * @param string[] $labels
+     * @param  string[]  $labels
      * @return string[]
      */
     private function regexesForLabels(array $labels): array
@@ -411,13 +416,13 @@ class ThreatDetectionService
         $data = [];
 
         if (!empty($segments['query'])) {
-            $data[] = "QUERY: " . $segments['query'];
+            $data[] = 'QUERY: ' . $segments['query'];
         }
         if (!empty($segments['body'])) {
-            $data[] = "BODY: " . $segments['body'];
+            $data[] = 'BODY: ' . $segments['body'];
         }
         if (!empty($segments['headers'])) {
-            $data[] = "HEADERS: " . $segments['headers'];
+            $data[] = 'HEADERS: ' . $segments['headers'];
         }
 
         return implode("\n", $data);
@@ -436,7 +441,7 @@ class ThreatDetectionService
         // 'raw' is built last and scanned last — see detectThreatPatternsWithContext().
         $segments = ['path' => '', 'query' => '', 'body' => '', 'headers' => '', 'raw' => ''];
         $safeFields = config('threat-detection.safe_fields', []);
-        $safePaths  = config('threat-detection.safe_paths', []);
+        $safePaths = config('threat-detection.safe_paths', []);
 
         // The request path itself. Roughly twenty shipped patterns are
         // path-shaped (/.env, /.git/, /actuator, vendor/phpunit/phpunit,
@@ -499,7 +504,7 @@ class ThreatDetectionService
         // (Bearer/JWT tokens) is not logged as a high-severity token threat.
         $headers = collect($request->headers->all())
             ->except(['cookie', 'authorization', 'x-xsrf-token', 'accept-language', 'accept-encoding', 'connection', 'host', 'referer', 'origin'])
-            ->map(fn($v) => is_array($v) ? implode('; ', array_slice($v, 0, 2)) : $v);
+            ->map(fn ($v) => is_array($v) ? implode('; ', array_slice($v, 0, 2)) : $v);
 
         if ($headers->isNotEmpty()) {
             $segments['headers'] = json_encode($headers, self::SEGMENT_JSON_FLAGS);
@@ -598,6 +603,7 @@ class ThreatDetectionService
                 $out[$key] = $value;
             }
         }
+
         return $out;
     }
 
@@ -617,6 +623,7 @@ class ThreatDetectionService
         // Decode Unicode escape sequences: \u003c → <
         $normalized = preg_replace_callback('/\\\\u([0-9a-fA-F]{4})/', function ($m) {
             $code = hexdec($m[1]);
+
             return $code < 128 ? chr($code) : $m[0];
         }, $normalized);
 
@@ -1042,6 +1049,7 @@ class ThreatDetectionService
                         ];
                     }
                 }
+
                 continue;
             }
 
@@ -1247,6 +1255,7 @@ class ThreatDetectionService
                 Log::warning("Threat detection: DDoS detection is disabled because cache driver '{$driver}' does not support atomic increment. Use redis or memcached.");
                 self::$ddosCacheWarned = true;
             }
+
             return false;
         }
 
@@ -1254,9 +1263,11 @@ class ThreatDetectionService
             $key = "ddos:$ip";
             Cache::add($key, 0, now()->addSeconds($this->ddosWindowSeconds));
             $count = Cache::increment($key);
+
             return $count > $this->ddosThreshold;
         } catch (\Throwable $e) {
             Log::error('Threat detection DDoS check failed: ' . $e->getMessage());
+
             return false;
         }
     }
@@ -1266,7 +1277,9 @@ class ThreatDetectionService
         $type = '[ddos] Excessive Requests';
         $level = 'high';
 
-        if ($this->isRecentlyLogged($ip, $type)) return;
+        if ($this->isRecentlyLogged($ip, $type)) {
+            return;
+        }
 
         // Mark only after the write succeeds. v1.3.1 made this change for the
         // main detection path but not for this one, so a failed DDoS insert
@@ -1319,12 +1332,14 @@ class ThreatDetectionService
             foreach ($keywords as $keyword) {
                 if (str_contains($labelLower, strtolower($keyword))) {
                     self::$threatLevelCache[$label] = $level;
+
                     return $level;
                 }
             }
         }
 
         self::$threatLevelCache[$label] = 'low';
+
         return 'low';
     }
 
@@ -1499,6 +1514,7 @@ class ThreatDetectionService
         foreach (config('threat-detection.custom_patterns', []) as $regex => $entry) {
             if (@preg_match($regex, '') === false) {
                 Log::warning("Threat detection: invalid custom pattern skipped: {$regex}");
+
                 continue;
             }
 
@@ -1508,6 +1524,7 @@ class ThreatDetectionService
 
             if (!is_array($entry) || !is_string($entry['label'] ?? null) || $entry['label'] === '') {
                 Log::warning("Threat detection: custom pattern without a label skipped: {$regex}");
+
                 continue;
             }
 
@@ -1581,6 +1598,7 @@ class ThreatDetectionService
     }
 
     private static ?array $cachedScanners = null;
+
     private static ?array $cachedBots = null;
 
     private function detectSuspiciousUserAgent(string $userAgent): array
@@ -1605,6 +1623,7 @@ class ThreatDetectionService
                     return $this->fullUserAgentScan($userAgentLower, $userAgent);
                 }
             }
+
             return $threats;
         }
 
@@ -1617,82 +1636,82 @@ class ThreatDetectionService
 
         if (self::$cachedScanners === null) {
             self::$cachedScanners = [
-            // Existing scanners
-            'sqlmap' => ['label' => 'SQLMap Scanner', 'level' => 'high'],
-            'nikto' => ['label' => 'Nikto Scanner', 'level' => 'high'],
-            'nmap' => ['label' => 'Nmap Scanner', 'level' => 'high'],
-            'acunetix' => ['label' => 'Acunetix Scanner', 'level' => 'high'],
-            'wpscan' => ['label' => 'WPScan Tool', 'level' => 'medium'],
-            'nessus' => ['label' => 'Nessus Scanner', 'level' => 'high'],
-            'openvas' => ['label' => 'OpenVAS Scanner', 'level' => 'high'],
-            'nuclei' => ['label' => 'Nuclei Scanner', 'level' => 'high'],
-            'burp' => ['label' => 'Burp Suite', 'level' => 'medium'],
-            // 'owasp zap'/'zaproxy' rather than bare 'zap' — avoids matching
-            // legitimate integration UAs such as "Zapier".
-            'owasp zap' => ['label' => 'OWASP ZAP', 'level' => 'medium'],
-            'zaproxy' => ['label' => 'OWASP ZAP', 'level' => 'medium'],
-            'metasploit' => ['label' => 'Metasploit', 'level' => 'high'],
-            'w3af' => ['label' => 'W3AF Scanner', 'level' => 'high'],
-            'havij' => ['label' => 'Havij SQLi Tool', 'level' => 'high'],
-            'dirbuster' => ['label' => 'DirBuster', 'level' => 'medium'],
-            'gobuster' => ['label' => 'GoBuster', 'level' => 'medium'],
+                // Existing scanners
+                'sqlmap' => ['label' => 'SQLMap Scanner', 'level' => 'high'],
+                'nikto' => ['label' => 'Nikto Scanner', 'level' => 'high'],
+                'nmap' => ['label' => 'Nmap Scanner', 'level' => 'high'],
+                'acunetix' => ['label' => 'Acunetix Scanner', 'level' => 'high'],
+                'wpscan' => ['label' => 'WPScan Tool', 'level' => 'medium'],
+                'nessus' => ['label' => 'Nessus Scanner', 'level' => 'high'],
+                'openvas' => ['label' => 'OpenVAS Scanner', 'level' => 'high'],
+                'nuclei' => ['label' => 'Nuclei Scanner', 'level' => 'high'],
+                'burp' => ['label' => 'Burp Suite', 'level' => 'medium'],
+                // 'owasp zap'/'zaproxy' rather than bare 'zap' — avoids matching
+                // legitimate integration UAs such as "Zapier".
+                'owasp zap' => ['label' => 'OWASP ZAP', 'level' => 'medium'],
+                'zaproxy' => ['label' => 'OWASP ZAP', 'level' => 'medium'],
+                'metasploit' => ['label' => 'Metasploit', 'level' => 'high'],
+                'w3af' => ['label' => 'W3AF Scanner', 'level' => 'high'],
+                'havij' => ['label' => 'Havij SQLi Tool', 'level' => 'high'],
+                'dirbuster' => ['label' => 'DirBuster', 'level' => 'medium'],
+                'gobuster' => ['label' => 'GoBuster', 'level' => 'medium'],
 
-            // Phase 3: Additional security scanners
-            'arachni' => ['label' => 'Arachni Scanner', 'level' => 'high'],
-            'netsparker' => ['label' => 'Netsparker Scanner', 'level' => 'high'],
-            'qualys' => ['label' => 'Qualys Scanner', 'level' => 'high'],
-            'skipfish' => ['label' => 'Skipfish Scanner', 'level' => 'high'],
-            'vega/' => ['label' => 'Vega Scanner', 'level' => 'high'],
-            'wapiti' => ['label' => 'Wapiti Scanner', 'level' => 'high'],
-            'joomscan' => ['label' => 'JoomScan Scanner', 'level' => 'high'],
-            'droopescan' => ['label' => 'DroopeScan Scanner', 'level' => 'high'],
-            'commix' => ['label' => 'Commix Tool', 'level' => 'high'],
-            'xsstrike' => ['label' => 'XSStrike Tool', 'level' => 'high'],
-            'dalfox' => ['label' => 'Dalfox XSS Scanner', 'level' => 'high'],
-            'feroxbuster' => ['label' => 'FeroxBuster', 'level' => 'high'],
-            'ffuf' => ['label' => 'FFUF Fuzzer', 'level' => 'high'],
-            'httpx' => ['label' => 'HTTPX Scanner', 'level' => 'medium'],
-            'subfinder' => ['label' => 'Subfinder Tool', 'level' => 'medium'],
-            'katana' => ['label' => 'Katana Crawler', 'level' => 'medium'],
-            'jaeles' => ['label' => 'Jaeles Scanner', 'level' => 'high'],
-        ];
+                // Phase 3: Additional security scanners
+                'arachni' => ['label' => 'Arachni Scanner', 'level' => 'high'],
+                'netsparker' => ['label' => 'Netsparker Scanner', 'level' => 'high'],
+                'qualys' => ['label' => 'Qualys Scanner', 'level' => 'high'],
+                'skipfish' => ['label' => 'Skipfish Scanner', 'level' => 'high'],
+                'vega/' => ['label' => 'Vega Scanner', 'level' => 'high'],
+                'wapiti' => ['label' => 'Wapiti Scanner', 'level' => 'high'],
+                'joomscan' => ['label' => 'JoomScan Scanner', 'level' => 'high'],
+                'droopescan' => ['label' => 'DroopeScan Scanner', 'level' => 'high'],
+                'commix' => ['label' => 'Commix Tool', 'level' => 'high'],
+                'xsstrike' => ['label' => 'XSStrike Tool', 'level' => 'high'],
+                'dalfox' => ['label' => 'Dalfox XSS Scanner', 'level' => 'high'],
+                'feroxbuster' => ['label' => 'FeroxBuster', 'level' => 'high'],
+                'ffuf' => ['label' => 'FFUF Fuzzer', 'level' => 'high'],
+                'httpx' => ['label' => 'HTTPX Scanner', 'level' => 'medium'],
+                'subfinder' => ['label' => 'Subfinder Tool', 'level' => 'medium'],
+                'katana' => ['label' => 'Katana Crawler', 'level' => 'medium'],
+                'jaeles' => ['label' => 'Jaeles Scanner', 'level' => 'high'],
+            ];
         }
 
         if (self::$cachedBots === null) {
             self::$cachedBots = [
-            // Existing bots
-            'masscan' => ['label' => 'MassScan Tool', 'level' => 'high'],
-            'zgrab' => ['label' => 'ZGrab Scanner', 'level' => 'high'],
-            'shodan' => ['label' => 'Shodan Bot', 'level' => 'medium'],
-            'censys' => ['label' => 'Censys Bot', 'level' => 'medium'],
-            'python-requests' => ['label' => 'Python Script', 'level' => 'low'],
-            'curl/' => ['label' => 'cURL Command', 'level' => 'low'],
-            'wget/' => ['label' => 'wget Command', 'level' => 'low'],
-            'go-http-client' => ['label' => 'Go HTTP Client', 'level' => 'low'],
+                // Existing bots
+                'masscan' => ['label' => 'MassScan Tool', 'level' => 'high'],
+                'zgrab' => ['label' => 'ZGrab Scanner', 'level' => 'high'],
+                'shodan' => ['label' => 'Shodan Bot', 'level' => 'medium'],
+                'censys' => ['label' => 'Censys Bot', 'level' => 'medium'],
+                'python-requests' => ['label' => 'Python Script', 'level' => 'low'],
+                'curl/' => ['label' => 'cURL Command', 'level' => 'low'],
+                'wget/' => ['label' => 'wget Command', 'level' => 'low'],
+                'go-http-client' => ['label' => 'Go HTTP Client', 'level' => 'low'],
 
-            // Phase 3: Aggressive/abusive crawlers
-            'ahrefsbot' => ['label' => 'Ahrefs Bot', 'level' => 'low'],
-            'semrushbot' => ['label' => 'SEMRush Bot', 'level' => 'low'],
-            'mj12bot' => ['label' => 'Majestic Bot', 'level' => 'low'],
-            'dotbot' => ['label' => 'DotBot Crawler', 'level' => 'low'],
-            'petalbot' => ['label' => 'PetalBot Crawler', 'level' => 'low'],
+                // Phase 3: Aggressive/abusive crawlers
+                'ahrefsbot' => ['label' => 'Ahrefs Bot', 'level' => 'low'],
+                'semrushbot' => ['label' => 'SEMRush Bot', 'level' => 'low'],
+                'mj12bot' => ['label' => 'Majestic Bot', 'level' => 'low'],
+                'dotbot' => ['label' => 'DotBot Crawler', 'level' => 'low'],
+                'petalbot' => ['label' => 'PetalBot Crawler', 'level' => 'low'],
 
-            // Phase 3: AI scrapers
-            'gptbot' => ['label' => 'GPTBot AI Scraper', 'level' => 'low'],
-            'chatgpt-user' => ['label' => 'ChatGPT User Agent', 'level' => 'low'],
-            'claudebot' => ['label' => 'ClaudeBot AI Scraper', 'level' => 'low'],
-            'anthropic-ai' => ['label' => 'Anthropic AI Bot', 'level' => 'low'],
-            'bytespider' => ['label' => 'ByteSpider Crawler', 'level' => 'low'],
-            'cohere-ai' => ['label' => 'Cohere AI Bot', 'level' => 'low'],
-            'ccbot' => ['label' => 'Common Crawl Bot', 'level' => 'low'],
+                // Phase 3: AI scrapers
+                'gptbot' => ['label' => 'GPTBot AI Scraper', 'level' => 'low'],
+                'chatgpt-user' => ['label' => 'ChatGPT User Agent', 'level' => 'low'],
+                'claudebot' => ['label' => 'ClaudeBot AI Scraper', 'level' => 'low'],
+                'anthropic-ai' => ['label' => 'Anthropic AI Bot', 'level' => 'low'],
+                'bytespider' => ['label' => 'ByteSpider Crawler', 'level' => 'low'],
+                'cohere-ai' => ['label' => 'Cohere AI Bot', 'level' => 'low'],
+                'ccbot' => ['label' => 'Common Crawl Bot', 'level' => 'low'],
 
-            // Phase 3: Headless browsers / automation
-            'headlesschrome' => ['label' => 'Headless Chrome', 'level' => 'medium'],
-            'phantomjs' => ['label' => 'PhantomJS Browser', 'level' => 'medium'],
-            'selenium' => ['label' => 'Selenium WebDriver', 'level' => 'medium'],
-            'puppeteer' => ['label' => 'Puppeteer Automation', 'level' => 'medium'],
-            'playwright' => ['label' => 'Playwright Automation', 'level' => 'medium'],
-        ];
+                // Phase 3: Headless browsers / automation
+                'headlesschrome' => ['label' => 'Headless Chrome', 'level' => 'medium'],
+                'phantomjs' => ['label' => 'PhantomJS Browser', 'level' => 'medium'],
+                'selenium' => ['label' => 'Selenium WebDriver', 'level' => 'medium'],
+                'puppeteer' => ['label' => 'Puppeteer Automation', 'level' => 'medium'],
+                'playwright' => ['label' => 'Playwright Automation', 'level' => 'medium'],
+            ];
         }
 
         foreach (self::$cachedScanners as $pattern => $info) {
@@ -1731,10 +1750,10 @@ class ThreatDetectionService
                 'user_agent' => $userAgent,
             ]);
 
-            if (class_exists(\Illuminate\Notifications\Messages\SlackMessage::class)) {
+            if (class_exists(SlackMessage::class)) {
                 Notification::route('slack', $webhookUrl)->notify($alert);
             } else {
-                \Illuminate\Support\Facades\Http::post($webhookUrl, $alert->toWebhookPayload());
+                Http::post($webhookUrl, $alert->toWebhookPayload());
             }
         } catch (\Throwable $e) {
             Log::error('Failed to send threat notification: ' . $e->getMessage());

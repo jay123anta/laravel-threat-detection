@@ -2,14 +2,15 @@
 
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
-use JayAnta\ThreatDetection\Tests\TestCase;
-use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
 use JayAnta\ThreatDetection\Events\DdosThresholdExceeded;
 use JayAnta\ThreatDetection\Facades\ThreatDetection;
+use JayAnta\ThreatDetection\Tests\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 
 /**
  * Operator-side refusal helpers (#4).
@@ -20,7 +21,7 @@ use JayAnta\ThreatDetection\Facades\ThreatDetection;
  * at match time, and the DdosThresholdExceeded event is throttled to once
  * per window.
  */
-class Phase18OperatorHelpersTest extends TestCase
+class OperatorHelpersTest extends TestCase
 {
     protected function setUp(): void
     {
@@ -112,7 +113,7 @@ class Phase18OperatorHelpersTest extends TestCase
     {
         config(['threat-detection.blocklisted_ips' => ['203.0.113.7']]);
 
-        Route::middleware('threat-detect')->get('/open-page', fn() => response('OK', 200));
+        Route::middleware('threat-detect')->get('/open-page', fn () => response('OK', 200));
 
         $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.7'])
             ->get('/open-page')
@@ -124,7 +125,7 @@ class Phase18OperatorHelpersTest extends TestCase
     {
         config(['threat-detection.whitelisted_ips' => [' 10.9.9.9 ']]);
 
-        Route::middleware('threat-detect')->get('/scan-me', fn() => response('OK', 200));
+        Route::middleware('threat-detect')->get('/scan-me', fn () => response('OK', 200));
 
         $this->withServerVariables(['REMOTE_ADDR' => '10.9.9.9'])
             ->get('/scan-me?q=' . urlencode('<script>alert(1)</script>'))
@@ -147,7 +148,7 @@ class Phase18OperatorHelpersTest extends TestCase
         config(['threat-detection.blocklisted_ips' => ['203.0.113.0/24']]);
 
         Route::middleware([RecipeEnforcementMiddleware::class, 'threat-detect'])
-            ->get('/guarded', fn() => response('OK', 200));
+            ->get('/guarded', fn () => response('OK', 200));
 
         $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.7'])
             ->get('/guarded')
@@ -164,7 +165,7 @@ class Phase18OperatorHelpersTest extends TestCase
         Cache::put('ddos:203.0.113.9', 10, now()->addSeconds(60));
 
         Route::middleware([RecipeEnforcementMiddleware::class, 'threat-detect'])
-            ->get('/guarded', fn() => response('OK', 200));
+            ->get('/guarded', fn () => response('OK', 200));
 
         $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.9'])
             ->get('/guarded')
@@ -213,7 +214,7 @@ class Phase18OperatorHelpersTest extends TestCase
 
         Cache::put('ddos:203.0.113.9', 3, now()->addSeconds(60));
 
-        $request = \Illuminate\Http\Request::create('/flood', 'GET');
+        $request = Request::create('/flood', 'GET');
         $request->server->set('REMOTE_ADDR', '203.0.113.9');
 
         ThreatDetection::detectAndLogFromRequest($request);

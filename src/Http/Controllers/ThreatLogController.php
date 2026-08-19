@@ -6,9 +6,10 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Response;
-use JayAnta\ThreatDetection\Services\ThreatDetectionService;
 use JayAnta\ThreatDetection\Services\ExclusionRuleService;
+use JayAnta\ThreatDetection\Services\ThreatDetectionService;
 
 class ThreatLogController extends Controller
 {
@@ -24,7 +25,7 @@ class ThreatLogController extends Controller
         try {
             return $callback();
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('Threat detection API error: ' . $e->getMessage());
+            Log::error('Threat detection API error: ' . $e->getMessage());
 
             return response()->json([
                 'success' => false,
@@ -85,7 +86,7 @@ class ThreatLogController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => $query->latest()->paginate($request->get('per_page', 20))
+                'data' => $query->latest()->paginate($request->get('per_page', 20)),
             ]);
         });
     }
@@ -130,9 +131,9 @@ class ThreatLogController extends Controller
                 ->get();
 
             $byDate = DB::table($this->table)
-                ->selectRaw("CAST(created_at AS DATE) as date, COUNT(*) as count")
+                ->selectRaw('CAST(created_at AS DATE) as date, COUNT(*) as count')
                 ->where('created_at', '>=', now()->subDays(30))
-                ->groupByRaw("CAST(created_at AS DATE)")
+                ->groupByRaw('CAST(created_at AS DATE)')
                 ->orderBy('date', 'asc')
                 ->get();
 
@@ -145,7 +146,7 @@ class ThreatLogController extends Controller
                     'byCountry' => $byCountry,
                     'byCloudProvider' => $byCloudProvider,
                     'byDate' => $byDate,
-                ]
+                ],
             ]);
         });
     }
@@ -157,15 +158,15 @@ class ThreatLogController extends Controller
             $lastHour = now()->subHour();
 
             $row = DB::table($this->table)
-                ->selectRaw("COUNT(*) as total_threats")
+                ->selectRaw('COUNT(*) as total_threats')
                 ->selectRaw("SUM(CASE WHEN threat_level = 'high' THEN 1 ELSE 0 END) as high_severity")
                 ->selectRaw("SUM(CASE WHEN threat_level = 'medium' THEN 1 ELSE 0 END) as medium_severity")
                 ->selectRaw("SUM(CASE WHEN threat_level = 'low' THEN 1 ELSE 0 END) as low_severity")
-                ->selectRaw("COUNT(DISTINCT ip_address) as unique_ips")
-                ->selectRaw("COUNT(DISTINCT CASE WHEN is_foreign = 1 THEN ip_address END) as foreign_ips")
-                ->selectRaw("SUM(CASE WHEN cloud_provider IS NOT NULL THEN 1 ELSE 0 END) as cloud_attacks")
-                ->selectRaw("SUM(CASE WHEN DATE(created_at) = ? THEN 1 ELSE 0 END) as today", [$today])
-                ->selectRaw("SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as last_hour", [$lastHour])
+                ->selectRaw('COUNT(DISTINCT ip_address) as unique_ips')
+                ->selectRaw('COUNT(DISTINCT CASE WHEN is_foreign = 1 THEN ip_address END) as foreign_ips')
+                ->selectRaw('SUM(CASE WHEN cloud_provider IS NOT NULL THEN 1 ELSE 0 END) as cloud_attacks')
+                ->selectRaw('SUM(CASE WHEN DATE(created_at) = ? THEN 1 ELSE 0 END) as today', [$today])
+                ->selectRaw('SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as last_hour', [$lastHour])
                 ->first();
 
             $stats = [
@@ -182,7 +183,7 @@ class ThreatLogController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => $stats
+                'data' => $stats,
             ]);
         });
     }
@@ -196,7 +197,7 @@ class ThreatLogController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => ['count' => $count]
+                'data' => ['count' => $count],
             ]);
         });
     }
@@ -214,7 +215,7 @@ class ThreatLogController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => $threat
+                'data' => $threat,
             ]);
         });
     }
@@ -253,7 +254,7 @@ class ThreatLogController extends Controller
                         'medium' => $levelBreakdown['medium'] ?? 0,
                         'low' => $levelBreakdown['low'] ?? 0,
                     ],
-                ]
+                ],
             ]);
         });
     }
@@ -284,7 +285,7 @@ class ThreatLogController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => $data
+                'data' => $data,
             ]);
         });
     }
@@ -347,7 +348,7 @@ class ThreatLogController extends Controller
                 'Content-Disposition' => "attachment; filename=\"$filename\"",
             ]);
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('Threat detection API error: ' . $e->getMessage());
+            Log::error('Threat detection API error: ' . $e->getMessage());
 
             return response()->json([
                 'success' => false,
@@ -369,7 +370,7 @@ class ThreatLogController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => $data
+                'data' => $data,
             ]);
         });
     }
@@ -386,7 +387,7 @@ class ThreatLogController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => $data
+                'data' => $data,
             ]);
         });
     }
@@ -407,7 +408,7 @@ class ThreatLogController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => $data
+                'data' => $data,
             ]);
         });
     }
@@ -428,7 +429,7 @@ class ThreatLogController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => $data
+                'data' => $data,
             ]);
         });
     }

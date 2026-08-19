@@ -2,10 +2,10 @@
 
 namespace JayAnta\ThreatDetection\Tests\Unit;
 
+use Illuminate\Support\Facades\DB;
 use JayAnta\ThreatDetection\Services\ExclusionRuleService;
 use JayAnta\ThreatDetection\Tests\TestCase;
 use PHPUnit\Framework\Attributes\Test;
-use Illuminate\Support\Facades\DB;
 
 class ExclusionRuleServiceTest extends TestCase
 {
@@ -16,7 +16,7 @@ class ExclusionRuleServiceTest extends TestCase
         parent::setUp();
         $this->createThreatLogsTable();
         $this->createExclusionRulesTable();
-        $this->service = new ExclusionRuleService();
+        $this->service = new ExclusionRuleService;
     }
 
     #[Test]

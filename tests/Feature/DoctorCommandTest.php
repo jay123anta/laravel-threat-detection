@@ -5,6 +5,7 @@ namespace JayAnta\ThreatDetection\Tests\Feature;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
+use JayAnta\ThreatDetection\Services\ThreatDetectionService;
 use JayAnta\ThreatDetection\Tests\TestCase;
 use PHPUnit\Framework\Attributes\Test;
 
@@ -14,7 +15,7 @@ use PHPUnit\Framework\Attributes\Test;
  * dashboard simply stayed empty, which reads as "no attacks" rather than
  * "nothing is being recorded".
  */
-class Phase15DoctorCommandTest extends TestCase
+class DoctorCommandTest extends TestCase
 {
     protected function setUp(): void
     {
@@ -31,7 +32,7 @@ class Phase15DoctorCommandTest extends TestCase
         ]);
 
         // The middleware check looks for a route or group carrying it.
-        Route::middleware('threat-detect')->get('/doctor-probe', fn() => 'OK');
+        Route::middleware('threat-detect')->get('/doctor-probe', fn () => 'OK');
     }
 
     private function healthySchema(): void
@@ -129,7 +130,7 @@ class Phase15DoctorCommandTest extends TestCase
     {
         $this->healthySchema();
 
-        $service = app(\JayAnta\ThreatDetection\Services\ThreatDetectionService::class);
+        $service = app(ThreatDetectionService::class);
         $regex = array_search('Localhost SSRF', $service->getDefaultThreatPatterns(), true);
 
         config(['threat-detection.custom_patterns' => [$regex => 'Localhost SSRF']]);

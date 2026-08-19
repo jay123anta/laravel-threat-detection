@@ -2,11 +2,15 @@
 
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Route;
+use JayAnta\ThreatDetection\Events\ThreatDetected;
+use JayAnta\ThreatDetection\Jobs\StoreThreatLog;
 use JayAnta\ThreatDetection\Tests\TestCase;
 use PHPUnit\Framework\Attributes\Test;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Cache;
 
 /**
  * Full-cycle evasion resistance tests.
@@ -44,8 +48,8 @@ class EvasionResistanceTest extends TestCase
 
         // Register a test route behind the middleware
         Route::middleware('threat-detect')->group(function () {
-            Route::get('/evasion-test', fn() => response('OK', 200));
-            Route::post('/evasion-test', fn() => response('OK', 200));
+            Route::get('/evasion-test', fn () => response('OK', 200));
+            Route::post('/evasion-test', fn () => response('OK', 200));
         });
     }
 
@@ -353,14 +357,14 @@ class EvasionResistanceTest extends TestCase
     #[Test]
     public function full_cycle_threat_detected_event_is_dispatched(): void
     {
-        \Illuminate\Support\Facades\Event::fake([
-            \JayAnta\ThreatDetection\Events\ThreatDetected::class,
+        Event::fake([
+            ThreatDetected::class,
         ]);
 
         $this->get('/evasion-test?q=UNION/**/SELECT');
 
-        \Illuminate\Support\Facades\Event::assertDispatched(
-            \JayAnta\ThreatDetection\Events\ThreatDetected::class,
+        Event::assertDispatched(
+            ThreatDetected::class,
             function ($event) {
                 return $event->threatLevel === 'high'
                     && $event->ipAddress !== null
@@ -398,14 +402,14 @@ class EvasionResistanceTest extends TestCase
     #[Test]
     public function full_cycle_queue_mode_dispatches_job_instead_of_sync_insert(): void
     {
-        \Illuminate\Support\Facades\Queue::fake();
+        Queue::fake();
 
         config(['threat-detection.queue.enabled' => true]);
 
         $this->get('/evasion-test?q=UNION/**/SELECT');
 
-        \Illuminate\Support\Facades\Queue::assertPushed(
-            \JayAnta\ThreatDetection\Jobs\StoreThreatLog::class
+        Queue::assertPushed(
+            StoreThreatLog::class
         );
 
         // With queue faked, nothing should be in the DB

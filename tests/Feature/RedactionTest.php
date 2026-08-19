@@ -19,7 +19,7 @@ use PHPUnit\Framework\Attributes\Test;
  * exists to warn about — kept for the full retention period and readable by
  * anyone with dashboard or database access.
  */
-class Phase16RedactionTest extends TestCase
+class RedactionTest extends TestCase
 {
     /**
      * The dashboard routes are registered during boot, gated on this flag, so
@@ -55,9 +55,9 @@ class Phase16RedactionTest extends TestCase
         ]);
 
         Route::middleware('threat-detect')->group(function () {
-            Route::post('/profile', fn() => response('OK', 200));
-            Route::get('/profile', fn() => response('OK', 200));
-            Route::post('/search', fn() => response('OK', 200));
+            Route::post('/profile', fn () => response('OK', 200));
+            Route::get('/profile', fn () => response('OK', 200));
+            Route::post('/search', fn () => response('OK', 200));
         });
 
         ThreatDetectionService::flushCaches();

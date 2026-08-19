@@ -2,9 +2,9 @@
 
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
+use Illuminate\Support\Facades\DB;
 use JayAnta\ThreatDetection\Tests\TestCase;
 use PHPUnit\Framework\Attributes\Test;
-use Illuminate\Support\Facades\DB;
 
 class ApiEndpointTest extends TestCase
 {
@@ -17,7 +17,7 @@ class ApiEndpointTest extends TestCase
         // These tests cover what the endpoints *do*. Since 1.7.0 the two write
         // endpoints sit behind api.write_guard ('role' by default), so without
         // this they would all assert 403 and stop testing their own subject.
-        // The guard itself is covered by Phase17WriteGuardTest.
+        // The guard itself is covered by WriteGuardTest.
         config(['threat-detection.api.write_guard' => 'none']);
     }
 

@@ -2,10 +2,10 @@
 
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Route;
 use JayAnta\ThreatDetection\Tests\TestCase;
 use PHPUnit\Framework\Attributes\Test;
-use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Cache;
 
 /**
  * v1.5.0: Path-aware false-positive control (safe_paths).
@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Cache;
  * which exempts a key name everywhere it appears. Detection of everything else
  * is unchanged.
  */
-class Phase10SafePathsTest extends TestCase
+class SafePathsTest extends TestCase
 {
     protected function setUp(): void
     {
@@ -40,7 +40,7 @@ class Phase10SafePathsTest extends TestCase
             'cache.default' => 'array',
         ]);
 
-        Route::middleware('threat-detect')->post('/phase10-test', fn() => response('OK', 200));
+        Route::middleware('threat-detect')->post('/phase10-test', fn () => response('OK', 200));
     }
 
     protected function tearDown(): void

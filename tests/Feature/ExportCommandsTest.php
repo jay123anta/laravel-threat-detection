@@ -2,15 +2,15 @@
 
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use JayAnta\ThreatDetection\Tests\TestCase;
 use PHPUnit\Framework\Attributes\Test;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Cache;
 
 /**
  * Phase 6 v1.3.0: Full-cycle tests for fail2ban and blocklist export commands.
  */
-class Phase6ExportCommandsTest extends TestCase
+class ExportCommandsTest extends TestCase
 {
     protected function setUp(): void
     {

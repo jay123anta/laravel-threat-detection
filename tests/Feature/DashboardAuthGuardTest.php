@@ -2,13 +2,13 @@
 
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
-use JayAnta\ThreatDetection\Tests\TestCase;
-use PHPUnit\Framework\Attributes\Test;
-use JayAnta\ThreatDetection\Http\Middleware\ThreatDashboardAuthMiddleware;
-use Illuminate\Support\Facades\Route;
+use Illuminate\Foundation\Auth\User;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Route;
+use JayAnta\ThreatDetection\Tests\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 
 /**
  * Phase 7 v1.3.0: Full-cycle tests for dashboard auth guard.
@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Auth;
  * Tests four guard modes (none, auth, role, ip) for dashboard
  * and API routes. Uses minimal middleware to avoid encryption issues.
  */
-class Phase7DashboardAuthTest extends TestCase
+class DashboardAuthGuardTest extends TestCase
 {
     protected function setUp(): void
     {
@@ -29,10 +29,10 @@ class Phase7DashboardAuthTest extends TestCase
 
         // Register test routes with only the auth middleware (no full web stack)
         Route::middleware(['threat-dashboard-auth:dashboard'])
-            ->get('/test-dashboard', fn() => response('Dashboard OK', 200));
+            ->get('/test-dashboard', fn () => response('Dashboard OK', 200));
 
         Route::middleware(['threat-dashboard-auth:api'])
-            ->get('/test-api-endpoint', fn() => response('API OK', 200));
+            ->get('/test-api-endpoint', fn () => response('API OK', 200));
     }
 
     protected function tearDown(): void
@@ -63,7 +63,7 @@ class Phase7DashboardAuthTest extends TestCase
         $this->get('/test-dashboard');
 
         Log::shouldHaveReceived('warning')
-            ->withArgs(fn($msg) => str_contains($msg, 'without authentication'))
+            ->withArgs(fn ($msg) => str_contains($msg, 'without authentication'))
             ->once();
     }
 
@@ -92,7 +92,7 @@ class Phase7DashboardAuthTest extends TestCase
     {
         config(['threat-detection.dashboard.guard' => 'auth']);
 
-        $user = new \Illuminate\Foundation\Auth\User();
+        $user = new User;
         $user->id = 1;
 
         $this->actingAs($user)
@@ -113,7 +113,7 @@ class Phase7DashboardAuthTest extends TestCase
     {
         config(['threat-detection.api.guard' => 'auth']);
 
-        $user = new \Illuminate\Foundation\Auth\User();
+        $user = new User;
         $user->id = 1;
 
         $this->actingAs($user)
@@ -180,9 +180,14 @@ class Phase7DashboardAuthTest extends TestCase
         ]);
 
         // Create a user mock with hasRole method
-        $user = new class extends \Illuminate\Foundation\Auth\User {
+        $user = new class extends User
+        {
             public $id = 1;
-            public function hasRole(string $role): bool { return $role === 'admin'; }
+
+            public function hasRole(string $role): bool
+            {
+                return $role === 'admin';
+            }
         };
 
         $this->actingAs($user)
@@ -198,9 +203,14 @@ class Phase7DashboardAuthTest extends TestCase
             'threat-detection.dashboard.role' => 'admin',
         ]);
 
-        $user = new class extends \Illuminate\Foundation\Auth\User {
+        $user = new class extends User
+        {
             public $id = 2;
-            public function hasRole(string $role): bool { return false; }
+
+            public function hasRole(string $role): bool
+            {
+                return false;
+            }
         };
 
         $this->actingAs($user)

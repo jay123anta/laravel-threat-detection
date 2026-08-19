@@ -13,6 +13,5 @@ class ThreatDetected
         public readonly array $threatLog,
         public readonly ?string $ipAddress = null,
         public readonly ?string $threatLevel = null,
-    ) {
-    }
+    ) {}
 }

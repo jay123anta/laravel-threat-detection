@@ -25,6 +25,7 @@ class PurgeThreatLogsCommand extends Command
 
         if ($count === 0) {
             $this->info("No threat logs found older than {$days} days.");
+
             return 0;
         }
 
@@ -57,6 +58,7 @@ class PurgeThreatLogsCommand extends Command
         }
 
         $this->info('Purge cancelled.');
+
         return 0;
     }
 }

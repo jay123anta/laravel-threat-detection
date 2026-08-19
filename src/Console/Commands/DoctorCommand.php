@@ -3,8 +3,10 @@
 namespace JayAnta\ThreatDetection\Console\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Support\Facades\Schema;
 use JayAnta\ThreatDetection\Http\Middleware\ThreatDetectionMiddleware;
+use JayAnta\ThreatDetection\Services\ThreatDetectionService;
 
 /**
  * Checks that threat detection is actually working, not merely installed.
@@ -35,6 +37,7 @@ class DoctorCommand extends Command
     ];
 
     private int $failures = 0;
+
     private int $warnings = 0;
 
     public function handle(): int
@@ -255,7 +258,7 @@ class DoctorCommand extends Command
      */
     private function checkShadowedPatterns(): void
     {
-        $service = $this->laravel->make(\JayAnta\ThreatDetection\Services\ThreatDetectionService::class);
+        $service = $this->laravel->make(ThreatDetectionService::class);
 
         $builtIn = array_flip($service->getDefaultThreatPatterns());
         $shadowed = [];
@@ -309,7 +312,7 @@ class DoctorCommand extends Command
 
             $authed = $guard !== 'none' || array_filter(
                 $middleware,
-                fn($m) => is_string($m) && str_starts_with($m, 'auth')
+                fn ($m) => is_string($m) && str_starts_with($m, 'auth')
             );
 
             if ($authed) {
@@ -319,7 +322,7 @@ class DoctorCommand extends Command
             }
 
             $message = ucfirst($surface) . ' is enabled with no authentication — your threat data is public';
-            $fix = "Set THREAT_DETECTION_" . strtoupper($surface) . "_GUARD to auth, role or ip,"
+            $fix = 'Set THREAT_DETECTION_' . strtoupper($surface) . '_GUARD to auth, role or ip,'
                 . " or add an auth middleware to threat-detection.{$surface}.middleware.";
 
             $this->laravel->environment('production')
@@ -423,7 +426,7 @@ class DoctorCommand extends Command
      * forever and this package supports Laravel 10 through 13. It costs one
      * query per column, which is nothing for a diagnostic run by hand.
      *
-     * @param  string[] $wanted
+     * @param  string[]  $wanted
      * @return string[]
      */
     private function missingColumns(string $table, array $wanted): array
@@ -459,7 +462,7 @@ class DoctorCommand extends Command
         $needles = [ThreatDetectionMiddleware::class, 'threat-detect'];
 
         try {
-            $kernel = $this->laravel->make(\Illuminate\Contracts\Http\Kernel::class);
+            $kernel = $this->laravel->make(Kernel::class);
 
             if (method_exists($kernel, 'getGlobalMiddleware')) {
                 foreach ($kernel->getGlobalMiddleware() as $m) {

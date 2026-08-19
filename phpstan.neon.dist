@@ -1,0 +1,19 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+    - phpstan-baseline.neon
+
+parameters:
+    level: 5
+
+    paths:
+        - src
+        - config
+        - database
+        - routes
+
+    # Pre-existing findings live in phpstan-baseline.neon so the build gates on
+    # *new* problems from day one rather than waiting for a cleanup sweep.
+    # Shrink the baseline over time; never regenerate it to silence a new error.
+
+    excludePaths:
+        - database/migrations/*.stub

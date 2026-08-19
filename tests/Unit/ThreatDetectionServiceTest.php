@@ -2,12 +2,11 @@
 
 namespace JayAnta\ThreatDetection\Tests\Unit;
 
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use JayAnta\ThreatDetection\Services\ThreatDetectionService;
 use JayAnta\ThreatDetection\Tests\TestCase;
 use PHPUnit\Framework\Attributes\Test;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 
 class ThreatDetectionServiceTest extends TestCase
 {
@@ -16,7 +15,7 @@ class ThreatDetectionServiceTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->service = new ThreatDetectionService();
+        $this->service = new ThreatDetectionService;
     }
 
     #[Test]
@@ -51,7 +50,7 @@ class ThreatDetectionServiceTest extends TestCase
     #[Test]
     public function it_detects_xss_script_tag(): void
     {
-        $payload = "BODY: {\"msg\":\"<script>alert(1)</script>\"}";
+        $payload = 'BODY: {"msg":"<script>alert(1)</script>"}';
         $results = $this->service->detectThreatPatterns($payload);
 
         $labels = array_column($results, 0);
@@ -62,7 +61,7 @@ class ThreatDetectionServiceTest extends TestCase
     #[Test]
     public function it_detects_directory_traversal(): void
     {
-        $payload = "QUERY: {\"file\":\"../../etc/passwd\"}";
+        $payload = 'QUERY: {"file":"../../etc/passwd"}';
         $results = $this->service->detectThreatPatterns($payload);
 
         $labels = array_column($results, 0);
@@ -84,7 +83,7 @@ class ThreatDetectionServiceTest extends TestCase
     #[Test]
     public function it_returns_empty_for_normal_text(): void
     {
-        $payload = "QUERY: {\"search\":\"latest news\",\"page\":\"1\"}";
+        $payload = 'QUERY: {"search":"latest news","page":"1"}';
         $results = $this->service->detectThreatPatterns($payload);
 
         $this->assertEmpty($results, 'Normal text should not trigger any threat patterns');
@@ -109,7 +108,7 @@ class ThreatDetectionServiceTest extends TestCase
     #[Test]
     public function it_suppresses_auth_patterns_on_auth_paths(): void
     {
-        $payload = "BODY: password=mysecretpassword123";
+        $payload = 'BODY: password=mysecretpassword123';
 
         $withAuth = $this->service->detectThreatPatterns($payload, 'middleware', true);
         $withoutAuth = $this->service->detectThreatPatterns($payload, 'middleware', false);
@@ -130,7 +129,7 @@ class ThreatDetectionServiceTest extends TestCase
         config(['threat-detection.ddos.threshold' => 3]);
         config(['threat-detection.ddos.window' => 60]);
 
-        $service = new ThreatDetectionService();
+        $service = new ThreatDetectionService;
 
         // Pre-fill cache to simulate requests just below threshold
         Cache::put('ddos:10.0.0.1', 3, now()->addSeconds(60));
@@ -163,7 +162,7 @@ class ThreatDetectionServiceTest extends TestCase
     #[Test]
     public function it_detects_sql_char_encoding(): void
     {
-        $segments = ['query' => "CHAR(39)"];
+        $segments = ['query' => 'CHAR(39)'];
         $matches = $this->service->detectThreatPatternsWithContext($segments);
 
         $labels = array_column($matches, 'label');

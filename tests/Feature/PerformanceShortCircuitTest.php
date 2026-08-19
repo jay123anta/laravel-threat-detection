@@ -2,11 +2,11 @@
 
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
-use JayAnta\ThreatDetection\Tests\TestCase;
-use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Cache;
+use JayAnta\ThreatDetection\Tests\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 
 /**
  * Phase 4 v1.3.0: Full-cycle tests for performance optimizations.
@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Cache;
  * Tests early bailout (no suspicious chars = skip regex),
  * batch DB inserts, and max_detections_per_request cap.
  */
-class Phase4PerformanceTest extends TestCase
+class PerformanceShortCircuitTest extends TestCase
 {
     protected function setUp(): void
     {
@@ -39,8 +39,8 @@ class Phase4PerformanceTest extends TestCase
         ]);
 
         Route::middleware('threat-detect')->group(function () {
-            Route::get('/perf-test', fn() => response('OK', 200));
-            Route::post('/perf-test', fn() => response('OK', 200));
+            Route::get('/perf-test', fn () => response('OK', 200));
+            Route::post('/perf-test', fn () => response('OK', 200));
         });
     }
 
@@ -96,7 +96,7 @@ class Phase4PerformanceTest extends TestCase
     public function full_cycle_multiple_threats_stored_in_single_request(): void
     {
         // This payload triggers multiple patterns at once
-        $this->get("/perf-test?q=UNION+SELECT+*+FROM+users--");
+        $this->get('/perf-test?q=UNION+SELECT+*+FROM+users--');
 
         // Should have multiple entries from one request
         $count = DB::table('threat_logs')->count();
@@ -111,7 +111,7 @@ class Phase4PerformanceTest extends TestCase
     public function full_cycle_batch_insert_preserves_all_threat_types(): void
     {
         // Payload that triggers SQL + other patterns
-        $this->call('POST', '/perf-test', ['q' => "UNION SELECT * FROM users; DROP TABLE users"]);
+        $this->call('POST', '/perf-test', ['q' => 'UNION SELECT * FROM users; DROP TABLE users']);
 
         // Verify specific types are all present
         $this->assertDatabaseHas('threat_logs', ['type' => '[middleware] SQL Injection UNION']);
@@ -129,7 +129,7 @@ class Phase4PerformanceTest extends TestCase
 
         // Payload that would normally trigger 5+ patterns
         $this->call('POST', '/perf-test', [
-            'q' => "UNION SELECT * FROM users; DROP TABLE sessions; <script>alert(1)</script>",
+            'q' => 'UNION SELECT * FROM users; DROP TABLE sessions; <script>alert(1)</script>',
         ]);
 
         // Context matches should be capped at 2 (but bot detection runs separately)
@@ -146,7 +146,7 @@ class Phase4PerformanceTest extends TestCase
         config(['threat-detection.max_detections_per_request' => 0]);
 
         $this->call('POST', '/perf-test', [
-            'q' => "UNION SELECT * FROM users; DROP TABLE sessions",
+            'q' => 'UNION SELECT * FROM users; DROP TABLE sessions',
         ]);
 
         // Should log all matches without cap

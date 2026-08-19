@@ -3,6 +3,7 @@
 namespace JayAnta\ThreatDetection\Facades;
 
 use Illuminate\Support\Facades\Facade;
+use JayAnta\ThreatDetection\Services\ThreatDetectionService;
 
 /**
  * @method static void detectAndLogFromRequest(\Illuminate\Http\Request $request)
@@ -19,7 +20,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static int ddosRequestCount(string $ip)
  * @method static bool isDdosThresholdExceeded(string $ip)
  *
- * @see \JayAnta\ThreatDetection\Services\ThreatDetectionService
+ * @see ThreatDetectionService
  */
 class ThreatDetection extends Facade
 {

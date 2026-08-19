@@ -13,7 +13,7 @@ class ConfidenceScorerTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->scorer = new ConfidenceScorer();
+        $this->scorer = new ConfidenceScorer;
     }
 
     #[Test]

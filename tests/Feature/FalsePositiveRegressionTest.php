@@ -2,10 +2,11 @@
 
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
+use Illuminate\Foundation\Auth\User;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Route;
 use JayAnta\ThreatDetection\Tests\TestCase;
 use PHPUnit\Framework\Attributes\Test;
-use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Cache;
 
 /**
  * v1.3.1: Full-cycle regression tests for the correctness / false-positive
@@ -21,7 +22,7 @@ use Illuminate\Support\Facades\Cache;
  *  - corrected severities
  *  - the dashboard/API guard fails closed on misconfiguration
  */
-class Phase9V131FixesTest extends TestCase
+class FalsePositiveRegressionTest extends TestCase
 {
     protected function setUp(): void
     {
@@ -46,12 +47,12 @@ class Phase9V131FixesTest extends TestCase
         ]);
 
         Route::middleware('threat-detect')->group(function () {
-            Route::get('/phase9-test', fn() => response('OK', 200));
-            Route::post('/phase9-test', fn() => response('OK', 200));
+            Route::get('/phase9-test', fn () => response('OK', 200));
+            Route::post('/phase9-test', fn () => response('OK', 200));
         });
 
         Route::middleware(['threat-dashboard-auth:dashboard'])
-            ->get('/phase9-dashboard', fn() => response('Dashboard OK', 200));
+            ->get('/phase9-dashboard', fn () => response('Dashboard OK', 200));
     }
 
     protected function tearDown(): void
@@ -227,7 +228,7 @@ class Phase9V131FixesTest extends TestCase
     }
 
     #[Test]
-    public function role_guard_without_hasRole_method_fails_closed(): void
+    public function role_guard_without_has_role_method_fails_closed(): void
     {
         config([
             'threat-detection.dashboard.guard' => 'role',
@@ -235,7 +236,7 @@ class Phase9V131FixesTest extends TestCase
         ]);
 
         // Plain user model with no hasRole() — cannot verify the role.
-        $user = new \Illuminate\Foundation\Auth\User();
+        $user = new User;
         $user->id = 1;
 
         $this->actingAs($user)

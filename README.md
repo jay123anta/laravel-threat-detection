@@ -1,9 +1,11 @@
 <p align="center">
-  <img src="https://img.shields.io/packagist/v/jayanta/laravel-threat-detection.svg?style=flat-square" alt="Latest Version">
-  <img src="https://img.shields.io/github/actions/workflow/status/jay123anta/laravel-threat-detection/tests.yml?branch=main&style=flat-square&label=tests" alt="Tests">
-  <img src="https://img.shields.io/packagist/dt/jayanta/laravel-threat-detection.svg?style=flat-square" alt="Total Downloads">
-  <img src="https://img.shields.io/packagist/php-v/jayanta/laravel-threat-detection?style=flat-square" alt="PHP Version">
-  <img src="https://img.shields.io/packagist/l/jayanta/laravel-threat-detection.svg?style=flat-square" alt="License">
+  <a href="https://packagist.org/packages/jayanta/laravel-threat-detection"><img src="https://img.shields.io/packagist/v/jayanta/laravel-threat-detection.svg?style=flat-square" alt="Latest Version"></a>
+  <a href="https://github.com/jay123anta/laravel-threat-detection/actions/workflows/tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/jay123anta/laravel-threat-detection/tests.yml?branch=main&style=flat-square&label=tests" alt="Tests"></a>
+  <a href="https://github.com/jay123anta/laravel-threat-detection/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/PHPStan-level%205-brightgreen?style=flat-square" alt="PHPStan Level 5"></a>
+  <a href="https://github.com/jay123anta/laravel-threat-detection/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/code%20style-Pint-orange?style=flat-square" alt="Code Style Pint"></a>
+  <a href="https://packagist.org/packages/jayanta/laravel-threat-detection"><img src="https://img.shields.io/packagist/dt/jayanta/laravel-threat-detection.svg?style=flat-square" alt="Total Downloads"></a>
+  <a href="https://packagist.org/packages/jayanta/laravel-threat-detection"><img src="https://img.shields.io/packagist/php-v/jayanta/laravel-threat-detection?style=flat-square" alt="PHP Version"></a>
+  <a href="https://github.com/jay123anta/laravel-threat-detection/blob/main/LICENSE"><img src="https://img.shields.io/packagist/l/jayanta/laravel-threat-detection.svg?style=flat-square" alt="License"></a>
 </p>
 
 # Laravel Threat Detection
@@ -24,6 +26,8 @@ probing your routes, how often, and with what techniques.
 
 > Extracted from a production app and battle-tested on real traffic. 335 tests, no runtime
 > dependencies beyond Laravel itself, and no internet connection required for detection.
+>
+> Upgrading? See [UPGRADING.md](UPGRADING.md). Contributing? See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Get started in under a minute
 
@@ -94,6 +98,28 @@ increasing order of effort:
 The package supplies the intelligence; you supply the refusal. That split is
 deliberate — enforcement code that lives in your app is code you can read,
 test and turn off, and it means a detection bug can never take your site down.
+
+
+### How it compares to other Laravel security packages
+
+These solve different problems and compose well — the table is about picking the
+right tool, not winning.
+
+| Package | What it does | Blocks? | Use it when |
+|---|---|:---:|---|
+| **this package** | Scans every request against 150+ patterns, logs with full app context | ❌ | You want to *see* what's being tried on your app |
+| `spatie/laravel-honeypot` | Hidden form field that catches spam bots | ✅ form only | You have public forms getting spammed |
+| `graham-campbell/security` | Strips XSS-ish markup from input | ✅ mutates | You want naive input sanitising |
+| `spatie/laravel-csp` | Sends Content-Security-Policy headers | ✅ browser | You want to constrain what the browser loads |
+| `laravel/fortify` + rate limits | Auth throttling and lockout | ✅ | You need brute-force protection on login |
+| Cloudflare / mod_security | Edge WAF, blocks before your app | ✅ | You want traffic stopped before it arrives |
+
+The honest summary: a honeypot catches form spam, a WAF blocks known-bad traffic
+at the edge, and CSP constrains the browser. **None of them tell you what an
+attacker tried against your specific routes, with the payload decoded and the
+authenticated user attached.** That gap is what this fills — and it's why the
+package deliberately doesn't block: you can run it alongside all of the above
+without any of them fighting each other.
 
 ---
 

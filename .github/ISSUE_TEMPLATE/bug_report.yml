@@ -1,0 +1,67 @@
+name: Bug report
+description: Something detects wrongly, doesn't detect, or errors
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Found a security vulnerability?** Don't file it here — see
+        [SECURITY.md](../blob/main/SECURITY.md).
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `php artisan threat-detection:doctor`
+      description: >
+        Please run this first. It catches the causes of most reports —
+        a stale schema silently discarding every threat, config that predates
+        your installed version, a pattern shadowing a built-in one.
+      render: shell
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of problem is it?
+      options:
+        - Something malicious was NOT detected (false negative)
+        - Ordinary traffic WAS detected (false positive)
+        - An error or exception
+        - Dashboard or API problem
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: request
+    attributes:
+      label: The request involved
+      description: >
+        Method, path, and the payload if you can share it. **Redact anything
+        real** — credentials, personal data, customer identifiers.
+      render: http
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what happened
+    validations:
+      required: true
+
+  - type: input
+    id: versions
+    attributes:
+      label: Package / Laravel / PHP versions
+      placeholder: "v1.7.0 / Laravel 12.66 / PHP 8.3"
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant config
+      description: Any non-default values from config/threat-detection.php.
+      render: php

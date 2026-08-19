@@ -13,8 +13,8 @@ class ConfidenceScorer
     ];
 
     /**
-     * @param array  $matches        [label, threatLevel, sourceTag] tuples
-     * @param string $sensitivityMode 'strict'|'balanced'|'relaxed'
+     * @param  array  $matches  [label, threatLevel, sourceTag] tuples
+     * @param  string  $sensitivityMode  'strict'|'balanced'|'relaxed'
      * @return array{score: int, label: string}
      */
     public function calculate(

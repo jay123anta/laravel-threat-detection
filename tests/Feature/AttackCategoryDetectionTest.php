@@ -2,11 +2,11 @@
 
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
-use JayAnta\ThreatDetection\Tests\TestCase;
-use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Cache;
+use JayAnta\ThreatDetection\Tests\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 
 /**
  * Phase 2 v1.3.0: Full-cycle tests for missing attack categories.
@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Cache;
  * HTTP smuggling, additional SQL patterns, GraphQL introspection,
  * prototype pollution, SSI injection, DNS rebinding, and exploit probes.
  */
-class Phase2AttackCategoriesTest extends TestCase
+class AttackCategoryDetectionTest extends TestCase
 {
     protected function setUp(): void
     {
@@ -39,8 +39,8 @@ class Phase2AttackCategoriesTest extends TestCase
         ]);
 
         Route::middleware('threat-detect')->group(function () {
-            Route::get('/phase2-test', fn() => response('OK', 200));
-            Route::post('/phase2-test', fn() => response('OK', 200));
+            Route::get('/phase2-test', fn () => response('OK', 200));
+            Route::post('/phase2-test', fn () => response('OK', 200));
         });
     }
 
@@ -166,7 +166,7 @@ class Phase2AttackCategoriesTest extends TestCase
     #[Test]
     public function full_cycle_sql_hex_encoded_string_is_detected(): void
     {
-        $this->call('POST', '/phase2-test', ['q' => "SELECT * FROM users WHERE name=0x61646d696e"]);
+        $this->call('POST', '/phase2-test', ['q' => 'SELECT * FROM users WHERE name=0x61646d696e']);
 
         $this->assertDatabaseHas('threat_logs', [
             'type' => '[middleware] SQL Hex Encoded String',
@@ -315,7 +315,7 @@ class Phase2AttackCategoriesTest extends TestCase
     public function full_cycle_all_phase2_attacks_return_200(): void
     {
         $this->call('POST', '/phase2-test', ['q' => '*(|(uid=admin))'])->assertStatus(200);
-        $this->call('POST', '/phase2-test', ['q' => "assert(1)"])->assertStatus(200);
+        $this->call('POST', '/phase2-test', ['q' => 'assert(1)'])->assertStatus(200);
         $this->call('POST', '/phase2-test', ['q' => '{"__proto__":1}'])->assertStatus(200);
         $this->get('/phase2-test?q=ORDER+BY+99')->assertStatus(200);
     }

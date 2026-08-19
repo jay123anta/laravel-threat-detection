@@ -378,11 +378,11 @@ return [
     |
     */
     'context_weights' => [
-        'path'    => 1.5,   // The URL path itself — nothing legitimate hides there
-        'raw'     => 1.5,   // Still-encoded request; only evasion patterns scan it
-        'query'   => 1.5,   // Patterns in query strings are most suspicious
+        'path' => 1.5,   // The URL path itself — nothing legitimate hides there
+        'raw' => 1.5,   // Still-encoded request; only evasion patterns scan it
+        'query' => 1.5,   // Patterns in query strings are most suspicious
         'headers' => 1.3,   // Patterns in headers are suspicious
-        'body'    => 1.0,   // POST body is baseline (often contains legitimate content)
+        'body' => 1.0,   // POST body is baseline (often contains legitimate content)
     ],
 
     /*

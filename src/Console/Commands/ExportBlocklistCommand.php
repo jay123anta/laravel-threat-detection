@@ -3,8 +3,8 @@
 namespace JayAnta\ThreatDetection\Console\Commands;
 
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class ExportBlocklistCommand extends Command
 {
@@ -22,6 +22,7 @@ class ExportBlocklistCommand extends Command
 
         if ($ips->isEmpty()) {
             $this->info('No IPs match the given filters.');
+
             return 0;
         }
 
@@ -67,6 +68,7 @@ class ExportBlocklistCommand extends Command
                 1 => 'low',
                 default => 'unknown',
             };
+
             return $row;
         });
     }

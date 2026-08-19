@@ -3,9 +3,9 @@
 namespace JayAnta\ThreatDetection\Console\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Cache;
 
 class EnrichThreatLogsCommand extends Command
 {
@@ -17,32 +17,32 @@ class EnrichThreatLogsCommand extends Command
 
     /** Cloud provider keywords keyed by ISP/org substrings. */
     protected array $cloudIspKeywords = [
-        'Amazon'          => 'AWS',
-        'AWS'             => 'AWS',
-        'EC2'             => 'AWS',
-        'Microsoft'       => 'Azure',
-        'Azure'           => 'Azure',
-        'Google Cloud'    => 'GCP',
-        'Google LLC'      => 'GCP',
-        'DigitalOcean'    => 'DigitalOcean',
-        'Linode'          => 'Linode',
-        'Akamai'          => 'Linode',
-        'Vultr'           => 'Vultr',
-        'Choopa'          => 'Vultr',
-        'OVH'             => 'OVH',
-        'Hetzner'         => 'Hetzner',
-        'Cloudflare'      => 'Cloudflare',
-        'Oracle Cloud'    => 'Oracle',
-        'Alibaba'         => 'Alibaba',
-        'Tencent Cloud'   => 'Tencent',
+        'Amazon' => 'AWS',
+        'AWS' => 'AWS',
+        'EC2' => 'AWS',
+        'Microsoft' => 'Azure',
+        'Azure' => 'Azure',
+        'Google Cloud' => 'GCP',
+        'Google LLC' => 'GCP',
+        'DigitalOcean' => 'DigitalOcean',
+        'Linode' => 'Linode',
+        'Akamai' => 'Linode',
+        'Vultr' => 'Vultr',
+        'Choopa' => 'Vultr',
+        'OVH' => 'OVH',
+        'Hetzner' => 'Hetzner',
+        'Cloudflare' => 'Cloudflare',
+        'Oracle Cloud' => 'Oracle',
+        'Alibaba' => 'Alibaba',
+        'Tencent Cloud' => 'Tencent',
     ];
 
     /** Known cloud provider IP prefixes. */
     protected array $cloudPrefixes = [
-        'AWS'          => ['18.', '54.'],
+        'AWS' => ['18.', '54.'],
         'DigitalOcean' => ['139.59.', '167.99.', '167.172.', '157.230.', '159.65.', '134.209.', '164.90.'],
-        'Linode'       => ['139.162.', '172.104.', '172.105.', '45.33.', '45.56.', '45.79.'],
-        'Vultr'        => ['45.32.', '45.63.', '45.76.', '45.77.', '149.28.', '108.61.', '95.179.'],
+        'Linode' => ['139.162.', '172.104.', '172.105.', '45.33.', '45.56.', '45.79.'],
+        'Vultr' => ['45.32.', '45.63.', '45.76.', '45.77.', '149.28.', '108.61.', '95.179.'],
     ];
 
     /**
@@ -86,6 +86,7 @@ class EnrichThreatLogsCommand extends Command
 
         if ($ips->isEmpty()) {
             $this->info('No IPs to enrich.');
+
             return 0;
         }
 
@@ -103,7 +104,7 @@ class EnrichThreatLogsCommand extends Command
 
             DB::table($table)
                 ->where('ip_address', $ip)
-                ->when(!$force, fn($q) => $q->whereNull('country_code'))
+                ->when(!$force, fn ($q) => $q->whereNull('country_code'))
                 ->update($data);
 
             $bar->advance();
@@ -162,6 +163,7 @@ class EnrichThreatLogsCommand extends Command
 
             if ($response->successful()) {
                 $data = $response->json();
+
                 return [
                     'country_code' => $data['countryCode'] ?? null,
                     'country_name' => $data['country'] ?? null,

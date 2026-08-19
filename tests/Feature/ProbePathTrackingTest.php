@@ -2,13 +2,13 @@
 
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Route;
+use JayAnta\ThreatDetection\Events\ThreatDetected;
 use JayAnta\ThreatDetection\Tests\TestCase;
 use PHPUnit\Framework\Attributes\Test;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Event;
-use JayAnta\ThreatDetection\Events\ThreatDetected;
 
 /**
  * Phase 5 v1.3.0: Full-cycle tests for 404 probe tracking.
@@ -16,7 +16,7 @@ use JayAnta\ThreatDetection\Events\ThreatDetected;
  * Tests detection of reconnaissance probes hitting known vulnerable paths
  * (wp-admin, .env, phpmyadmin, etc.) logged with [probe] type tag.
  */
-class Phase5ProbeTrackingTest extends TestCase
+class ProbePathTrackingTest extends TestCase
 {
     protected function setUp(): void
     {
@@ -42,19 +42,19 @@ class Phase5ProbeTrackingTest extends TestCase
 
         // Register probe paths as actual routes so middleware runs
         Route::middleware('threat-detect')->group(function () {
-            Route::get('/wp-admin', fn() => response('OK', 200));
-            Route::get('/wp-login.php', fn() => response('OK', 200));
-            Route::get('/.env', fn() => response('OK', 200));
-            Route::get('/phpmyadmin', fn() => response('OK', 200));
-            Route::get('/actuator/env', fn() => response('OK', 200));
-            Route::get('/cgi-bin/test', fn() => response('OK', 200));
-            Route::get('/swagger/index.html', fn() => response('OK', 200));
-            Route::get('/backup/db.sql', fn() => response('OK', 200));
-            Route::get('/test.jsp', fn() => response('OK', 200));
-            Route::get('/normal-page', fn() => response('OK', 200));
-            Route::get('/wp-admin-dashboard', fn() => response('OK', 200));
+            Route::get('/wp-admin', fn () => response('OK', 200));
+            Route::get('/wp-login.php', fn () => response('OK', 200));
+            Route::get('/.env', fn () => response('OK', 200));
+            Route::get('/phpmyadmin', fn () => response('OK', 200));
+            Route::get('/actuator/env', fn () => response('OK', 200));
+            Route::get('/cgi-bin/test', fn () => response('OK', 200));
+            Route::get('/swagger/index.html', fn () => response('OK', 200));
+            Route::get('/backup/db.sql', fn () => response('OK', 200));
+            Route::get('/test.jsp', fn () => response('OK', 200));
+            Route::get('/normal-page', fn () => response('OK', 200));
+            Route::get('/wp-admin-dashboard', fn () => response('OK', 200));
             // Probe path WITH malicious payload
-            Route::get('/wp-login.php-inject', fn() => response('OK', 200));
+            Route::get('/wp-login.php-inject', fn () => response('OK', 200));
         });
     }
 

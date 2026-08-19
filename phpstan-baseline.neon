@@ -1,0 +1,49 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Called ''env'' outside of the config directory which returns null when the config is cached, use ''config''\.$#'
+			identifier: larastan.noEnvCallsOutsideOfConfig
+			count: 34
+			path: config/threat-detection.php
+
+		-
+			message: '#^Argument of an invalid type Illuminate\\Routing\\RouteCollectionInterface supplied for foreach, only iterables are supported\.$#'
+			identifier: foreach.nonIterable
+			count: 1
+			path: src/Console/Commands/DoctorCommand.php
+
+		-
+			message: '#^Call to function method_exists\(\) with Orchestra\\Testbench\\Http\\Kernel and ''getGlobalMiddleware'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: src/Console/Commands/DoctorCommand.php
+
+		-
+			message: '#^Call to function method_exists\(\) with Orchestra\\Testbench\\Http\\Kernel and ''getMiddlewareGroups'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: src/Console/Commands/DoctorCommand.php
+
+		-
+			message: '#^Called ''pluck'' on Laravel collection, but could have been retrieved as a query\.$#'
+			identifier: larastan.noUnnecessaryCollectionCall
+			count: 1
+			path: src/Http/Controllers/ThreatLogController.php
+
+		-
+			message: '#^Call to method from\(\) on an unknown class Illuminate\\Notifications\\Messages\\SlackMessage\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Notifications/ThreatAlertSlack.php
+
+		-
+			message: '#^Instantiated class Illuminate\\Notifications\\Messages\\SlackMessage not found\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Notifications/ThreatAlertSlack.php
+
+		-
+			message: '#^Call to function is_array\(\) with list\<string\|null\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: src/Services/ThreatDetectionService.php

@@ -13,7 +13,7 @@ use PHPUnit\Framework\Attributes\Test;
  * guard => 'none' meant any authenticated user of the host application could
  * silence a detection type for everyone, with no authorization check.
  */
-class Phase17WriteGuardTest extends TestCase
+class WriteGuardTest extends TestCase
 {
     protected function setUp(): void
     {

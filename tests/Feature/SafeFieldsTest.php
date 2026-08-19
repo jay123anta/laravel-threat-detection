@@ -2,11 +2,11 @@
 
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
-use JayAnta\ThreatDetection\Tests\TestCase;
-use PHPUnit\Framework\Attributes\Test;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Cache;
+use JayAnta\ThreatDetection\Tests\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 
 /**
  * Phase 8 v1.3.0: Full-cycle tests for safe fields (false positive reduction).
@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Cache;
  * Tests that configured safe fields are excluded from detection scanning,
  * while other fields on the same request are still scanned.
  */
-class Phase8SafeFieldsTest extends TestCase
+class SafeFieldsTest extends TestCase
 {
     protected function setUp(): void
     {
@@ -39,8 +39,8 @@ class Phase8SafeFieldsTest extends TestCase
         ]);
 
         Route::middleware('threat-detect')->group(function () {
-            Route::get('/safe-test', fn() => response('OK', 200));
-            Route::post('/safe-test', fn() => response('OK', 200));
+            Route::get('/safe-test', fn () => response('OK', 200));
+            Route::post('/safe-test', fn () => response('OK', 200));
         });
     }
 
@@ -76,7 +76,7 @@ class Phase8SafeFieldsTest extends TestCase
 
         $this->call('POST', '/safe-test', [
             'content' => '<script>alert(1)</script>',  // safe — skipped
-            'search' => "UNION SELECT * FROM users",    // not safe — scanned
+            'search' => 'UNION SELECT * FROM users',    // not safe — scanned
         ]);
 
         // SQL in non-safe field should be detected
