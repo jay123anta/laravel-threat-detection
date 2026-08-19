@@ -64,3 +64,16 @@ sentences (`detected_pii_is_not_written_to_the_payload`).
 ## Reporting a vulnerability
 
 Don't open an issue — see [SECURITY.md](SECURITY.md).
+
+## Why `illuminate/foundation` isn't in `composer.json`
+
+The package uses foundation-provided helpers (`config()`, `response()`,
+`abort()`, `dispatch()`) and `Illuminate\Foundation\Events\Dispatchable`, so
+you'd expect it in `require`. It can't be: Laravel stopped publishing that
+read-only split, and Packagist has nothing above `v1.1.2` for it, so
+`illuminate/foundation: ^10.0` is unsatisfiable.
+
+In practice every consumer has `laravel/framework`, which `replace`s all
+`illuminate/*` splits and provides foundation. Please don't "fix" this by
+adding the constraint — it will fail to resolve. If a granular-split consumer
+ever appears, the fix is to stop using foundation helpers, not to declare them.
