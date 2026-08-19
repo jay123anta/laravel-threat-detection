@@ -16,6 +16,7 @@ use JayAnta\ThreatDetection\Http\Middleware\ThreatDetectionMiddleware;
 use JayAnta\ThreatDetection\Services\ConfidenceScorer;
 use JayAnta\ThreatDetection\Services\ExclusionRuleService;
 use JayAnta\ThreatDetection\Services\ProbeDetectorService;
+use JayAnta\ThreatDetection\Services\ThreatCorrelationService;
 use JayAnta\ThreatDetection\Services\ThreatDetectionService;
 use Laravel\Sanctum\SanctumServiceProvider;
 
@@ -35,7 +36,8 @@ class ThreatDetectionServiceProvider extends ServiceProvider
         $this->app->singleton('threat-detection', function ($app) {
             return new ThreatDetectionService(
                 $app->make(ConfidenceScorer::class),
-                $app->make(ExclusionRuleService::class)
+                $app->make(ExclusionRuleService::class),
+                $app->make(ThreatCorrelationService::class)
             );
         });
 
