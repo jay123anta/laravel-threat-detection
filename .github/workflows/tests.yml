@@ -126,10 +126,9 @@ jobs:
       - name: Run tests with coverage
         run: vendor/bin/phpunit --coverage-clover=coverage.xml
 
-      - name: Upload to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          files: ./coverage.xml
-          fail_ci_if_error: false
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      # A gate, not a badge. No upload, no token, and no third party holding
+      # repo access — which matters more than usual for a security package.
+      # The percentage is written to the run summary so it is visible without
+      # opening the logs. Raise the minimum as coverage improves.
+      - name: Enforce minimum coverage
+        run: php .github/coverage-threshold.php coverage.xml 60
