@@ -46,15 +46,6 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Skip Paths
-    |--------------------------------------------------------------------------
-    |
-    | Paths that should be skipped from threat detection.
-    | Supports wildcard patterns.
-    |
-    */
-    /*
-    |--------------------------------------------------------------------------
     | Only Paths (Whitelist Mode)
     |--------------------------------------------------------------------------
     |
@@ -72,6 +63,15 @@ return [
         // 'register',
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Skip Paths
+    |--------------------------------------------------------------------------
+    |
+    | Paths that should be skipped from threat detection.
+    | Supports wildcard patterns.
+    |
+    */
     'skip_paths' => [
         // Match against $request->path(), which has no leading "public/" segment.
         'assets/*',

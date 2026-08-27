@@ -32,6 +32,7 @@ class ThreatDetectionServiceProvider extends ServiceProvider
         $this->app->singleton(ConfidenceScorer::class, fn () => new ConfidenceScorer);
         $this->app->singleton(ExclusionRuleService::class, fn () => new ExclusionRuleService);
         $this->app->singleton(ProbeDetectorService::class, fn () => new ProbeDetectorService);
+        $this->app->singleton(ThreatCorrelationService::class, fn () => new ThreatCorrelationService);
 
         $this->app->singleton('threat-detection', function ($app) {
             return new ThreatDetectionService(
@@ -180,10 +181,6 @@ class ThreatDetectionServiceProvider extends ServiceProvider
         }
 
         $this->app->booted(function () {
-            if (!class_exists(Schedule::class)) {
-                return;
-            }
-
             $days = (int) config('threat-detection.retention.days', 90);
 
             $schedule = $this->app->make(Schedule::class);

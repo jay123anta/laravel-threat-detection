@@ -2,6 +2,53 @@
 
 All notable changes to `jayanta/laravel-threat-detection` will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **Tests for the three commands that shipped without any.** `purge` (including
+  the cascade that removes exclusion rules orphaned by a delete), `stats`, and
+  `enrich` - which sends every IP it looks up to a third party and previously
+  had nothing asserting its SSRF guard, its private-range skip or its field
+  mapping. `Http::preventStrayRequests()` now runs in the base TestCase, so no
+  test can reach the network unnoticed.
+- **Tests for `ThreatCorrelationService` and `ThreatAlertSlack`.** The
+  correlation aggregates were only reached through two API endpoints that
+  asserted a 200 and an envelope shape, never the numbers. The Slack alert had
+  never been executed at all, including the URL defanging.
+- **Quality gates.** PHPStan level 5 via larastan and Pint on the `laravel`
+  preset, both enforced by a dedicated CI job, plus a coverage job gated by an
+  in-repo threshold script rather than a third-party service.
+- **Contributor scaffolding.** `CONTRIBUTING.md`, `UPGRADING.md`, a PR template
+  and issue templates that ask for `threat-detection:doctor` output first.
+  Dependabot watches composer and actions.
+- **`ThreatCorrelationService`.** The reporting queries moved out of
+  `ThreatDetectionService`, which had grown past 1,900 lines by carrying both
+  the request-time detection path and after-the-fact analysis.
+  `ThreatDetectionService` still exposes all five methods and delegates, so the
+  facade and every existing call site are unchanged.
+
+### Fixed
+
+- `ThreatCorrelationService` was resolved by auto-wiring while its three sibling
+  services were bound as singletons; it is now bound alongside them.
+- The service provider imported `Laravel\Sanctum\SanctumServiceProvider` for a
+  `class_exists()` probe. Sanctum is a `suggest`, not a requirement, so the
+  import read as a hard dependency; the check is inlined.
+- Removed a `class_exists(Schedule::class)` guard that could never be false -
+  `illuminate/console` is a hard requirement.
+- `phpunit.xml` declared an empty `<source><include>`, so `--coverage` produced
+  nothing. It now includes `src`.
+- The `[1.3.2]` changelog entry, lost when 3cf0e32 rewrote the top of this file
+  for v1.4.0, is restored from its tag.
+- Seven config environment variables were absent from the README, including
+  `THREAT_DETECTION_HOME_COUNTRY`, which defaults to `IN` and silently drives
+  the `is_foreign` flag for every installation outside India.
+- The "Skip Paths" config comment banner sat above the "Only Paths" banner, so
+  `only_paths` inherited the wrong heading and `skip_paths` had none.
+- `actions/checkout` bumped v4 to v7; v4 targets Node 20, which GitHub runners
+  now force onto Node 24.
+
 ## [1.7.0] - 2026-08-12
 
 Detection *gap* fixes: patterns that were configured, matched their input, and
@@ -405,6 +452,22 @@ as before. 5 new tests (227 → 232).
 
 No functional or API changes to detection behaviour.
 
+## [1.3.2] - 2026-07-23
+
+### Changed
+
+- **Minimum PHP raised to 8.2.** PHP 8.1 reached end of security support in
+  November 2025, and the current Laravel 10 test tooling (Testbench / PHPUnit)
+  no longer supports it, so the `PHP 8.1 / Laravel 10` CI combination could no
+  longer install. If you are still on PHP 8.1, stay on v1.3.1.
+- **CI matrix updated** to PHP 8.2 / 8.3 / 8.4 x Laravel 10 / 11 / 12 (excluding
+  the unsupported PHP 8.4 + Laravel 10 pair), with `fail-fast: false` so every
+  cell reports independently. The Laravel-version pin step now also constrains
+  `illuminate/console`, `illuminate/events`, `illuminate/bus`, and
+  `illuminate/queue` (added in v1.3.1) to the matrix version.
+
+No functional or API changes - detection behaviour is identical to v1.3.1.
+
 ## [1.3.1] - 2026-07-23
 
 Correctness and false-positive fixes. No breaking changes: detection is still
@@ -486,6 +549,9 @@ regression tests (213 → 227 tests, 640 → 657 assertions).
   `illuminate/queue` dependencies the package already uses.
 
 ## [1.3.0] - 2026-03-23
+
+> Never tagged and never published to Packagist - the work below reached users
+> as part of v1.3.1. Kept for the historical record.
 
 ### Added
 

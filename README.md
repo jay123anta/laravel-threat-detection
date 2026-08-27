@@ -400,6 +400,31 @@ THREAT_DETECTION_MODE=balanced
 # Custom table name (default: threat_logs)
 # THREAT_DETECTION_TABLE=threat_logs
 
+# Your ISO 3166-1 alpha-2 country code (default: IN)
+# Drives the is_foreign flag on every enriched row — set this or every
+# non-Indian address is reported as foreign.
+# THREAT_DETECTION_HOME_COUNTRY=IN
+
+# Geo-enrichment provider used by threat-detection:enrich (default shown).
+# Cleartext HTTP because ip-api.com's free tier rejects HTTPS; point this at
+# an HTTPS endpoint if you hold a key. Enrichment is opt-in either way.
+# THREAT_DETECTION_GEO_ENDPOINT=http://ip-api.com/json
+
+# Dashboard URL path (default: threat-detection)
+# THREAT_DETECTION_DASHBOARD_PATH=threat-detection
+
+# API route prefix (default: api/threat-detection)
+# THREAT_DETECTION_API_PREFIX=api/threat-detection
+
+# Role required when the API guard is 'role' (default: admin)
+# THREAT_DETECTION_API_ROLE=admin
+
+# Allowed IPs when the API guard is 'ip'. Comma-separated, CIDR supported.
+# THREAT_DETECTION_API_IPS=127.0.0.1,10.0.0.0/8
+
+# Username shown on Slack alerts (default: ThreatBot)
+# THREAT_DETECTION_SLACK_USERNAME=ThreatBot
+
 # Whitelist IPs to skip detection entirely (default: empty)
 # Supports CIDR notation. Comma-separated.
 # THREAT_DETECTION_WHITELISTED_IPS=10.0.0.0/8,192.168.1.0/24
