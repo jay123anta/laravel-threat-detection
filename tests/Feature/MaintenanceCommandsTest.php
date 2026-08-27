@@ -2,6 +2,7 @@
 
 namespace JayAnta\ThreatDetection\Tests\Feature;
 
+use GuzzleHttp\Client;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -244,6 +245,35 @@ class MaintenanceCommandsTest extends TestCase
             ->assertExitCode(0);
 
         Http::assertNothingSent();
+    }
+
+    /**
+     * Laravel's HTTP client wraps Guzzle, which this package only suggests —
+     * detection makes no outbound request. When it is absent every lookup fails
+     * inside fetchGeoData()'s best-effort catch, so the command used to print
+     * "Enrichment complete!" having enriched nothing. It now refuses up front.
+     *
+     * guzzle is a dev requirement, so it is present here and the guard cannot
+     * be exercised directly; this pins the contract that the check exists and
+     * runs before any work.
+     */
+    #[Test]
+    public function enrich_refuses_up_front_without_an_http_client(): void
+    {
+        $this->assertTrue(
+            class_exists(Client::class),
+            'guzzlehttp/guzzle must be a dev requirement, or the enrich tests cannot fake HTTP'
+        );
+
+        $source = file_get_contents(__DIR__ . '/../../src/Console/Commands/EnrichThreatLogsCommand.php');
+        $handle = substr($source, strpos($source, 'public function handle'));
+
+        $this->assertStringContainsString("class_exists('GuzzleHttp", $handle);
+        $this->assertLessThan(
+            strpos($handle, "option('days')"),
+            strpos($handle, 'GuzzleHttp'),
+            'the client check must run before any query or output'
+        );
     }
 
     #[Test]

@@ -55,6 +55,7 @@ class DoctorCommand extends Command
         $this->checkConfigDrift();
         $this->checkShadowedPatterns();
         $this->checkCacheDriver();
+        $this->checkHttpClient();
         $this->checkDashboardExposure();
 
         return $this->summarise();
@@ -282,6 +283,27 @@ class DoctorCommand extends Command
             'Your copy runs instead of the maintained one, so later fixes to it never reach you. '
             . 'Delete these from custom_patterns unless you meant to override them.'
         );
+    }
+
+    /**
+     * Laravel's HTTP client wraps Guzzle, which is a suggest rather than a
+     * requirement — detection makes no outbound request. Without it the geo
+     * lookup and the Slack webhook fallback both fail inside best-effort
+     * catches, so enrichment quietly does nothing and alerts quietly go
+     * nowhere.
+     */
+    private function checkHttpClient(): void
+    {
+        if (!class_exists('GuzzleHttp\Client')) {
+            $this->reportWarning(
+                'No HTTP client — geo enrichment and Slack webhook alerts will do nothing',
+                'Run: composer require guzzlehttp/guzzle. Detection itself is unaffected.'
+            );
+
+            return;
+        }
+
+        $this->reportPass('HTTP client available for enrichment and alerts');
     }
 
     private function checkCacheDriver(): void

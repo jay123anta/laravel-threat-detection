@@ -36,12 +36,14 @@
         "illuminate/notifications": "^10.0|^11.0|^12.0|^13.0"
     },
     "require-dev": {
+        "guzzlehttp/guzzle": "^7.5",
         "larastan/larastan": "^2.9|^3.0",
         "laravel/pint": "^1.13",
         "orchestra/testbench": "^8.0|^9.0|^10.0|^11.0",
         "phpunit/phpunit": "^10.0|^11.0|^12.0"
     },
     "suggest": {
+        "guzzlehttp/guzzle": "Required by threat-detection:enrich and the Slack webhook fallback (^7.5). Detection itself needs no HTTP client.",
         "laravel/slack-notification-channel": "Required for Slack notifications on Laravel 11+ (^3.0)",
         "laravel/sanctum": "Recommended for API route authentication (^3.0|^4.0)"
     },

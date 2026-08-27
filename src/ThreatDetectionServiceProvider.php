@@ -18,7 +18,6 @@ use JayAnta\ThreatDetection\Services\ExclusionRuleService;
 use JayAnta\ThreatDetection\Services\ProbeDetectorService;
 use JayAnta\ThreatDetection\Services\ThreatCorrelationService;
 use JayAnta\ThreatDetection\Services\ThreatDetectionService;
-use Laravel\Sanctum\SanctumServiceProvider;
 
 class ThreatDetectionServiceProvider extends ServiceProvider
 {
@@ -115,7 +114,7 @@ class ThreatDetectionServiceProvider extends ServiceProvider
             $middleware = config('threat-detection.api.middleware', ['api', 'auth:sanctum']);
 
             // Fall back to ['api', 'auth'] when Sanctum is not installed (never unauthenticated)
-            if (!class_exists(SanctumServiceProvider::class)) {
+            if (!class_exists('Laravel\Sanctum\SanctumServiceProvider')) {
                 $hadSanctum = in_array('auth:sanctum', $middleware);
                 $middleware = array_values(array_filter($middleware, fn ($m) => $m !== 'auth:sanctum'));
                 // Only add 'auth' fallback if we removed 'auth:sanctum' (user intended auth)

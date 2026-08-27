@@ -2,6 +2,38 @@
 
 All notable changes to `jayanta/laravel-threat-detection` will be documented in this file.
 
+## [1.7.2] - 2026-08-27
+
+### Fixed
+
+- **`guzzlehttp/guzzle` was an undeclared dependency.** Three places in `src/`
+  use Laravel's HTTP client — the geo lookup in `threat-detection:enrich` and
+  the Slack webhook fallback in both the synchronous and queued write paths —
+  but guzzle appeared nowhere in `composer.json`. It reached the test suite
+  transitively on most dependency resolutions, so this surfaced only on the
+  Laravel 10 CI leg, where `Http::response()` fatalled with
+  `Class "GuzzleHttp\Psr7\Response" not found`. It is now a dev requirement,
+  so the tests resolve it on every leg, and a `suggest` so the runtime need is
+  documented. It stays out of `require`: detection itself makes no outbound
+  request, and forcing an HTTP client on every install for two optional
+  features would be wrong.
+
+- **`threat-detection:enrich` reported success having enriched nothing.**
+  Without an HTTP client every lookup failed inside `fetchGeoData()`'s
+  best-effort catch, and the command still printed "Enrichment complete!". It
+  now refuses up front with the command that fixes it. `threat-detection:doctor`
+  reports the same condition.
+
+- **The v1.7.1 note about the Sanctum import was wrong, and is now true.** That
+  release claimed the `class_exists()` probe had been inlined so an optional
+  package was no longer imported. It had been — and then Pint's
+  `fully_qualified_strict_types` fixer hoisted it straight back into a `use`
+  statement before the tag was cut, so v1.7.1 shipped with the import intact.
+  All three optional-class probes (Sanctum and both Guzzle checks) now use
+  string literals, which that fixer leaves alone. Behaviour was never affected:
+  a `use` statement does not autoload, so `class_exists()` answered correctly
+  throughout.
+
 ## [1.7.1] - 2026-08-27
 
 ### Added

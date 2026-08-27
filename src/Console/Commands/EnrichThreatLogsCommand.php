@@ -70,6 +70,18 @@ class EnrichThreatLogsCommand extends Command
 
     public function handle(): int
     {
+        // Laravel's HTTP client is a Guzzle wrapper, and guzzle is a suggest
+        // rather than a requirement — detection itself never makes a request.
+        // Without it every lookup fails inside fetchGeoData()'s best-effort
+        // catch, and this command would report success having enriched
+        // nothing. Say so instead.
+        if (!class_exists('GuzzleHttp\Client')) {
+            $this->error('Geo enrichment needs an HTTP client, and guzzlehttp/guzzle is not installed.');
+            $this->line('  Run: composer require guzzlehttp/guzzle');
+
+            return 1;
+        }
+
         $days = (int) $this->option('days');
         $force = $this->option('force');
         $table = config('threat-detection.table_name', 'threat_logs');
