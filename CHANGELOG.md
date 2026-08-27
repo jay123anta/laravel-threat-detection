@@ -2,7 +2,7 @@
 
 All notable changes to `jayanta/laravel-threat-detection` will be documented in this file.
 
-## [Unreleased]
+## [1.7.1] - 2026-08-27
 
 ### Added
 
