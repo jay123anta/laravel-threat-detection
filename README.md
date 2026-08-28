@@ -16,7 +16,7 @@ every hostile request recorded to your database with full application context.
 It's an IDS, not a WAF: it never blocks, filters, or modifies a request.**
 
 <p align="center">
-  <img src="art/dashboard.png" alt="Threat Detection Dashboard — stats, 7-day timeline, live threat log, top offending IPs, and threats by country" width="100%">
+  <img src="art/demo.gif" alt="Install the package, send three attacks — SQL injection, directory traversal, XSS — every one returns HTTP 200 because nothing is blocked, and all three are already counted in threat-detection:stats" width="100%">
 </p>
 
 ### Are you here because you saw something like this?
@@ -636,6 +636,10 @@ composer require laravel/slack-notification-channel
 ---
 
 ## Dashboard
+
+<p align="center">
+  <img src="art/dashboard.png" alt="Threat Detection Dashboard — stats, 7-day timeline, live threat log, top offending IPs, and threats by country" width="100%">
+</p>
 
 The package ships with a built-in dark-mode dashboard (Alpine.js + Tailwind CDN -  no build step required).
 
