@@ -10,19 +10,34 @@
 
 # Laravel Threat Detection
 
-**Passive intrusion detection for Laravel — see every SQL injection, XSS, scanner,
-and bot probe hitting your app, logged with full context. It's an IDS, not a WAF:
-it never blocks, filters, or modifies a request.**
+**Security monitoring and attack logging for Laravel. Detect and log SQL injection,
+XSS, RCE, directory traversal, bot scanners and `/wp-admin`-style recon probes —
+every hostile request recorded to your database with full application context.
+It's an IDS, not a WAF: it never blocks, filters, or modifies a request.**
 
 <p align="center">
   <img src="art/dashboard.png" alt="Threat Detection Dashboard — stats, 7-day timeline, live threat log, top offending IPs, and threats by country" width="100%">
 </p>
 
-Drop it into any Laravel 10–13 app and it starts scanning every HTTP request against
-150+ attack patterns, scoring each match by confidence and writing it to your database —
-with a built-in dashboard, Slack alerts, geo-enrichment, and fail2ban/blocklist exports.
-No request is ever blocked. Think security camera, not a lock: it shows you exactly who's
-probing your routes, how often, and with what techniques.
+### Are you here because you saw something like this?
+
+```
+GET /wp-admin/setup-config.php          404   — on a site that isn't WordPress
+GET /.env                               404   — someone wants your database password
+GET /?id=1' UNION SELECT password FROM  200   — SQL injection against a real route
+GET /phpmyadmin/index.php               404   — scanning for an admin panel
+```
+
+Those requests are already reaching your Laravel app. Your access log shows the URL
+and the status code, and nothing else — not the decoded payload, not which of your
+routes was targeted, not whether the same IP has tried forty other things this hour.
+
+This package answers those questions. Drop it into any Laravel 10–13 app and it starts
+scanning every HTTP request against 150+ attack patterns, scoring each match by
+confidence and writing it to your database — with a built-in dashboard, Slack alerts,
+geo-enrichment, and fail2ban/blocklist exports. No request is ever blocked. Think
+security camera, not a lock: it shows you exactly who's probing your routes, how
+often, and with what techniques.
 
 > Extracted from a production app and battle-tested on real traffic. 335 tests, no runtime
 > dependencies beyond Laravel itself, and no internet connection required for detection.
