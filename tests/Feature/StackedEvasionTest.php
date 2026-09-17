@@ -222,7 +222,9 @@ class StackedEvasionTest extends TestCase
      * json_encode.
      *
      * The README lists "Unicode escapes" and "hex escapes" among the
-     * techniques the normalization pipeline defeats (README.md:378), and the
+     * techniques the normalization pipeline defeats (README, "Features",
+     * the Evasion Resistance bullet — cited by name, since a line number
+     * goes stale with every edit above it and these already had), and the
      * pre-existing tests passed throughout, because they assert only the
      * evasion *flag* ("Unicode Escape Evasion") — matched on the un-normalized
      * text, and never affected. That is why this went unnoticed for so long.
@@ -346,12 +348,19 @@ class StackedEvasionTest extends TestCase
      * BUG 4d (fixed) — IIS %uXXXX encoding was flagged but never decoded, so
      * the payload behind it was never identified.
      *
-     * Unlike the others this is arguably by design: the README lists IIS
-     * Unicode under detected *evasion techniques* (README.md:1246) rather than
-     * among the encodings the pipeline decodes (README.md:378). It is recorded
-     * here so the boundary is explicit rather than assumed — a %uXXXX-encoded
-     * attack is reported as "someone used IIS encoding", never as "someone
-     * attempted SQL injection".
+     * Before the fix this was arguably by design: the README listed IIS
+     * Unicode only under detected *evasion techniques* ("Detected Attack
+     * Types", the Evasion row) and not among the encodings the pipeline
+     * decodes ("Features", the Evasion Resistance bullet). A %uXXXX-encoded
+     * attack was reported as "someone used IIS encoding" and never as
+     * "someone attempted SQL injection".
+     *
+     * That boundary has moved. %uXXXX is now decoded like the others, this
+     * test asserts the attack behind it is named, and the Features bullet
+     * lists it. The evasion flag still fires as well — both facts are worth
+     * having. (An earlier version of this comment still described the old
+     * behaviour in the present tense, directly above a test asserting the
+     * opposite.)
      */
     #[Test]
     public function an_iis_unicode_encoded_sql_injection_is_identified_as_sql_injection(): void
@@ -359,6 +368,10 @@ class StackedEvasionTest extends TestCase
         $this->sendOnTheWire('%u0075nion/**/%u0073elect password from users');
 
         $this->assertLogged('SQL Injection UNION');
+
+        // Decoding the payload must not cost the other signal: that someone
+        // bothered to encode it this way is itself worth recording.
+        $this->assertLogged('IIS Unicode Encoding Evasion');
     }
 
     /**

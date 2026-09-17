@@ -426,7 +426,7 @@ php artisan route:clear
 - **404 Probe Tracking** -  Detects reconnaissance probes hitting known vulnerable paths (`/wp-admin`, `/.env`, `/phpmyadmin`, `/actuator`, etc.) with 50+ default probe paths
 - **DDoS Monitoring** -  Rate-based threshold detection with configurable windows
 - **Confidence Scoring** -  Each threat gets a 0-100 confidence score based on pattern count, context, and signals
-- **Evasion Resistance** -  Normalization pipeline defeats SQL comment insertion, double URL encoding, HTML entity encoding, Unicode escapes, and hex escapes before pattern matching
+- **Evasion Resistance** -  Normalization pipeline defeats SQL comment insertion, double URL encoding, HTML entity encoding, Unicode escapes, hex escapes, and IIS `%uXXXX` encoding before pattern matching — repeated until the payload stops changing, so stacking two techniques does not get past it
 - **CVE Detection** -  Shellshock (CVE-2014-6271), Spring4Shell (CVE-2022-22965), PHPUnit RCE (CVE-2017-9841), Drupalgeddon, Log4Shell
 - **Context-Aware Detection** -  Patterns found in query strings score higher than those in the request body
 - **Request Body Scanning** -  Both form-encoded and JSON (`application/json`) request bodies are inspected

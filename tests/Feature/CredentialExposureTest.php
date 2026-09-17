@@ -271,7 +271,11 @@ class CredentialExposureTest extends TestCase
             // test only requires 20+ characters of [A-Za-z0-9-_] after the
             // key name, so the prefix was never carrying any weight.
             'API Key Exposure' => ['API Key Exposure', 'api_key', 'example-api-key-0123456789-not-real'],
-            'Access Token Leak' => ['Access Token Leak', 'access_token', 'ya29.aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789'],
+            // Same reasoning as the API key above: this was shaped like a Google
+            // OAuth token ('ya29.' + base64ish). Push protection happened not to
+            // flag it, but that is luck, not safety. The pattern only requires
+            // 32+ characters of [A-Za-z0-9-_.=] after the key name.
+            'Access Token Leak' => ['Access Token Leak', 'access_token', 'example-access-token-0123456789-not-real'],
             'Session ID Leak' => ['Session ID Leak', 'session_id', 'abcdef1234567890abcdefghij'],
             'PHP Session Exposure' => ['PHP Session Exposure', 'PHPSESSID', 'abcdef1234567890abcdef'],
             'CSRF Token Reference' => ['CSRF Token Reference', 'csrf_token', 'aBcD1234aBcD1234aBcD1234aBcD1234aBcD'],
