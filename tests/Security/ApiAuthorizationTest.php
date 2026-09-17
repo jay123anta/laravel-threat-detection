@@ -2,7 +2,6 @@
 
 namespace JayAnta\ThreatDetection\Tests\Security;
 
-use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Route;
@@ -218,53 +217,5 @@ class ApiAuthorizationTest extends TestCase
         $this->assertSame('none', $shipped['api']['guard'], 'api.guard default changed');
         $this->assertContains('auth:sanctum', $shipped['api']['middleware'], 'the API default is no longer authenticated');
         $this->assertSame('role', $shipped['api']['write_guard'], 'api.write_guard no longer defaults to role');
-    }
-}
-
-class ApiUserWithoutRoles implements Authenticatable
-{
-    /** markFalsePositive() reads $request->user()?->id. */
-    public int $id = 1;
-
-    public function getAuthIdentifierName()
-    {
-        return 'id';
-    }
-
-    public function getAuthIdentifier()
-    {
-        return 1;
-    }
-
-    public function getAuthPassword()
-    {
-        return '';
-    }
-
-    public function getAuthPasswordName()
-    {
-        return 'password';
-    }
-
-    public function getRememberToken()
-    {
-        return null;
-    }
-
-    public function setRememberToken($value) {}
-
-    public function getRememberTokenName()
-    {
-        return 'remember_token';
-    }
-}
-
-class ApiUser extends ApiUserWithoutRoles
-{
-    public function __construct(private array $roles = []) {}
-
-    public function hasRole(string $role): bool
-    {
-        return in_array($role, $this->roles, true);
     }
 }
