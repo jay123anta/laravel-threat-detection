@@ -2,9 +2,11 @@
 
 namespace JayAnta\ThreatDetection\Tests\Security;
 
+use Illuminate\Cookie\CookieValuePrefix;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use JayAnta\ThreatDetection\Tests\TestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -173,6 +175,85 @@ class CsrfOnWriteEndpointsTest extends TestCase
 
         $this->assertGreaterThanOrEqual(400, $response->getStatusCode(), 'a tokenless write was accepted');
         $this->assertSame($before, $this->rulesCount(), 'a tokenless write changed the exclusion rules');
+
+        // The README and UPGRADING.md both promise this exact status, so it is
+        // pinned rather than left as "some 4xx".
+        $this->assertSame(419, $response->getStatusCode(), 'the documented status for a missing CSRF token is 419');
+    }
+
+    // ── the third accepted token: Laravel's encrypted XSRF cookie ──────────
+
+    /**
+     * The X-XSRF-TOKEN header value, built the way Laravel's EncryptCookies
+     * middleware builds the XSRF-TOKEN cookie an SPA reads it from: the token
+     * prefixed with an HMAC of the cookie name, then encrypted unserialized.
+     */
+    private function xsrfHeaderFor(string $token): string
+    {
+        $key = app('encrypter')->getKey();
+
+        return Crypt::encrypt(CookieValuePrefix::create('XSRF-TOKEN', $key) . $token, false);
+    }
+
+    /**
+     * axios sends only this header, never X-CSRF-TOKEN, so if it is not
+     * accepted every axios-based SPA breaks on upgrade. The docs promise it;
+     * until now nothing had ever executed the decrypt-and-strip-prefix path.
+     */
+    #[Test]
+    public function an_encrypted_xsrf_cookie_header_is_accepted(): void
+    {
+        $this->loginAsAdmin();
+
+        $this->withSession(['_token' => 'real-token'])
+            ->call(
+                'POST',
+                '/api/threat-detection/threats/1/false-positive',
+                [],
+                [],
+                [],
+                ['HTTP_X_XSRF_TOKEN' => $this->xsrfHeaderFor('real-token')]
+            )
+            ->assertStatus(200);
+
+        $this->assertSame(2, $this->rulesCount(), 'the XSRF-authenticated write did not create its exclusion rule');
+    }
+
+    /**
+     * And that accepting it is not the same as accepting anything: a validly
+     * encrypted header carrying the wrong token, and one that does not decrypt
+     * at all, are both refused.
+     *
+     * @return array<string, array{0: string}>
+     */
+    public static function badXsrfHeaders(): array
+    {
+        return [
+            'well-formed but wrong token' => ['wrong'],
+            'not decryptable at all' => ['garbage'],
+        ];
+    }
+
+    #[Test]
+    #[DataProvider('badXsrfHeaders')]
+    public function an_xsrf_header_that_does_not_match_the_session_is_rejected(string $kind): void
+    {
+        $this->loginAsAdmin();
+        $before = $this->rulesCount();
+
+        $header = $kind === 'wrong' ? $this->xsrfHeaderFor('attacker-guess') : 'not-an-encrypted-payload';
+
+        $response = $this->withSession(['_token' => 'real-token'])->call(
+            'POST',
+            '/api/threat-detection/threats/1/false-positive',
+            [],
+            [],
+            [],
+            ['HTTP_X_XSRF_TOKEN' => $header]
+        );
+
+        $this->assertSame(419, $response->getStatusCode());
+        $this->assertSame($before, $this->rulesCount(), 'a write with a bad XSRF header changed the exclusion rules');
     }
 
     #[Test]
@@ -193,6 +274,7 @@ class CsrfOnWriteEndpointsTest extends TestCase
 
         $this->assertGreaterThanOrEqual(400, $response->getStatusCode(), 'a write with a wrong token was accepted');
         $this->assertSame($before, $this->rulesCount());
+        $this->assertSame(419, $response->getStatusCode(), 'the documented status for a wrong CSRF token is 419');
     }
 
     /**

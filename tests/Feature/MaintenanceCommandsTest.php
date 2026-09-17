@@ -51,6 +51,37 @@ class MaintenanceCommandsTest extends TestCase
 
     // ── threat-detection:purge ──────────────────────────────────────────────
 
+    /**
+     * The v1.8.0 advisory, release notes and UPGRADING.md all tell operators to
+     * clear stored credentials with `--days=0`. That instruction had never been
+     * run by a test.
+     *
+     * What it does is delete everything written before the moment it runs. It
+     * does not reach a row written in the same second — the comparison is a
+     * strict `<` on a second-precision timestamp — which is why the documented
+     * order is upgrade first, purge second: anything that survives was written
+     * by the fixed code and is already masked. That same-second case is not
+     * asserted here, because it cannot be made deterministic without freezing
+     * the clock around the command.
+     */
+    #[Test]
+    public function purge_with_zero_days_deletes_every_row_written_before_it_runs(): void
+    {
+        $ancient = $this->seedThreat(['created_at' => now()->subYears(2)]);
+        $lastMonth = $this->seedThreat(['created_at' => now()->subDays(30)]);
+        $aMinuteAgo = $this->seedThreat(['created_at' => now()->subMinute()]);
+
+        $this->artisan('threat-detection:purge', ['--days' => 0, '--no-interaction' => true])
+            ->assertExitCode(0);
+
+        foreach (['two years old' => $ancient, 'a month old' => $lastMonth, 'a minute old' => $aMinuteAgo] as $age => $id) {
+            $this->assertNull(
+                DB::table('threat_logs')->find($id),
+                "a row {$age} survived `purge --days=0`, which the advisory tells operators clears stored credentials"
+            );
+        }
+    }
+
     #[Test]
     public function purge_deletes_rows_older_than_the_days_option_and_keeps_newer(): void
     {

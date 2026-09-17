@@ -565,7 +565,7 @@ THREAT_DETECTION_MODE=balanced
 |------|---------------------|----------|
 | `strict` | 0 (logs everything) | All patterns active, lowest thresholds. Catches everything but may flag legitimate traffic. |
 | `balanced` | 10 | Default. Confidence scoring active, standard thresholds. Good for most apps. |
-| `relaxed` | 40 | Only high-severity patterns trigger. Best for content-heavy sites with frequent false positives. |
+| `relaxed` | 25 | Only high-severity patterns run at all. Best for content-heavy sites with frequent false positives. (Was 40 before v1.8.0 — a floor no single detection could reach, so the mode silently logged nothing.) |
 
 ### Enabled Environments
 
@@ -751,19 +751,25 @@ The package provides 15 REST endpoints for building custom dashboards or integra
 
 ### API Authentication
 
-API routes use `auth:sanctum` middleware by default. The package handles this gracefully:
+API routes use `auth:sanctum` middleware by default. The package handles its absence safely:
 
-- **Sanctum installed:** API requires authentication via Sanctum tokens or SPA session auth.
-- **Sanctum NOT installed:** The package **automatically detects** that Sanctum is missing and falls back to `['api']` only. The API works without authentication.
+- **Sanctum installed:** the API requires authentication via Sanctum tokens or SPA session auth.
+- **Sanctum NOT installed:** the package detects that and swaps `auth:sanctum` for Laravel's plain `auth` middleware. **The API is never left unauthenticated** — an unauthenticated request is refused either way.
 
-**If you don't use Sanctum but want to protect your API**, you have two options:
+> **`auth` means any logged-in user, not an administrator.** Out of the box, every
+> authenticated user of your application can read the threat log — IPs, URLs,
+> payloads, which account triggered what. On an app with public sign-up, that is
+> your security log readable by every user. Restrict it:
+>
+> ```env
+> THREAT_DETECTION_API_GUARD=role     # none | auth | role | ip
+> THREAT_DETECTION_API_ROLE=admin
+> ```
+>
+> or `THREAT_DETECTION_API_GUARD=ip` with `THREAT_DETECTION_API_IPS=203.0.113.10`,
+> or `THREAT_DETECTION_API=false` if you do not use the API at all.
 
-**Option 1 -  Use the built-in auth guard:**
-```env
-THREAT_DETECTION_API_GUARD=auth
-```
-
-**Option 2 -  Change the middleware directly:**
+**To authenticate with a different Laravel guard**, change the middleware directly:
 ```php
 // config/threat-detection.php
 'api' => [
@@ -778,6 +784,27 @@ THREAT_DETECTION_API_GUARD=auth
 'middleware' => ['api'],  // remove 'auth:sanctum'
 ```
 > Restore authentication before deploying to production.
+
+### Write endpoints and CSRF
+
+Two endpoints change what gets detected for everyone: marking a threat a false
+positive, and deleting an exclusion rule. Since v1.8.0, when the request is
+authenticated **by session cookie**, they also require a CSRF token and answer
+**419** without one. Any of these is accepted:
+
+- a `_token` field in the body,
+- an `X-CSRF-TOKEN` header,
+- an `X-XSRF-TOKEN` header carrying Laravel's encrypted `XSRF-TOKEN` cookie —
+  which is what axios sends on its own.
+
+**Token-authenticated clients are unaffected.** A request with no session has no
+cookie for a third-party page to ride on, so nothing is demanded of it. If you
+call these endpoints from a script with a Sanctum or bearer token, nothing
+changes.
+
+Both are additionally checked against `api.write_guard`
+(`THREAT_DETECTION_API_WRITE_GUARD`, `role` by default), independently of
+`api.guard`.
 
 ### Endpoint Reference
 
@@ -1080,8 +1107,28 @@ The alert, the endpoint, the field names and the attacking IP all survive -  onl
     'enabled' => env('THREAT_DETECTION_REDACT', true),
     'mask'    => '[REDACTED]',
     'labels'  => ['Aadhaar Number Detected', 'PAN Number Detected', /* ... */],
+    'fields'  => ['password', 'api_key', 'token', 'cvv', /* ... */],
 ],
 ```
+
+**Since v1.8.0 there are two triggers, and the second does not depend on detection
+at all.** `labels` masks the value a listed pattern matched. `fields` masks a value
+by the *name of the field carrying it* — `password`, `api_key`, `token`, `cvv` and
+so on — whether or not any pattern noticed it.
+
+It exists because labels alone could not protect a login form. The credential
+patterns are written for the wire form (`password=…`), every scanned segment is
+JSON-encoded first (`"password":"…"`), and so they never fired — which meant
+redaction never ran, and a password on any request that tripped some *other*
+pattern was stored in cleartext. See the [v1.8.0 advisory](https://github.com/jay123anta/laravel-threat-detection/security/advisories/GHSA-9jh8-pj82-6ccg).
+
+Names are compared after folding case, treating `-` and `_` alike, and dropping a
+leading `x-`, so `X-Api-Key`, `api-key` and `api_key` are one entry. The default
+list lives in code, so a config published before v1.8.0 — which has no `fields`
+key — is protected without being re-published.
+
+**Setting `fields` replaces the default list; it does not add to it.** List
+everything you want masked. An explicit empty array switches field masking off.
 
 Attack payloads are deliberately left intact -  an injection string is evidence, not a secret, and masking it would destroy the investigation. Only labels you list are touched.
 

@@ -5,6 +5,122 @@ without changes.
 
 ---
 
+## 1.7.x → 1.8.0
+
+A security release. **One step is required of everyone; the rest depend on what
+you use.** No public signature changed and nothing needs re-publishing.
+
+```bash
+composer update jayanta/laravel-threat-detection
+php artisan threat-detection:doctor
+```
+
+### 1. Purge `threat_logs` — it may contain passwords
+
+**Required.** Before 1.8.0, any request that tripped a detection while also
+carrying a password field stored that password in cleartext, for the whole
+retention period. Upgrading stops new ones being written. **It does not remove
+the ones already there.**
+
+```bash
+php artisan threat-detection:purge --days=0
+```
+
+Run it **after** `composer update`, not before. It deletes every row written before
+the moment it runs; anything that lands afterwards — including a row written in the
+same second, which the purge does not reach — comes from 1.8.0 and is already
+masked. Purge first and cleartext rows keep arriving until you upgrade.
+
+If you cannot lose the history, at minimum restrict who
+can read it (step 2) and rotate credentials for accounts that signed in while the
+package was active — administrators first. Details in the
+[security advisory](https://github.com/jay123anta/laravel-threat-detection/security/advisories/GHSA-9jh8-pj82-6ccg).
+
+### 2. Check who can read the API
+
+Not new in 1.8.0, but it is what made step 1 serious. The API is on by default
+and guarded only by `auth` — **any logged-in user**, not an administrator. If
+your app has public sign-up, restrict it:
+
+```env
+THREAT_DETECTION_API_GUARD=role
+THREAT_DETECTION_API_ROLE=admin
+```
+
+or set `THREAT_DETECTION_API=false` if you do not use it.
+
+### 3. Session-authenticated writes now need a CSRF token
+
+`POST …/threats/{id}/false-positive` and `DELETE …/exclusion-rules/{id}` answer
+**419** without one when the request is authenticated by session cookie. `_token`,
+`X-CSRF-TOKEN` and the encrypted `X-XSRF-TOKEN` are all accepted.
+
+Nothing to do if you call them with a Sanctum or bearer token — a request with no
+session is not asked for one — or if you only use the built-in dashboard, which
+already sent it.
+
+### 4. Geo enrichment is HTTPS, and fails loudly
+
+The endpoint default is now `https://ip-api.com/json`, a failed lookup is never
+retried over cleartext, and a run in which **every** lookup failed exits non-zero
+instead of reporting success.
+
+ip-api.com's free tier rejects HTTPS. If you relied on it, `threat-detection:enrich`
+will now fail rather than quietly send your visitors' IP addresses unencrypted.
+Point it at a provider you hold a key for, or set it back and accept the
+disclosure:
+
+```env
+THREAT_DETECTION_GEO_ENDPOINT=http://ip-api.com/json
+```
+
+### 5. If retention is enabled, expect a backlog to be deleted
+
+The scheduled purge has never actually run. It reached a confirmation prompt under
+cron, read EOF, and cancelled — every night, exiting 0. Retention looked configured
+and removed nothing. It now runs with `--no-interaction`, so **the first scheduled
+run after upgrading deletes everything older than your retention period at once.**
+On a large table that is one long delete; run it by hand at a quiet time if that
+matters:
+
+```bash
+php artisan threat-detection:purge --days=90
+```
+
+### 6. `relaxed` mode now logs something
+
+Its confidence floor was 40, which no single detection could reach, so the mode
+silently discarded every attack that was not also announced by a scanner user
+agent. It is 25. If you chose `relaxed` for the quiet, expect high-severity rows to
+start appearing — those are detections you were not seeing, not new noise.
+
+### 7. Exports are stricter
+
+`export-blocklist` and `export-fail2ban` skip any row whose `ip_address` is not a
+valid IP, and log each one they skip. On a healthy install that set is empty. If
+you write your own rows to `threat_logs`, entries that were not addresses will
+disappear from generated blocklists — which is the intent.
+
+`export-fail2ban --jail` now refuses anything outside `[A-Za-z0-9_-]` and exits 1,
+rather than interpolating it into a script you run as root.
+
+### Nothing to do
+
+- Credentials are masked by field name regardless of whether a pattern fired. The
+  default list lives in code, so an already-published config is covered without
+  re-publishing. Customise it with `redact.fields` — which **replaces** the
+  default list rather than adding to it.
+- API responses carry `X-Content-Type-Options: nosniff` and
+  `Referrer-Policy: no-referrer`.
+- `threat-detection:stats` says **Recorded Detections**, not "Total Threats". The
+  numbers did not change; the label did, because a detection is written once per
+  IP per type per five minutes and the old one invited reading it as attempt
+  volume.
+- A scanner hiding behind a browser user agent is now identified, and
+  `max_detections_per_request` keeps the most severe matches rather than the first
+  few. Both can only add rows.
+
+---
 ## 1.6.x → 1.7.0
 
 Three defaults changed and one behaviour tightened. Run this first — it reports
