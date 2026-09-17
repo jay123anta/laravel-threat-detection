@@ -257,7 +257,15 @@ class LegitimateTrafficCorpusTest extends TestCase
             $observed[$name] = $this->logged();
         }
 
-        $this->assertSame(self::untunedNoiseFloor(), $observed, 'the untuned noise floor changed — confirm this is intended');
+        // assertSame is order-sensitive on associative arrays, and the corpus
+        // above and the expectation below now live in two places. Sort both by
+        // case so adding a case mid-list reads as what it is, rather than as a
+        // noise-floor change that did not happen.
+        $expected = self::untunedNoiseFloor();
+        ksort($expected);
+        ksort($observed);
+
+        $this->assertSame($expected, $observed, 'the untuned noise floor changed — confirm this is intended');
     }
 
     /**
