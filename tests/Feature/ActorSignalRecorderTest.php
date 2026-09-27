@@ -244,6 +244,38 @@ class ActorSignalRecorderTest extends TestCase
     }
 
     /**
+     * Case is the other cheap surface mutation, and it behaves like
+     * whitespace: a new variant, the same fingerprint.
+     *
+     * This one was wrong until an end-to-end run caught it. Every per-feature
+     * test used a single casing, so "UNION SELECT" and "Union Select" quietly
+     * produced two fingerprints, and a chain that should have counted as one
+     * split into two shorter ones — each below the reporting threshold.
+     */
+    #[Test]
+    public function changing_case_is_a_new_variant_but_not_a_new_fingerprint(): void
+    {
+        $this->enable();
+
+        $this->get('/search?q=' . urlencode("' UNION SELECT password FROM users--"))->assertStatus(200);
+        $this->get('/search?q=' . urlencode("' Union Select password From users--"))->assertStatus(200);
+
+        $rows = DB::table(self::SIGNALS)->where('label', 'SQL Injection UNION')->get();
+
+        $this->assertGreaterThanOrEqual(2, $rows->count(), 'the re-cased payload was not recorded at all');
+        $this->assertSame(
+            1,
+            $rows->pluck('fingerprint')->unique()->count(),
+            're-casing produced a different fingerprint, so one mutation chain splits into several short ones'
+        );
+        $this->assertSame(
+            2,
+            $rows->pluck('variant')->unique()->count(),
+            're-casing did not produce a different variant, so a case-alternating bypass loop would be invisible'
+        );
+    }
+
+    /**
      * Recorded above the confidence floor, which returns before anything is
      * written to threat_logs. A low-scoring attempt is still an attempt.
      */

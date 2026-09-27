@@ -1752,11 +1752,16 @@ class ThreatDetectionService
      * Two requests share this when they decode to the same thing, however they
      * were encoded — the property the mutation-chain signal is built on.
      *
-     * No canonicalisation here: normalizeForDetection() already collapses
-     * whitespace and trims as its final step, so re-indenting a JSON body
-     * cannot reach this method as a different string. An earlier version
-     * repeated that collapse and it was dead code — mutation testing caught it
-     * by removing it and watching nothing fail.
+     * Case is folded here, and nowhere else. normalizeForDetection() does not
+     * lowercase — it has no reason to, because every pattern is matched
+     * case-insensitively — but "UNION SELECT" and "Union Select" are the same
+     * attack, and changing case is about the cheapest bypass mutation there
+     * is. Without folding, an actor alternating case split into several
+     * fingerprints and the chain that should have been one read as two. An
+     * end-to-end run caught that; the per-feature tests never used mixed case.
+     *
+     * Whitespace is *not* re-collapsed: normalizeForDetection() already
+     * collapses and trims as its final step, so doing it again was dead code.
      *
      * Truncated SHA-256 rather than the text, for two reasons. Normalisation
      * runs before redaction, so the text can contain credentials; and 16 hex
@@ -1765,7 +1770,7 @@ class ThreatDetectionService
      */
     private function fingerprintOf(string $normalizedPayload): string
     {
-        return substr(hash('sha256', $normalizedPayload), 0, 16);
+        return substr(hash('sha256', mb_strtolower($normalizedPayload)), 0, 16);
     }
 
     /**
