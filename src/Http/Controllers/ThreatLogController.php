@@ -355,8 +355,11 @@ class ThreatLogController extends Controller
                     // stops a newline splitting the record; this stops the cell
                     // carrying something that was never an address.
                     $this->sanitizeIpCell($log->ip_address),
-                    $this->sanitizeCsvCell($log->url),
-                    $this->sanitizeCsvCell($log->type),
+                    // url and type are the two cells carrying attacker-chosen
+                    // text, so they are the two that get a trust boundary when
+                    // spotlighting is on.
+                    $this->spotlight($this->sanitizeCsvCell($log->url)),
+                    $this->spotlight($this->sanitizeCsvCell($log->type)),
                     $log->threat_level,
                     ($log->confidence_score ?? 0) . '%',
                     ($log->is_false_positive ?? false) ? 'Yes' : 'No',
@@ -561,6 +564,40 @@ class ThreatLogController extends Controller
         );
 
         return '[INVALID IP]';
+    }
+
+    /**
+     * Wrap an attacker-controlled cell in an explicit trust boundary, so a log
+     * pasted into an LLM says which parts of itself are data rather than
+     * instructions.
+     *
+     * This is "spotlighting", and it is a mitigation rather than a fix: in the
+     * study that measured it, marking untrusted regions cut prompt-injection
+     * success from 87.3% to 51.4% on its own, and to 8.4% only when layered
+     * with input filtering and output validation. It also degrades as the
+     * context window grows. Worth doing; not worth trusting alone.
+     *
+     * Off by default — it changes the bytes of an established export format,
+     * and a pipeline parsing that CSV should not have its columns rewritten
+     * because the package shipped an upgrade.
+     *
+     * An empty cell is left alone: wrapping nothing communicates nothing and
+     * only makes the file harder to read.
+     */
+    private function spotlight(string $value): string
+    {
+        if ($value === '' || !config('threat-detection.llm_log_safety.spotlight_exports', false)) {
+            return $value;
+        }
+
+        $open = (string) config('threat-detection.llm_log_safety.spotlight_open', '<<<UNTRUSTED_LOG_DATA');
+        $close = (string) config('threat-detection.llm_log_safety.spotlight_close', 'END_UNTRUSTED_LOG_DATA>>>');
+
+        // A payload that contains the closing marker could otherwise appear to
+        // end the untrusted region early and have the rest read as trusted.
+        $value = str_replace([$open, $close], '', $value);
+
+        return $open . ' ' . $value . ' ' . $close;
     }
 
     private function sanitizeCsvCell(?string $value): string

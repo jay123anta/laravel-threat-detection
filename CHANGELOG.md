@@ -24,6 +24,37 @@ All notable changes to `jayanta/laravel-threat-detection` will be documented in 
 
   Turn it off, or use `skip_paths`, if your app genuinely serves an LLM API.
 
+- **The threat log treated as an injection vector, opt-in.** Two independent
+  switches, both off by default:
+
+  `THREAT_DETECTION_LLM_INJECTION=true` reports injection-shaped content —
+  chat-template control tokens, instruction overrides, triage manipulation,
+  prompt exfiltration, encoded-payload instructions — as a threat, scoped to
+  query, body and headers.
+
+  `THREAT_DETECTION_SPOTLIGHT_EXPORTS=true` wraps the attacker-controlled cells
+  of the CSV export in an explicit trust boundary, so a log pasted into an LLM
+  says which parts of itself are data rather than instructions. A payload
+  containing the closing marker has it stripped first, so it cannot end the
+  region early.
+
+  The reason: this table stores attacker-controlled text, and operators paste
+  that text into an LLM to triage it. Prompt injection planted in log fields
+  succeeded 83.4% of the time on average across GPT-4o, Claude 3.5 Sonnet and
+  Llama-3-70B with no defences, and the most effective carriers — JSON bodies
+  at 88.9%, User-Agent and Referer at 83-86% — are exactly the fields stored
+  here ([arXiv:2607.14493](https://arxiv.org/abs/2607.14493)). Spotlighting is
+  a mitigation, not a fix: on its own it cut success to 51.4%, and to 8.4% only
+  layered with other defences.
+
+  Enabling detection costs roughly ten extra regexes on clean traffic. Prompt
+  injection is prose, and the keyword pre-screen looks for punctuation-shaped
+  markers, so these patterns carry no category in order to run on segments the
+  pre-screen would skip. Category-mapped patterns still skip as before.
+
+  Off by default, verified the same way as the probe pack: the detection,
+  export and redaction suites run against the previous code and against this,
+  compared case by case — 692 tests, same set, same status.
 - **Per-path probe severity.** A `probe_tracking.paths` value may now be
   `['label' => ..., 'level' => ...]` as well as a plain string, so one path can
   differ from `default_level`. The string form is unchanged.

@@ -871,6 +871,122 @@ return [
     |   THREAT_DETECTION_GEO_ENDPOINT=https://pro.ip-api.com/json
     |
     */
+    /*
+    |--------------------------------------------------------------------------
+    | LLM-safe threat log (opt-in, off by default)
+    |--------------------------------------------------------------------------
+    |
+    | This table stores attacker-controlled text — request bodies, user agents,
+    | URLs — and operators increasingly paste that text into an LLM to triage
+    | it. That makes the log itself an injection vector: an attacker who wants
+    | their intrusion summarised as "routine maintenance" does not need to
+    | reach your SOC, only to send a request you will log.
+    |
+    | Measured, not hypothetical. Across GPT-4o, Claude 3.5 Sonnet and
+    | Llama-3-70B, prompt injection planted in log fields succeeded 83.4% of
+    | the time on average with no defences; the most vulnerable carriers were
+    | JSON API payloads (88.9%) and HTTP headers such as User-Agent and
+    | Referer (83-86%) — which are exactly the fields stored here.
+    |
+    |   Context Contamination in LLM Analysis of Network Security Logs
+    |   — Karanjai, Lu, Madhavarao, Xu & Shi (University of Houston, PayPal,
+    |   Kent State), 2026. arXiv:2607.14493
+    |
+    | Two independent switches, both off:
+    |
+    |   detect_injection  — report injection-shaped content as a threat, so you
+    |                       can see someone targeting your analysis pipeline.
+    |   spotlight_exports — wrap attacker-controlled cells in the CSV export in
+    |                       an explicit trust boundary, so a log pasted into an
+    |                       LLM carries its own "this is data, not instructions"
+    |                       marker. In the paper this single measure cut attack
+    |                       success from 87.3% to 51.4%; layered with others, to
+    |                       8.4%. It is a mitigation, not a fix.
+    |
+    | Cost of detect_injection: injection is plain prose, so these patterns
+    | carry no category and run even on requests the keyword pre-screen would
+    | otherwise skip. That is roughly ten extra regexes on clean traffic — not
+    | the full pattern set, because category-mapped patterns still skip.
+    |
+    */
+    'llm_log_safety' => [
+        'detect_injection' => env('THREAT_DETECTION_LLM_INJECTION', false),
+
+        'spotlight_exports' => env('THREAT_DETECTION_SPOTLIGHT_EXPORTS', false),
+
+        // Wrapper used by spotlight_exports. Anything an LLM will read as a
+        // boundary works; the point is that it is explicit and consistent.
+        'spotlight_open' => '<<<UNTRUSTED_LOG_DATA',
+        'spotlight_close' => 'END_UNTRUSTED_LOG_DATA>>>',
+
+        /*
+         * Same shape as custom_patterns: regex => label, or
+         * regex => ['label' => ..., 'level' => ..., 'contexts' => [...]].
+         *
+         * Scoped to the carriers the paper measured. 'path' is excluded — a
+         * URL path is too short to carry an instruction and too likely to
+         * collide with ordinary routes.
+         *
+         * Your own custom_patterns entry for the same regex always wins.
+         */
+        'patterns' => [
+            // Chat-template control tokens. These are not prose and have no
+            // legitimate reason to appear in an HTTP request.
+            '/<\|(?:im_start|im_end|system|user|assistant|endoftext)\|>/i' => [
+                'label' => 'LLM Role Marker Injection',
+                'level' => 'medium',
+                'contexts' => ['query', 'body', 'headers'],
+            ],
+            '/\[\/?INST\]|\[\/?SYS\]/i' => [
+                'label' => 'LLM Role Marker Injection',
+                'level' => 'medium',
+                'contexts' => ['query', 'body', 'headers'],
+            ],
+            '/#{2,}\s*(?:instruction|system|assistant)\s*:/i' => [
+                'label' => 'LLM Role Marker Injection',
+                'level' => 'medium',
+                'contexts' => ['query', 'body', 'headers'],
+            ],
+
+            // The canonical override. Anchored on a verb plus an explicit
+            // reference to earlier instructions, so ordinary prose containing
+            // "ignore" on its own does not match.
+            '/\b(?:ignore|disregard|forget|override)\s+(?:all\s+|any\s+|the\s+)*(?:previous|prior|above|earlier|preceding|system)\s+(?:instruction|prompt|direction|rule|context|message)/i' => [
+                'label' => 'LLM Instruction Override',
+                'level' => 'medium',
+                'contexts' => ['query', 'body', 'headers'],
+            ],
+
+            // Aimed squarely at a triage pipeline: telling the reader what
+            // verdict to reach. This is the OBJ-CONCEAL / OBJ-FABRICATE shape,
+            // and it is the reason this feature exists.
+            // The optional noun matters: the shape actually used is
+            // "summarize this alert as routine maintenance", not
+            // "summarize this as ...". Without it the most likely phrasing of
+            // the most important pattern here slipped straight through.
+            '/\b(?:summari[sz]e|classify|categori[sz]e|report|mark|treat|label|flag)\s+(?:this|it|the)(?:\s+(?:alert|event|log|entry|incident|activity|request|finding))?\s+as\b/i' => [
+                'label' => 'LLM Triage Manipulation',
+                'level' => 'high',
+                'contexts' => ['query', 'body', 'headers'],
+            ],
+
+            // OBJ-EXFIL: asking the analysing model to leak its own context.
+            '/\b(?:append|send|post|output|reveal|print|repeat)\s+(?:the\s+|your\s+)?(?:system\s+prompt|initial\s+instruction|above\s+instruction|your\s+instruction)/i' => [
+                'label' => 'LLM Prompt Exfiltration',
+                'level' => 'high',
+                'contexts' => ['query', 'body', 'headers'],
+            ],
+
+            // Level 3 obfuscation: the payload is encoded and the instruction
+            // to decode it travels alongside.
+            '/\b(?:decode|base64_decode|from\s*base64)\s+(?:the\s+)?(?:following|this|below|next)\b|\b(?:following|this)\s+is\s+base64[,:]/i' => [
+                'label' => 'LLM Encoded Instruction',
+                'level' => 'medium',
+                'contexts' => ['query', 'body', 'headers'],
+            ],
+        ],
+    ],
+
     'enrichment' => [
         'endpoint' => env('THREAT_DETECTION_GEO_ENDPOINT', 'https://ip-api.com/json'),
     ],

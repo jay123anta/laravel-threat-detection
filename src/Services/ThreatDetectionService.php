@@ -2019,6 +2019,32 @@ class ThreatDetectionService
      *
      * @return array<string, array{label: string, level: ?string, contexts: ?array, validator: ?string}>
      */
+    /**
+     * The configured custom patterns, plus the prompt-injection pack when it
+     * is turned on.
+     *
+     * The pack rides on custom_patterns rather than getting a loader of its
+     * own: that reuses the regex validation, the label/level/contexts shape
+     * and the per-process memoisation already built here, and it means an
+     * operator can override or delete any pack entry using a mechanism they
+     * already know.
+     *
+     * Union, not array_merge — `+` keeps the LEFT side on a key collision, so
+     * an operator's own entry for the same regex wins over the pack's.
+     *
+     * @return array<string, mixed>
+     */
+    private function customPatternSource(): array
+    {
+        $configured = (array) config('threat-detection.custom_patterns', []);
+
+        if (!config('threat-detection.llm_log_safety.detect_injection', false)) {
+            return $configured;
+        }
+
+        return $configured + (array) config('threat-detection.llm_log_safety.patterns', []);
+    }
+
     private function getValidatedCustomPatterns(): array
     {
         if (self::$validatedCustomPatterns !== null) {
@@ -2026,7 +2052,7 @@ class ThreatDetectionService
         }
 
         self::$validatedCustomPatterns = [];
-        foreach (config('threat-detection.custom_patterns', []) as $regex => $entry) {
+        foreach ($this->customPatternSource() as $regex => $entry) {
             if (@preg_match($regex, '') === false) {
                 Log::warning("Threat detection: invalid custom pattern skipped: {$regex}");
 
