@@ -67,6 +67,23 @@ class ThreatLogController extends Controller
     }
 
     /**
+     * created_at's calendar day, as an ISO date string, on every driver.
+     *
+     * CAST(... AS DATE) is right on MySQL, PostgreSQL and SQL Server, and
+     * silently wrong on SQLite — the default database for a new Laravel app.
+     * SQLite has no DATE type, so the cast takes NUMERIC affinity and returns
+     * the leading number: every row of 2026 landed in one bucket called 2026,
+     * and the dashboard's chart, which formats dates as strings, never drew.
+     * SQLite's own DATE() returns 'YYYY-MM-DD'.
+     */
+    private function day(): string
+    {
+        return DB::connection()->getDriverName() === 'sqlite'
+            ? 'DATE(created_at)'
+            : 'CAST(created_at AS DATE)';
+    }
+
+    /**
      * Narrow a query to AI-related or traditional threats.
      *
      * No parameter means everything, exactly as before, so an existing
@@ -292,9 +309,9 @@ class ThreatLogController extends Controller
                 ->get();
 
             $byDate = DB::table($this->table)
-                ->selectRaw('CAST(created_at AS DATE) as date, COUNT(*) as count')
+                ->selectRaw($this->day() . ' as date, COUNT(*) as count')
                 ->where('created_at', '>=', now()->subDays(30))
-                ->groupByRaw('CAST(created_at AS DATE)')
+                ->groupByRaw($this->day())
                 ->orderBy('date', 'asc')
                 ->get();
 
@@ -640,9 +657,9 @@ class ThreatLogController extends Controller
             $this->scopeCategory($query, $request);
 
             $data = $query
-                ->selectRaw('CAST(created_at AS DATE) as date, threat_level, COUNT(*) as count')
+                ->selectRaw($this->day() . ' as date, threat_level, COUNT(*) as count')
                 ->where('created_at', '>=', now()->subDays($days))
-                ->groupByRaw('CAST(created_at AS DATE), threat_level')
+                ->groupByRaw($this->day() . ', threat_level')
                 ->orderBy('date')
                 ->get();
 

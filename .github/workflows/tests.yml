@@ -136,7 +136,7 @@ jobs:
           THREAT_DETECTION_MYSQL_PASSWORD: ''
         run: |
           set -o pipefail
-          vendor/bin/phpunit tests/Security/MysqlStrictModeTest.php tests/Security/MysqlActorSignalsTest.php tests/Security/MysqlHostileBytesTest.php | tee result.txt
+          vendor/bin/phpunit tests/Security/MysqlStrictModeTest.php tests/Security/MysqlActorSignalsTest.php tests/Security/MysqlHostileBytesTest.php tests/Security/MysqlDateBucketingTest.php | tee result.txt
           if grep -qi 'skipped' result.txt; then
             echo "::error::The strict-mode tests skipped instead of running. They execute nowhere else, so a skip means they never ran at all."
             exit 1

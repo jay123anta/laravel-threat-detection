@@ -261,6 +261,14 @@ All notable changes to `jayanta/laravel-threat-detection` will be documented in 
 
 ### Fixed
 
+- **The timeline and summary put a whole year in one bucket on SQLite** — the
+  default database for a new Laravel app. Both grouped by
+  `CAST(created_at AS DATE)`, and SQLite, which has no DATE type, returns the
+  leading number: every row of 2026 landed in a bucket called `2026`, and the
+  dashboard's chart, which formats dates as strings, never drew. SQLite now
+  uses `DATE(created_at)`; other drivers keep the cast. Found by executing the
+  dashboard's own JavaScript against real API output. Verified on SQLite and
+  on MariaDB, which now runs in CI.
 - `threat-detection:purge` now sweeps actor signals even when no `threat_logs`
   rows aged out. The command returns early when nothing matches `--days`, so an
   install whose logs were all recent would never have purged the table that
