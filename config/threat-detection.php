@@ -232,6 +232,106 @@ return [
             '/api-docs' => 'API Docs',
             '/api-docs/*' => 'API Docs',
         ],
+
+        /*
+        |----------------------------------------------------------------------
+        | AI-infrastructure probes (opt-in, off by default)
+        |----------------------------------------------------------------------
+        |
+        | Self-hosted LLM gateways are now a routine scanning target, and the
+        | paths below are the ones attackers were measured hitting rather than
+        | the ones that seemed likely. They come from Ollure, a honeypot
+        | emulating the Ollama API, which recorded 290,887 interactions from
+        | 2,793 unique source IPs over 84 days across four deployments:
+        | mostly automated discovery, fingerprinting and model enumeration,
+        | but also path traversal, SSRF, RCE, cryptomining payloads, resource
+        | exhaustion and prompt injection.
+        |
+        |   OllamaDrama: Designing and Deploying a Honeypot to Measure Attacks
+        |   on Exposed LLM Infrastructure — Elzer, Johansen & Vasilomanolakis,
+        |   Technical University of Denmark, 2026. arXiv:2609.29757
+        |
+        | OFF by default: switching it on is the only thing that changes what
+        | an existing install reports. Turn it on if your app does not itself
+        | serve an LLM API — if it does, these are your own endpoints, and you
+        | want this off or those paths in skip_paths.
+        |
+        | Entries may be a plain label, or ['label' => ..., 'level' => ...]
+        | where one path deserves a different severity from the rest.
+        |
+        */
+        'ai_infrastructure' => [
+            'enabled' => env('THREAT_DETECTION_AI_PROBES', false),
+
+            // Applies to every entry below that does not set its own level.
+            // Higher than the general probe default: these paths exist on
+            // almost no public app, so a request for one is a deliberate hunt
+            // for exposed model infrastructure rather than broad spraying.
+            'level' => 'high',
+
+            'paths' => [
+                // Ollama REST API — default port 11434, commonly proxied.
+                // Enumeration first: what is running, and what is loaded.
+                '/api/tags' => 'Ollama Model Enumeration',
+                '/api/ps' => 'Ollama Running Models',
+                '/api/show' => 'Ollama Model Details',
+                '/api/version' => 'Ollama Version Probe',
+
+                // Model management. Abuse of these is how an exposed instance
+                // gets turned into someone else's compute, and /api/pull is
+                // also the SSRF vector: the paper observed a pull request
+                // whose "name" was an internal URL.
+                '/api/pull' => 'Ollama Model Pull',
+                '/api/push' => 'Ollama Model Push',
+                '/api/create' => 'Ollama Model Create',
+                '/api/copy' => 'Ollama Model Copy',
+                '/api/delete' => 'Ollama Model Delete',
+
+                // Inference endpoints — free compute, and the way in for
+                // prompt injection against a self-hosted model.
+                '/api/generate' => 'Ollama Inference Probe',
+                '/api/chat' => 'Ollama Chat Probe',
+                '/api/embed' => 'Ollama Embedding Probe',
+                '/api/embeddings' => 'Ollama Embedding Probe',
+
+                // OpenAI-compatible surface, exposed by Ollama, LiteLLM,
+                // vLLM, LocalAI, Open WebUI and most gateways.
+                '/v1/models' => 'OpenAI-Compatible Model Enumeration',
+                '/v1/chat/completions' => 'OpenAI-Compatible Inference Probe',
+                '/v1/completions' => 'OpenAI-Compatible Inference Probe',
+                '/v1/embeddings' => 'OpenAI-Compatible Embedding Probe',
+
+                // Model Context Protocol servers.
+                '/mcp' => 'MCP Server Probe',
+                '/mcp/*' => 'MCP Server Probe',
+                '/sse' => 'MCP SSE Transport Probe',
+
+                // Agent/IDE configuration files. Not infrastructure: these are
+                // read for the instructions inside them, which is a different
+                // and more interesting intent.
+                '/.cursor/rules' => 'Agent Rules File Probe',
+                '/.cursor/*' => 'Agent Config Probe',
+                '/.aider.conf.yml' => 'Agent Config Probe',
+                '/.continue/*' => 'Agent Config Probe',
+                '/AGENTS.md' => 'Agent Instructions Probe',
+                '/CLAUDE.md' => 'Agent Instructions Probe',
+                '/llms.txt' => 'Agent Instructions Probe',
+
+                // AI application frameworks with known RCE / auth-bypass
+                // history. Dated so they can be pruned when they stop being
+                // worth the entry.
+                '/api/v1/validate/code' => 'Langflow Code Validation (CVE-2025-3248, 2025)',
+                '/api/v1/*' => 'Langflow API Probe',
+                '/health_check' => 'Langflow Health Probe',
+                '/api/kernels/*' => 'Notebook Kernel Probe',
+                '/lsp/*' => 'marimo LSP Probe',
+                '/@file/*' => 'marimo File Access Probe',
+                '/litellm/*' => 'LiteLLM Admin Probe',
+                '/key/generate' => 'LiteLLM Key Generation Probe',
+                '/ollama/*' => 'Open WebUI Ollama Proxy Probe',
+                '/rag/api/*' => 'Open WebUI RAG Probe',
+            ],
+        ],
     ],
 
     /*

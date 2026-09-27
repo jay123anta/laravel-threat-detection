@@ -423,7 +423,7 @@ php artisan route:clear
 - **83 Bot/Scanner Signatures** -  SQLMap, Nikto, Nmap, Burp Suite, FeroxBuster, FFUF, XSStrike, Dalfox, Netsparker, and 70+ other scanner and bot signatures
 - **AI Scraper Detection** -  GPTBot, ClaudeBot, ByteSpider, Common Crawl, and other AI training bots
 - **Headless Browser Detection** -  HeadlessChrome, PhantomJS, Selenium, Puppeteer, Playwright
-- **404 Probe Tracking** -  Detects reconnaissance probes hitting known vulnerable paths (`/wp-admin`, `/.env`, `/phpmyadmin`, `/actuator`, etc.) with 50+ default probe paths
+- **404 Probe Tracking** -  Detects reconnaissance probes hitting known vulnerable paths (`/wp-admin`, `/.env`, `/phpmyadmin`, `/actuator`, etc.) with 50+ default probe paths, plus an opt-in [AI-infrastructure pack](#ai-infrastructure-probes-opt-in) for exposed LLM gateways
 - **DDoS Monitoring** -  Rate-based threshold detection with configurable windows
 - **Confidence Scoring** -  Each threat gets a 0-100 confidence score based on pattern count, context, and signals
 - **Evasion Resistance** -  Normalization pipeline defeats SQL comment insertion, double URL encoding, HTML entity encoding, Unicode escapes, hex escapes, and IIS `%uXXXX` encoding before pattern matching — repeated until the payload stops changing, so stacking two techniques does not get past it
@@ -1033,6 +1033,53 @@ Enabled by default with 50+ probe paths. Customize in `config/threat-detection.p
 ```
 
 Disable with `THREAT_DETECTION_PROBE_TRACKING=false`.
+
+A path's value may also be an array when one path deserves a different severity
+from the rest:
+
+```php
+'/api/pull' => ['label' => 'Ollama Model Pull', 'level' => 'high'],
+```
+
+The plain-string form is unchanged and takes `default_level`.
+
+### AI-infrastructure probes (opt-in)
+
+Self-hosted LLM gateways — Ollama, LiteLLM, Open WebUI, vLLM, MCP servers — are
+now a routine scanning target, and almost no public Laravel app serves those
+paths. A request for one is a deliberate hunt for exposed model infrastructure
+rather than broad spraying, so the pack logs at **high** severity.
+
+```env
+THREAT_DETECTION_AI_PROBES=true
+```
+
+**Off by default.** With it off, this release reports exactly what 1.8.0
+reported.
+
+The paths are the ones attackers were measured hitting, not the ones that
+seemed likely. They come from Ollure, a honeypot emulating the Ollama API,
+which over 84 days across four deployments recorded **290,887 interactions from
+2,793 unique source IPs** — mostly automated discovery, fingerprinting and model
+enumeration, but also path traversal, SSRF, RCE, cryptomining payloads, resource
+exhaustion and prompt injection.[^ollure]
+
+Covered: Ollama's REST API (`/api/tags`, `/api/ps`, `/api/show`, `/api/pull`,
+`/api/generate`, …), the OpenAI-compatible surface (`/v1/models`,
+`/v1/chat/completions`, …), MCP servers (`/mcp`, `/sse`), agent configuration and
+instruction files (`/.cursor/rules`, `/AGENTS.md`, `/llms.txt`), and dated paths
+for known AI-application CVEs.
+
+**Turn it off — or add those paths to `skip_paths` — if your app genuinely
+serves an LLM API.** They are your own endpoints, and every request to them
+would be logged.
+
+Your own `paths` entry always wins over the pack, so a path you have already
+classified is never reclassified by turning this on.
+
+[^ollure]: *OllamaDrama: Designing and Deploying a Honeypot to Measure Attacks on
+Exposed LLM Infrastructure* — Elzer, Johansen & Vasilomanolakis, Technical
+University of Denmark, 2026. [arXiv:2609.29757](https://arxiv.org/abs/2609.29757)
 
 ---
 

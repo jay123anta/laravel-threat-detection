@@ -2,6 +2,39 @@
 
 All notable changes to `jayanta/laravel-threat-detection` will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **AI-infrastructure probe tracking, opt-in via `THREAT_DETECTION_AI_PROBES=true`.**
+  37 paths covering Ollama's REST API, the OpenAI-compatible surface, MCP
+  servers, agent configuration and instruction files, and dated paths for known
+  AI-application CVEs. Logged at `high`, because almost no public Laravel app
+  serves these: a request for one is a deliberate hunt for exposed model
+  infrastructure, not broad spraying.
+
+  The list is not guesswork. It is the set of endpoints attackers were observed
+  hitting by Ollure, a honeypot emulating the Ollama API, across 290,887
+  interactions from 2,793 unique source IPs over 84 days
+  ([arXiv:2609.29757](https://arxiv.org/abs/2609.29757)).
+
+  **Off by default.** With it off, this release reports exactly what 1.8.0
+  reported — verified by running the detection suite against both and comparing
+  all 429 tests case by case, not by count.
+
+  Turn it off, or use `skip_paths`, if your app genuinely serves an LLM API.
+
+- **Per-path probe severity.** A `probe_tracking.paths` value may now be
+  `['label' => ..., 'level' => ...]` as well as a plain string, so one path can
+  differ from `default_level`. The string form is unchanged.
+
+### Fixed
+
+- A malformed `probe_tracking.paths` entry — no label, empty label, or a
+  non-string — is now skipped instead of being indexed. Previously a malformed
+  *wildcard* entry that matched a request produced a probe row with an empty
+  label; malformed exact paths were already inert, because `isset()` is false
+  for null.
 ## [1.8.0] - 2026-09-06
 
 Three audits, in sequence: a full audit of the test suite, a second audit of
