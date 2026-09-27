@@ -1217,9 +1217,27 @@ many addresses it arrives from. A *single* shared fingerprint is ignored: every
 install on the internet is hit by the same off-the-shelf scanner strings. The
 report needs several payloads shared by the same set of actors.
 
+**Retry bursts** — one actor, many *different* payloads of one attack:
+
+```
+GET /api/threat-detection/correlation?type=retries
+```
+
+The complement of a chain. A chain is one payload in many encodings — what a
+tamper script produces. An attacker that writes a new payload each time leaves
+a row of one-variant chains and no chain at all, and that is how a generating
+attacker iterates: an LLM-driven exploitation agent converged in 10–40 newly
+generated attempts, averaging 10, 20 and 40 by difficulty.[^awe] The count is
+of distinct fingerprints per actor and label, so a re-encoded payload is not
+counted twice. Like the other two, this is *adaptive* behaviour, not evidence
+of AI: a scanner working through a payload list leaves the same shape.
+
 Both counts also appear in `correlation?type=all` and in the summary — but only
 when signals are enabled, so the summary an existing install receives keeps
 exactly the keys it had before.
+
+[^awe]: Jaswal & Baghel, *AWE: Adaptive Agents for Dynamic Web Penetration
+Testing*, NDSS LAST-X 2026. [arXiv:2603.00960](https://arxiv.org/abs/2603.00960)
 
 [^mutation]: *The Infinite Mutation Engine? Measuring Polymorphism in
 LLM-Generated Offensive Code* — Universidad Carlos III de Madrid, 2026.
@@ -1279,7 +1297,7 @@ here reached **90.8% recall at 1.20% false positives** over 10,654 cases.[^peak]
 | **peak** | the most severe single detection — a lower bound on attention |
 | **persistence** | how many detections, saturating, and scaled by peak severity |
 | **diversity** | how many different weaknesses were probed |
-| **progression** | reconnaissance *and* an exploit attempt — movement along the kill chain |
+| **progression** | reconnaissance *then* an exploit attempt, in that order — movement along the kill chain; the gap is returned as `time_to_exploit_seconds`[^phase] |
 | **mutation** | many surface forms of one payload (needs actor signals) |
 | **cadence** | machine-regular spacing between attempts |
 
@@ -1368,6 +1386,12 @@ on Websites*, 2026. [arXiv:2603.28546](https://arxiv.org/abs/2603.28546)
 [^rba]: *Can Risk-Based Alerting Mitigate Cybersecurity Alert Fatigue?* 2026.
 [arXiv:2609.02465](https://arxiv.org/abs/2609.02465)
 
+[^phase]: Erdem, *How Reliable Are AI Attackers Against a Fixed Vulnerable
+Target? A 400-Run Empirical Study of LLM Penetration Testing Consistency*, 2026.
+The first exploit followed recon by about 15–30 s, and the authors recommend
+detecting that phase transition over command signatures.
+[arXiv:2605.30096](https://arxiv.org/abs/2605.30096)
+
 [^peak]: *Peak + Accumulation: A Proxy-Level Scoring Formula for Multi-Turn LLM
 Attack Detection*, 2026. [arXiv:2602.11247](https://arxiv.org/abs/2602.11247)
 
@@ -1398,7 +1422,7 @@ THREAT_DETECTION_SPOTLIGHT_EXPORTS=true  # mark untrusted cells in the CSV expor
 
 ### Reporting injection-shaped content
 
-Seven patterns covering the shapes the study catalogued: chat-template control
+Seven patterns cover the shapes the study catalogued: chat-template control
 tokens (`<|im_start|>`, `[INST]`), instruction overrides ("ignore all previous
 instructions"), triage manipulation ("summarize this alert as routine
 maintenance"), prompt exfiltration, and encoded-payload instructions. They are
@@ -1407,6 +1431,20 @@ carry an instruction and too likely to collide with a real route.
 
 They are ordinary `custom_patterns` entries, so you can override or delete any
 of them; your own entry for the same regex always wins.
+
+Two more catch instructions a human cannot see at all: runs of Unicode Tag
+characters (one hidden ASCII character each) and binary zero-width runs (eight
+per character). With tool access and a decoding hint, models followed such
+hidden instructions 98–100% of the time,[^reverse] and an LLM triaging your
+log has both. Thresholds sit above legitimate use — a flag emoji carries at
+most six Tag characters, and the joiners in emoji and Indic scripts (U+200D)
+are not matched. Segments are JSON-escaped before matching, so these are
+matched in their escaped form; a pattern written for the raw bytes would
+never fire, and a test pins that.
+
+[^reverse]: Graves, *Reverse CAPTCHA: Evaluating LLM Susceptibility to
+Invisible Unicode Instruction Injection*, 2026.
+[arXiv:2603.00164](https://arxiv.org/abs/2603.00164)
 
 **One cost worth knowing.** Prompt injection is plain prose, and the keyword
 pre-screen that normally keeps large clean bodies off the regex engine looks for

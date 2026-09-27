@@ -250,6 +250,57 @@ class ThreatCorrelationService
     }
 
     /**
+     * One actor, many *different* payloads of one attack class.
+     *
+     * The complement of a mutation chain. A chain is one payload in many
+     * encodings — what a tamper script produces — and it is grouped by
+     * fingerprint, so an attacker who writes a genuinely new payload each
+     * time shows up as a row of one-variant chains and is never seen.
+     * That is how a generating attacker iterates: an LLM-driven web
+     * exploitation agent converged in 10–40 newly generated payload
+     * attempts, averaging 10, 20 and 40 by difficulty (AWE,
+     * arXiv:2603.00960), while LLMs are poor at the encoding tricks a chain
+     * detects.
+     *
+     * Adaptive, not AI: a scanner iterating a payload list leaves the same
+     * shape. The default minimum of five sits below the easiest level AWE
+     * reported.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function detectRetryBursts(int $minutesBack = 60, int $minPayloads = 5): array
+    {
+        $table = $this->signalsTable();
+
+        if ($table === null) {
+            return [];
+        }
+
+        $bursts = DB::table($table)
+            ->select(
+                'actor_key',
+                'label',
+                DB::raw('COUNT(DISTINCT fingerprint) as payload_count'),
+                DB::raw('MIN(created_at) as first_seen'),
+                DB::raw('MAX(created_at) as last_seen')
+            )
+            ->where('created_at', '>=', now()->subMinutes(max($minutesBack, 1)))
+            ->groupBy('actor_key', 'label')
+            ->havingRaw('COUNT(DISTINCT fingerprint) >= ?', [max($minPayloads, 2)])
+            ->orderByDesc('payload_count')
+            ->limit(20)
+            ->get();
+
+        return $bursts->map(fn ($burst) => [
+            'actor_key' => $burst->actor_key,
+            'label' => $burst->label,
+            'payload_count' => (int) $burst->payload_count,
+            'first_seen' => $burst->first_seen,
+            'last_seen' => $burst->last_seen,
+        ])->toArray();
+    }
+
+    /**
      * One payload seen from many actors: a campaign whose egress rotates.
      *
      * Clustering on the *fingerprint* is what makes this work. Serverless and

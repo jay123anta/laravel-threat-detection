@@ -2590,6 +2590,11 @@ class ThreatDetectionService
         return $this->correlation->detectPayloadClusters($minutesBack, $minActors, $minFingerprints);
     }
 
+    public function detectRetryBursts(int $minutesBack = 60, int $minPayloads = 5): array
+    {
+        return $this->correlation->detectRetryBursts($minutesBack, $minPayloads);
+    }
+
     public function getCorrelationSummary(): array
     {
         return $this->correlation->getCorrelationSummary();

@@ -192,6 +192,7 @@ class AiThreatsApiTest extends TestCase
         );
         $this->assertNull($data['mutation_chains'], 'an analysis that never ran reported an empty result');
         $this->assertNull($data['payload_clusters']);
+        $this->assertNull($data['retry_bursts']);
         $this->assertNull($data['risky_actors']);
     }
 

@@ -73,6 +73,7 @@ class DashboardSectionsTest extends TestCase
         $this->assertStringContainsString('data-panel="llm-directed"', $html);
         $this->assertStringContainsString('data-panel="mutation-chains"', $html);
         $this->assertStringContainsString('data-panel="payload-clusters"', $html);
+        $this->assertStringContainsString('data-panel="retry-bursts"', $html);
     }
 
     /**

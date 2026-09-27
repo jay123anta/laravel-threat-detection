@@ -118,7 +118,29 @@ class ActorRiskScorer
         $exploit = $rows->contains(
             fn ($row) => $row->threat_level === 'high' && !str_starts_with((string) $row->type, '[probe]')
         );
-        $progression = $recon && $exploit ? $this->floatSetting('progression_bonus', 0.2) : 0.0;
+
+        // In order. A kill chain is a transition — reconnaissance, *then*
+        // exploitation — and that transition is the signal: across 400
+        // autonomous attack runs the first exploit came at iteration 4–6,
+        // roughly 15–30 s after recon began, and the authors recommend
+        // detecting phase transitions over command signatures because the
+        // paths themselves barely repeat (98 distinct strategies in 100
+        // runs for one model; arXiv:2605.30096). An exploit followed later
+        // by a probe is two unrelated events, not movement along a chain.
+        // First occurrences are genuine: deduplication keeps the first row
+        // of each type and drops the repeats.
+        $firstRecon = $rows->first(fn ($row) => str_starts_with((string) $row->type, '[probe]'));
+        $firstExploit = $rows->first(
+            fn ($row) => $row->threat_level === 'high' && !str_starts_with((string) $row->type, '[probe]')
+        );
+        $timeToExploit = null;
+
+        if ($firstRecon !== null && $firstExploit !== null) {
+            $gap = strtotime((string) $firstExploit->created_at) - strtotime((string) $firstRecon->created_at);
+            $timeToExploit = $gap >= 0 ? $gap : null;
+        }
+
+        $progression = $timeToExploit !== null ? $this->floatSetting('progression_bonus', 0.2) : 0.0;
 
         // Mutation: many surface forms of one attack. The strongest single
         // indicator in the source formula, and the one this package is built
@@ -150,6 +172,9 @@ class ActorRiskScorer
             'peak_variants' => $variants,
             'reached_recon' => $recon,
             'reached_exploit' => $exploit,
+            // Seconds from first reconnaissance to first exploit attempt, when
+            // they happened in that order; null otherwise.
+            'time_to_exploit_seconds' => $timeToExploit,
             'components' => [
                 'peak' => round($peak, 3),
                 'persistence' => round($persistence, 3),
@@ -436,6 +461,7 @@ class ActorRiskScorer
             'peak_variants' => 0,
             'reached_recon' => false,
             'reached_exploit' => false,
+            'time_to_exploit_seconds' => null,
             'components' => [
                 'peak' => 0.0,
                 'persistence' => 0.0,

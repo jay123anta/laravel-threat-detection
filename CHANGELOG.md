@@ -120,6 +120,14 @@ All notable changes to `jayanta/laravel-threat-detection` will be documented in 
   nothing to agent detection once removed by backward elimination
   ([arXiv:2607.26935](https://arxiv.org/abs/2607.26935)).
 
+  Kill-chain progression requires reconnaissance *before* exploitation, and
+  the gap is returned as `time_to_exploit_seconds`. A kill chain is a
+  transition: across 400 autonomous attack runs the first exploit followed
+  recon by about 15–30 s, and the authors recommend detecting that phase
+  transition over command signatures
+  ([arXiv:2605.30096](https://arxiv.org/abs/2605.30096)). An exploit followed
+  later by a probe is two events, and no longer scores as a chain.
+
   The default weights come from the source formula, where they were tuned for
   multi-turn LLM conversations rather than HTTP actors: a considered starting
   point, not a transferred result.
@@ -142,6 +150,15 @@ All notable changes to `jayanta/laravel-threat-detection` will be documented in 
   `getCorrelationSummary()` gains `mutation_chains` and `payload_clusters`
   **only when signals are enabled**, so an install that has not opted in
   receives exactly the keys it did before.
+
+  **Retry bursts** (`correlation?type=retries`) are the complement: one actor
+  sending many *different* payloads of one attack class. A chain is one
+  payload in many encodings; an attacker that writes a new payload each time
+  leaves no chain at all — and that is how a generating attacker iterates, an
+  LLM-driven exploitation agent converging in 10–40 newly generated attempts
+  ([arXiv:2603.00960](https://arxiv.org/abs/2603.00960)). Counted by distinct
+  fingerprint, so a re-encoded payload is not counted twice. Adaptive, not
+  evidence of AI.
 - **Actor signals, opt-in via `THREAT_DETECTION_ACTOR_SIGNALS=true`.** A new
   `threat_actor_signals` table recording attempt-level evidence that
   `threat_logs` cannot hold, written *before* both the confidence floor and the
@@ -204,6 +221,14 @@ All notable changes to `jayanta/laravel-threat-detection` will be documented in 
   Off by default, verified the same way as the probe pack: the detection,
   export and redaction suites run against the previous code and against this,
   compared case by case — 692 tests, same set, same status.
+
+  Two more patterns catch instructions a human cannot see: runs of Unicode Tag
+  characters and binary zero-width runs. With tool access and a decoding hint,
+  models followed such hidden instructions 98–100% of the time
+  ([arXiv:2603.00164](https://arxiv.org/abs/2603.00164)). They match the
+  JSON-escaped form segments are stored in — a pattern for the raw bytes, the
+  obvious way to write it, would never fire — and their thresholds clear flag
+  emoji and the joiners used in emoji and Indic scripts.
 - **Per-path probe severity.** A `probe_tracking.paths` value may now be
   `['label' => ..., 'level' => ...]` as well as a plain string, so one path can
   differ from `default_level`. The string form is unchanged.

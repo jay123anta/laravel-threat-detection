@@ -196,6 +196,7 @@ class ThreatLogController extends Controller
                     // and "measured, nothing found" are different answers.
                     'mutation_chains' => $signalsOn ? $service->detectMutationChains(60, 5) : null,
                     'payload_clusters' => $signalsOn ? $service->detectPayloadClusters(60, 3, 2) : null,
+                    'retry_bursts' => $signalsOn ? $service->detectRetryBursts(60, 5) : null,
                     'risky_actors' => $scoreOn ? app(ActorRiskScorer::class)->topActors(null, 10) : null,
                 ],
             ]);
@@ -444,7 +445,7 @@ class ThreatLogController extends Controller
 
     public function correlation(Request $request, ThreatDetectionService $service): JsonResponse
     {
-        $request->validate(['type' => 'sometimes|in:all,coordinated,campaigns,rapid,mutations,clusters,actors']);
+        $request->validate(['type' => 'sometimes|in:all,coordinated,campaigns,rapid,mutations,clusters,retries,actors']);
 
         return $this->safe(function () use ($request, $service) {
             $type = $request->input('type', 'all');
@@ -471,6 +472,10 @@ class ThreatLogController extends Controller
 
             if ($type === 'all' || $type === 'clusters') {
                 $data['payload_clusters'] = $service->detectPayloadClusters(60, 3, 2);
+            }
+
+            if ($type === 'all' || $type === 'retries') {
+                $data['retry_bursts'] = $service->detectRetryBursts(60, 5);
             }
 
             // Returns [] unless actor scoring is enabled, so including it in

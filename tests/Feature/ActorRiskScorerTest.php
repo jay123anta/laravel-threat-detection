@@ -182,6 +182,50 @@ class ActorRiskScorerTest extends TestCase
         $this->assertSame(0.0, $exploitOnly['components']['progression']);
     }
 
+    /**
+     * A kill chain is a transition, so order matters: across 400 autonomous
+     * attack runs the first exploit followed recon by roughly 15–30 s, and
+     * the authors recommend detecting that phase transition
+     * (arXiv:2605.30096). The gap is reported so an operator can see it.
+     */
+    #[Test]
+    public function progression_is_recon_then_exploit_and_reports_the_gap(): void
+    {
+        $this->detection('203.0.113.30', '[probe] Environment File', 'medium', now()->subSeconds(40)->toDateTimeString());
+        $this->detection('203.0.113.30', '[middleware] SQL Injection UNION', 'high', now()->toDateTimeString());
+
+        $score = $this->scorer->score('203.0.113.30');
+
+        $this->assertGreaterThan(0, $score['components']['progression']);
+        $this->assertSame(40, $score['time_to_exploit_seconds']);
+    }
+
+    /** An exploit followed later by a probe is two events, not movement along a chain. */
+    #[Test]
+    public function exploit_then_recon_is_not_progression(): void
+    {
+        $this->detection('203.0.113.31', '[middleware] SQL Injection UNION', 'high', now()->subSeconds(40)->toDateTimeString());
+        $this->detection('203.0.113.31', '[probe] Environment File', 'medium', now()->toDateTimeString());
+
+        $score = $this->scorer->score('203.0.113.31');
+
+        $this->assertTrue($score['reached_recon']);
+        $this->assertTrue($score['reached_exploit']);
+        $this->assertSame(0.0, $score['components']['progression'], 'a probe after the exploit was scored as a kill chain');
+        $this->assertNull($score['time_to_exploit_seconds']);
+    }
+
+    /** One request that is both — a probe path carrying an injection — is recon and exploit at once. */
+    #[Test]
+    public function recon_and_exploit_in_the_same_second_is_progression(): void
+    {
+        $at = now()->toDateTimeString();
+        $this->detection('203.0.113.32', '[probe] Environment File', 'medium', $at);
+        $this->detection('203.0.113.32', '[middleware] SQL Injection UNION', 'high', $at);
+
+        $this->assertSame(0, $this->scorer->score('203.0.113.32')['time_to_exploit_seconds']);
+    }
+
     #[Test]
     public function a_mutation_chain_adds_to_the_score_when_signals_are_available(): void
     {

@@ -1224,6 +1224,31 @@ return [
                 'level' => 'medium',
                 'contexts' => ['query', 'body', 'headers'],
             ],
+
+            /*
+             * Instructions a human cannot see. Unicode Tag characters
+             * (U+E0000–E007F) carry one hidden ASCII character each; binary
+             * zero-width runs (U+200B = 0, U+200C = 1) carry one per eight.
+             * With tool access and a decoding hint, models followed such
+             * hidden instructions up to 98–100% of the time (Reverse CAPTCHA,
+             * arXiv:2603.00164) — and an LLM triaging this log has both.
+             *
+             * Matched in the form segments are stored in: JSON-escaped, so a
+             * Tag character is the text \udb40\udcXX and a zero-width space
+             * is ​. Thresholds sit above legitimate use: a flag emoji
+             * uses at most six Tag characters, and the joiners in emoji and
+             * Indic scripts are U+200D, which is not matched at all.
+             */
+            '/(?:\\\\udb40\\\\udc[0-7][0-9a-f]){8,}/i' => [
+                'label' => 'LLM Invisible Instruction Smuggling',
+                'level' => 'medium',
+                'contexts' => ['query', 'body', 'headers'],
+            ],
+            '/(?:\\\\u200[bc]){16,}/i' => [
+                'label' => 'LLM Invisible Instruction Smuggling',
+                'level' => 'medium',
+                'contexts' => ['query', 'body', 'headers'],
+            ],
         ],
     ],
 

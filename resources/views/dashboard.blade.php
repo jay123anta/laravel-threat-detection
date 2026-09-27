@@ -259,7 +259,21 @@
             Off. Needs actor signals: <code class="bg-gray-700 px-1 rounded">THREAT_DETECTION_ACTOR_SIGNALS=true</code> and the package migrations.
         </p>
 
-        <div x-show="ai.enabled && ai.enabled.actor_signals" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div x-show="ai.enabled && ai.enabled.actor_signals" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="bg-gray-800 rounded-lg p-5 border border-gray-700" data-panel="retry-bursts">
+                <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wide mb-1">Retry bursts</h3>
+                <p class="text-xs text-gray-500 mb-3">One actor, many different payloads of one attack — iterating until something lands.</p>
+                <div class="space-y-1.5">
+                    <template x-for="burst in (ai.retry_bursts ?? [])" :key="burst.actor_key + burst.label">
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="font-mono text-xs text-gray-300" x-text="burst.actor_key"></span>
+                            <span class="text-gray-400 text-xs" x-text="burst.label + ' — ' + burst.payload_count + ' payloads'"></span>
+                        </div>
+                    </template>
+                    <div x-show="(ai.retry_bursts ?? []).length === 0" class="text-gray-500 text-sm">None in the last hour.</div>
+                </div>
+            </div>
+
             <div class="bg-gray-800 rounded-lg p-5 border border-gray-700" data-panel="mutation-chains">
                 <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wide mb-1">Mutation chains</h3>
                 <p class="text-xs text-gray-500 mb-3">One actor, many surface forms of the same payload — iterating to get past a filter.</p>
