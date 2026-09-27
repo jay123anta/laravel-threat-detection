@@ -51,13 +51,13 @@ class AiInfrastructureProbeTest extends TestCase
             'cache.default' => 'array',
         ]);
 
+        // A fallback, not a route per path. A probe is a request for a path
+        // the app does not serve, and the pack is route-aware: an explicit
+        // route would tell it the app serves these, which is the case it is
+        // built to leave alone (see AiProbeRouteAwarenessTest). The 200 keeps
+        // the status assertions below meaningful.
         Route::middleware('threat-detect')->group(function () {
-            foreach ([
-                '/v1/models', '/api/tags', '/api/pull', '/mcp', '/.cursor/rules',
-                '/api/v1/validate/code', '/wp-admin', '/harmless-page',
-            ] as $path) {
-                Route::get($path, fn () => response('OK', 200));
-            }
+            Route::fallback(fn () => response('OK', 200));
         });
     }
 
@@ -348,8 +348,6 @@ class AiInfrastructureProbeTest extends TestCase
     public function a_wildcard_pack_path_reports_at_the_pack_level(): void
     {
         $this->enablePack();
-
-        Route::middleware('threat-detect')->get('/mcp/tools/list', fn () => response('OK', 200));
 
         $this->get('/mcp/tools/list')->assertStatus(200);
 

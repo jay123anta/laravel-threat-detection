@@ -7,14 +7,36 @@ class ProbeDetectorService
     /** @var array<string, array{label: string, level: string|null}>|null Exact paths for O(1) lookup */
     private static ?array $exactPaths = null;
 
-    /** @var array<string, array{label: string, level: string|null}>|null Wildcard paths that need fnmatch */
+    /** @var array<string, array{label: string, level: string|null, pack?: string}>|null Wildcard paths that need fnmatch */
     private static ?array $wildcardPaths = null;
+
+    /** Marks entries that came from the AI-infrastructure pack. */
+    public const AI_PACK = 'ai_infrastructure';
+
+    /**
+     * @param  array{label: string, level: string|null, pack?: string}  $entry
+     * @return array{label: string, level: string, pack?: string}
+     */
+    private function result(array $entry, string $default): array
+    {
+        $result = ['label' => $entry['label'], 'level' => $entry['level'] ?? $default];
+
+        // Only for pack entries, so the general list's result keeps the exact
+        // shape it has always had.
+        if (isset($entry['pack'])) {
+            $result['pack'] = $entry['pack'];
+        }
+
+        return $result;
+    }
 
     /**
      * Check if a request URI matches a known probe path.
      * Uses hash lookup for exact paths, fnmatch only for wildcards.
      *
-     * @return array{label: string, level: string}|null
+     * `pack` is present only on entries from the AI-infrastructure pack.
+     *
+     * @return array{label: string, level: string, pack?: string}|null
      */
     public function detect(string $uri): ?array
     {
@@ -30,15 +52,13 @@ class ProbeDetectorService
 
         // O(1) hash lookup for exact paths
         if (isset(self::$exactPaths[$uriLower])) {
-            $entry = self::$exactPaths[$uriLower];
-
-            return ['label' => $entry['label'], 'level' => $entry['level'] ?? $default];
+            return $this->result(self::$exactPaths[$uriLower], $default);
         }
 
         // fnmatch only for wildcard patterns
         foreach (self::$wildcardPaths as $pattern => $entry) {
             if (fnmatch($pattern, $uri, FNM_CASEFOLD)) {
-                return ['label' => $entry['label'], 'level' => $entry['level'] ?? $default];
+                return $this->result($entry, $default);
             }
         }
 
@@ -106,7 +126,7 @@ class ProbeDetectorService
 
             // A level on the individual entry wins; otherwise the pack-wide
             // level; otherwise the global default, applied at lookup time.
-            $pack[$pattern] = ['label' => $entry['label'], 'level' => $entry['level'] ?? $packLevel];
+            $pack[$pattern] = ['label' => $entry['label'], 'level' => $entry['level'] ?? $packLevel, 'pack' => self::AI_PACK];
         }
 
         // Union, not array_merge: `+` keeps the LEFT side on a key collision,
@@ -125,7 +145,7 @@ class ProbeDetectorService
      * both a WordPress login page and an endpoint that is only ever reached by
      * someone exploiting a known RCE.
      *
-     * @return array{label: string, level: string|null}|null
+     * @return array{label: string, level: string|null, pack?: string}|null
      */
     private function normaliseDefinition(mixed $definition): ?array
     {
@@ -151,7 +171,13 @@ class ProbeDetectorService
             ? trim($definition['level'])
             : null;
 
-        return ['label' => $label, 'level' => $level === '' ? null : $level];
+        $normalised = ['label' => $label, 'level' => $level === '' ? null : $level];
+
+        if (isset($definition['pack']) && is_string($definition['pack'])) {
+            $normalised['pack'] = $definition['pack'];
+        }
+
+        return $normalised;
     }
 
     /**

@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Log;
 use JayAnta\ThreatDetection\Integration\AiGuardVerdictListener;
 use JayAnta\ThreatDetection\Services\ProbeDetectorService;
 use JayAnta\ThreatDetection\Services\ThreatDetectionService;
+use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class ThreatDetectionMiddleware
 {
@@ -81,6 +83,14 @@ class ThreatDetectionMiddleware
 
             // Probe detection: check if URI matches known vulnerable paths
             $probeResult = $this->probeDetector->detect($request->path());
+
+            // The AI pack assumes the app does not serve these paths. When it
+            // does — a tags API at /api/tags, a chat widget at /api/chat —
+            // the request is the app's own traffic, not a hunt for Ollama.
+            if (($probeResult['pack'] ?? null) === ProbeDetectorService::AI_PACK && $this->applicationServes($request)) {
+                $probeResult = null;
+            }
+
             if ($probeResult) {
                 $request->attributes->set('threat-detection:probe', $probeResult);
             }
@@ -109,5 +119,34 @@ class ThreatDetectionMiddleware
         }
 
         return $next($request);
+    }
+
+    /**
+     * Does a real route serve this path?
+     *
+     * A fallback route answers every path, and so does a catch-all made of a
+     * single parameter (an SPA's `{any}`); neither says this path is real, and
+     * those are exactly the setups where the pack does its work. A path that
+     * exists under another method is the app's own: the verb differs, the
+     * endpoint does not.
+     *
+     * Asked only for an AI-pack hit, which ordinary traffic rarely produces,
+     * and matched against the route table without dispatching anything.
+     */
+    private function applicationServes(Request $request): bool
+    {
+        try {
+            $route = app('router')->getRoutes()->match($request);
+        } catch (MethodNotAllowedHttpException) {
+            return true;
+        } catch (NotFoundHttpException) {
+            return false;
+        }
+
+        if ($route->isFallback) {
+            return false;
+        }
+
+        return !preg_match('#^\{[^/{}]+\??\}$#', trim($route->uri(), '/'));
     }
 }

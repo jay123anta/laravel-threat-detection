@@ -66,7 +66,10 @@ class AiAttackerEndToEndTest extends TestCase
         ProbeDetectorService::flushCaches();
 
         Route::middleware('threat-detect')->group(function () {
-            Route::get('/v1/models', fn () => response('OK', 200));
+            // Recon arrives at paths the app does not serve. The AI pack is
+            // route-aware, so an explicit /v1/models route would say the app
+            // serves it; a fallback models the probe faithfully.
+            Route::fallback(fn () => response('OK', 200));
             Route::get('/search', fn () => response('OK', 200));
             Route::post('/submit', fn () => response('OK', 200));
         });

@@ -82,7 +82,13 @@ All notable changes to `jayanta/laravel-threat-detection` will be documented in 
   reported — verified by running the detection suite against both and comparing
   all 429 tests case by case, not by count.
 
-  Turn it off, or use `skip_paths`, if your app genuinely serves an LLM API.
+  Route-aware: a pack path that a real route in the app serves — a tags API at
+  `/api/tags`, a chat widget at `/api/chat` — is the app's own traffic and is
+  not logged. A fallback or a single-parameter catch-all (an SPA's `{any}`)
+  answers every path, so it does not count. Also covers the Anthropic-compatible
+  `/v1/messages`, OpenAI `/v1/responses` and Gemini `/v1beta/models` shapes,
+  probed through misconfigured proxies for leaked paid keys (GreyNoise: 80,469
+  sessions in 11 days across 73+ model endpoints).
 
 - **Actor risk scoring, opt-in via `THREAT_DETECTION_ACTOR_SCORE=true`.**
   Read-only ranking of who to look at first, computed on demand from

@@ -252,9 +252,13 @@ return [
         |   Technical University of Denmark, 2026. arXiv:2609.29757
         |
         | OFF by default: switching it on is the only thing that changes what
-        | an existing install reports. Turn it on if your app does not itself
-        | serve an LLM API — if it does, these are your own endpoints, and you
-        | want this off or those paths in skip_paths.
+        | an existing install reports.
+        |
+        | Route-aware, unlike the general list above. A pack path that a real
+        | route in your app serves — a tags API at /api/tags, a chat widget at
+        | /api/chat — is your own traffic and is not logged. A fallback route
+        | or a single-parameter catch-all (an SPA's {any}) answers every path,
+        | so it does not count as serving one.
         |
         | Entries may be a plain label, or ['label' => ..., 'level' => ...]
         | where one path deserves a different severity from the rest.
@@ -300,6 +304,15 @@ return [
                 '/v1/chat/completions' => 'OpenAI-Compatible Inference Probe',
                 '/v1/completions' => 'OpenAI-Compatible Inference Probe',
                 '/v1/embeddings' => 'OpenAI-Compatible Embedding Probe',
+                '/v1/responses' => 'OpenAI Responses API Probe',
+
+                // Other commercial API shapes, probed through misconfigured
+                // proxies that might leak a paid key. GreyNoise recorded one
+                // campaign making 80,469 sessions in 11 days across 73+ model
+                // endpoints in both OpenAI-compatible and Gemini formats.
+                '/v1/messages' => 'Anthropic-Compatible Messages Probe',
+                '/v1beta/models' => 'Gemini Model Enumeration',
+                '/v1beta/models/*' => 'Gemini Inference Probe',
 
                 // Model Context Protocol servers.
                 '/mcp' => 'MCP Server Probe',
@@ -321,7 +334,6 @@ return [
                 // history. Dated so they can be pruned when they stop being
                 // worth the entry.
                 '/api/v1/validate/code' => 'Langflow Code Validation (CVE-2025-3248, 2025)',
-                '/api/v1/*' => 'Langflow API Probe',
                 '/health_check' => 'Langflow Health Probe',
                 '/api/kernels/*' => 'Notebook Kernel Probe',
                 '/lsp/*' => 'marimo LSP Probe',

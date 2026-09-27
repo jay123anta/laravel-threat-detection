@@ -1066,13 +1066,25 @@ exhaustion and prompt injection.[^ollure]
 
 Covered: Ollama's REST API (`/api/tags`, `/api/ps`, `/api/show`, `/api/pull`,
 `/api/generate`, …), the OpenAI-compatible surface (`/v1/models`,
-`/v1/chat/completions`, …), MCP servers (`/mcp`, `/sse`), agent configuration and
-instruction files (`/.cursor/rules`, `/AGENTS.md`, `/llms.txt`), and dated paths
-for known AI-application CVEs.
+`/v1/chat/completions`, `/v1/responses`, …), Anthropic-compatible and Gemini
+shapes (`/v1/messages`, `/v1beta/models`), MCP servers (`/mcp`, `/sse`), agent
+configuration and instruction files (`/.cursor/rules`, `/AGENTS.md`,
+`/llms.txt`), and dated paths for known AI-application CVEs. The other API
+shapes are there because attackers probe misconfigured proxies for leaked paid
+keys: GreyNoise recorded one campaign making 80,469 sessions in 11 days across
+73+ model endpoints, in OpenAI-compatible and Gemini formats.[^greynoise]
 
-**Turn it off — or add those paths to `skip_paths` — if your app genuinely
-serves an LLM API.** They are your own endpoints, and every request to them
-would be logged.
+**Route-aware, so your own endpoints are left alone.** Unlike the general list,
+a pack path that a real route in your app serves — a tags API at `/api/tags`, a
+chat widget at `/api/chat` — is your own traffic and is not logged. A fallback
+route or a single-parameter catch-all (an SPA's `{any}`) answers every path, so
+it does not count as serving one; those are the setups where the pack does its
+work. With the middleware in the `web` group, it only sees requests that matched
+a route — so the pack needs a fallback or catch-all route to see probes at all,
+or register the middleware globally.
+
+[^greynoise]: GreyNoise, *Threat Actors Actively Targeting LLMs*, 2026.
+[greynoise.io](https://www.greynoise.io/blog/threat-actors-actively-targeting-llms)
 
 Your own `paths` entry always wins over the pack, so a path you have already
 classified is never reclassified by turning this on.
