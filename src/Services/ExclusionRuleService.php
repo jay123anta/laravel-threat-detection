@@ -34,13 +34,37 @@ class ExclusionRuleService
 
         foreach ($this->getActiveRules() as $rule) {
             if ($this->labelMatches($rule->pattern_label, $type)) {
-                if (empty($rule->path_pattern) || fnmatch($rule->path_pattern, $path)) {
+                if (empty($rule->path_pattern) || $this->pathMatches($rule, $path)) {
                     return true;
                 }
             }
         }
 
         return false;
+    }
+
+    /**
+     * A rule built from a logged row names that row's path, literally.
+     *
+     * Matching it with fnmatch() made the requester's path a glob — and the
+     * requester chose it. A request for `/*` carrying an injection, marked as
+     * noise, silenced that label on every path of the site, permanently.
+     * Exclusions are the part of a detector that ratchets: across nine years
+     * of SigmaHQ rules they were added 5.4 times for every one removed, and
+     * 64.1% of path exclusions were satisfiable by an unprivileged attacker
+     * (arXiv:2608.31062).
+     *
+     * Deciding by origin rather than by rewriting the stored path means rules
+     * that already exist are fixed too, with no migration. A rule an operator
+     * wrote by hand is still a glob: there, the pattern is theirs.
+     */
+    private function pathMatches(object $rule, string $path): bool
+    {
+        if (!empty($rule->created_from_threat_id)) {
+            return $rule->path_pattern === $path;
+        }
+
+        return fnmatch($rule->path_pattern, $path);
     }
 
     public function createFromThreat(int $threatId, ?int $userId = null, ?string $reason = null): ?object

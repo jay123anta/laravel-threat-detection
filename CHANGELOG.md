@@ -26,6 +26,22 @@ All notable changes to `jayanta/laravel-threat-detection` will be documented in 
   The stored URL gets the same treatment. Symfony already normalises a URL
   that arrives through the server, so that half is defence in depth.
 
+- **A false-positive click could silence a detection site-wide, on a path the
+  attacker chose.** Marking a row as a false positive builds an exclusion rule
+  from its label and URL path, and the path was matched with `fnmatch()` — so
+  it was a glob, written by whoever sent the request. A request for `/*`
+  carrying an injection, marked as noise, became a permanent rule silencing
+  that label on every path. `[a-z]*` and backslashes misbehaved the same way,
+  and such rules did not even match their own row's path.
+
+  A rule built from a logged row now matches that row's path exactly. Rules
+  already stored are fixed too, with no migration, because the decision is
+  made by the rule's origin. A rule an operator writes by hand is still a
+  glob. Exclusions are the part of a detector that quietly ratchets — across
+  nine years of SigmaHQ rules they were added 5.4 times for every one
+  removed, and 64.1% of path exclusions were satisfiable by an unprivileged
+  attacker ([arXiv:2608.31062](https://arxiv.org/abs/2608.31062)).
+
 ### Added
 
 - **AI-infrastructure probe tracking, opt-in via `THREAT_DETECTION_AI_PROBES=true`.**
