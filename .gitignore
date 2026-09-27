@@ -51,3 +51,9 @@ FIX_LOG.md
 
 # Release decision input — not a published document
 RELEASE_ASSESSMENT.md
+
+# Planning documents — internal, never published.
+# Anything matching *_PLAN.md is a working plan; add new ones by name only if
+# they break the pattern.
+*_PLAN.md
+PLAN.md
