@@ -42,6 +42,28 @@ All notable changes to `jayanta/laravel-threat-detection` will be documented in 
   removed, and 64.1% of path exclusions were satisfiable by an unprivileged
   attacker ([arXiv:2608.31062](https://arxiv.org/abs/2608.31062)).
 
+- **A detection regex that failed was read as "no threat".** PHP stops
+  catastrophic backtracking with `pcre.backtrack_limit`, and `preg_match()`
+  then returns `false` — which the matcher treated exactly like a non-match.
+  So the limit that exists to stop a denial of service turned an input that
+  made one pattern blow up into a silent bypass of that pattern. The v1.8.0
+  audit rewrote one pattern that failed this way; this handles the failure
+  mode itself, for every pattern, shipped or custom.
+
+  A request that makes a pattern fail is now reported as
+  `[engine] Pattern Evaluation Failure` (medium) instead of passed, after the
+  per-request cap so padding cannot push it out, and the failing pattern is
+  named once in the log. Backtracking in NIDS rule matching made Snort up to
+  1.5 million times slower and let 4.0 kbps perpetually disable it (Smith,
+  Estan and Jha, ACSAC 2006); the ReDoS SoK
+  ([arXiv:2406.11618](https://arxiv.org/abs/2406.11618)) lists PHP's limits as
+  its defence — which is why the detector has to notice when they fire.
+
+  Normalisation had the same hole: a replace that fails returns `null`, which
+  emptied the payload, so every pattern saw nothing. Reproducible with PCRE
+  JIT disabled, as on some hardened hosts; a failed step now leaves the text
+  as it was. CI runs that test with JIT off.
+
 ### Added
 
 - **AI-infrastructure probe tracking, opt-in via `THREAT_DETECTION_AI_PROBES=true`.**

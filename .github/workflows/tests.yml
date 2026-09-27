@@ -167,6 +167,19 @@ jobs:
       - name: Run static analysis
         run: vendor/bin/phpstan analyse --no-progress --memory-limit=1G
 
+      # A pattern compiled with PCRE JIT stays cached that way, so the test
+      # proving a failed normalisation step cannot empty the payload only runs
+      # in a process started with JIT off — which is also how some hardened
+      # hosts run. Everywhere else it skips, so a skip here means it never ran.
+      - name: Regex-failure handling with PCRE JIT disabled
+        run: |
+          set -o pipefail
+          php -d pcre.jit=0 vendor/bin/phpunit tests/Feature/PatternFailureTest.php | tee jit.txt
+          if grep -qi 'skipped' jit.txt; then
+            echo "::error::The JIT-off regex-failure tests skipped instead of running."
+            exit 1
+          fi
+
   coverage:
     runs-on: ubuntu-latest
     name: Coverage

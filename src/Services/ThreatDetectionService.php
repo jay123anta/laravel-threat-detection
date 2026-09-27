@@ -1032,8 +1032,11 @@ class ThreatDetectionService
             }
         }
 
-        // Collapse whitespace
-        $normalized = preg_replace('/\s+/', ' ', $normalized);
+        // Collapse whitespace. `?? $normalized` throughout normalisation: a
+        // replace that fails returns null, and a null here used to become an
+        // empty payload — every pattern then saw nothing, and the request was
+        // clean. A failed step leaves the text as it was instead.
+        $normalized = preg_replace('/\s+/', ' ', $normalized) ?? $normalized;
 
         return trim($normalized);
     }
@@ -1073,7 +1076,7 @@ class ThreatDetectionService
         }
 
         // Strip SQL inline comments: UNION/**/SELECT -> UNION SELECT
-        $text = preg_replace('/\/\*.*?\*\//s', ' ', $text);
+        $text = preg_replace('/\/\*.*?\*\//s', ' ', $text) ?? $text;
 
         // Decode HTML entities: &#60;script&#62; -> <script>, &#x3c; -> <
         $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
@@ -1083,7 +1086,7 @@ class ThreatDetectionService
             $code = hexdec($m[1]);
 
             return $code < 128 ? chr($code) : $m[0];
-        }, $text);
+        }, $text) ?? $text;
 
         // Decode IIS-style %uXXXX. The evasion pattern flags this encoding but
         // nothing ever decoded it, so a %u-encoded attack was reported only as
@@ -1092,12 +1095,12 @@ class ThreatDetectionService
             $code = hexdec($m[1]);
 
             return $code < 128 ? chr($code) : $m[0];
-        }, $text);
+        }, $text) ?? $text;
 
         // Decode hex escapes (backslash, x, two hex digits).
         $text = preg_replace_callback('/\\\\+x([0-9a-fA-F]{2})/', function ($m) {
             return chr(hexdec($m[1]));
-        }, $text);
+        }, $text) ?? $text;
 
         // Percent decoding, one layer per pass.
         $decoded = urldecode($text);
@@ -1476,6 +1479,7 @@ class ThreatDetectionService
         self::$cachedBots = null;
         self::$threatLevelCache = [];
         self::$validatorWarned = [];
+        self::$patternFailureWarned = [];
         self::$writeFailureWarned = false;
         self::$labelRegexMap = null;
         // Warn-once flags are process-lifetime state too. Missing this one
@@ -1495,6 +1499,7 @@ class ThreatDetectionService
         bool $isAuthPath = false
     ): array {
         $matches = [];
+        $this->patternFailures = [];
         $mode = config('threat-detection.detection_mode', 'balanced');
         $maxDetections = (int) config('threat-detection.max_detections_per_request', 0);
 
@@ -1674,7 +1679,20 @@ class ThreatDetectionService
             }
         }
 
-        return $this->applySeverityCap($matches, $maxDetections);
+        $reported = $this->applySeverityCap($matches, $maxDetections);
+
+        // After the cap, not before it: padding a request with cheap matches
+        // must not be a way to push this out of the report.
+        if ($this->patternFailures !== []) {
+            $reported[] = [
+                'label' => self::PATTERN_FAILURE_LABEL,
+                'threat_level' => 'medium',
+                'source' => 'engine',
+                'context' => 'engine',
+            ];
+        }
+
+        return $reported;
     }
 
     /**
@@ -1743,6 +1761,68 @@ class ThreatDetectionService
     /** @var array<string, bool> Unknown validator names already warned about */
     private static array $validatorWarned = [];
 
+    /** Reported in place of silence when a detection pattern cannot be evaluated. */
+    public const PATTERN_FAILURE_LABEL = 'Pattern Evaluation Failure';
+
+    /** @var array<string, true> Labels whose pattern failed during the current scan */
+    private array $patternFailures = [];
+
+    /** @var array<string, true> Labels already warned about in this process */
+    private static array $patternFailureWarned = [];
+
+    /**
+     * Match, no match — or the engine gave up, which is neither.
+     *
+     * PHP stops catastrophic backtracking with pcre.backtrack_limit and
+     * pcre.jit's stack limit, and preg_match() then returns false. Reading
+     * that as "no match" — as this did until now — turns the resource limit
+     * that exists to stop a denial of service into a silent bypass: craft an
+     * input that makes one pattern blow up, and that pattern stops existing
+     * for your request. It is the oldest lesson in regex-based detection:
+     * backtracking in Snort's rule matching made inspection up to 1.5 million
+     * times slower, and 4.0 kbps perpetually disabled an unmodified NIDS
+     * (Smith, Estan and Jha, ACSAC 2006). The SoK on ReDoS (arXiv:2406.11618)
+     * lists these limits as PHP's defence — which is exactly why a PHP
+     * detector has to notice when they fire.
+     *
+     * The v1.8.0 audit rewrote one pattern that failed this way. This handles
+     * the failure mode itself: any pattern, shipped or an operator's own,
+     * present or future. The request is reported rather than passed, and the
+     * pattern is named in the log so it can be fixed.
+     *
+     * Impure: a failure is recorded on the instance for the current scan.
+     *
+     * @phpstan-impure
+     */
+    private function evaluate(string $regex, string $payload, string $label): bool
+    {
+        $result = @preg_match($regex, $payload);
+
+        if ($result === false) {
+            $this->notePatternFailure($label, preg_last_error_msg());
+
+            return false;
+        }
+
+        return $result === 1;
+    }
+
+    private function notePatternFailure(string $label, string $error): void
+    {
+        $this->patternFailures[$label] = true;
+
+        if (isset(self::$patternFailureWarned[$label])) {
+            return;
+        }
+        self::$patternFailureWarned[$label] = true;
+
+        Log::warning(
+            "Threat detection: the pattern for '{$label}' could not be evaluated ({$error}). "
+            . "The request was reported as '" . self::PATTERN_FAILURE_LABEL . "' rather than passed. "
+            . 'A pattern that fails on real traffic backtracks badly and should be rewritten.'
+        );
+    }
+
     /**
      * Post-match validation. A pattern label mapped to a named validator in
      * config('threat-detection.pattern_validators') only counts as a match
@@ -1753,13 +1833,17 @@ class ThreatDetectionService
      *
      * An array-form custom pattern can name its validator inline; that takes
      * precedence over the pattern_validators label map.
+     *
+     * Impure: an evaluation failure is recorded for the current scan.
+     *
+     * @phpstan-impure
      */
     private function patternMatches(string $regex, string $payload, string $label, ?string $inlineValidator = null): bool
     {
         $validator = $inlineValidator ?? config('threat-detection.pattern_validators', [])[$label] ?? null;
 
         if ($validator === null) {
-            return (bool) @preg_match($regex, $payload);
+            return $this->evaluate($regex, $payload, $label);
         }
 
         if (!PatternValidators::known($validator)) {
@@ -1770,10 +1854,18 @@ class ThreatDetectionService
                 self::$validatorWarned[$validator] = true;
             }
 
-            return (bool) @preg_match($regex, $payload);
+            return $this->evaluate($regex, $payload, $label);
         }
 
-        if (!@preg_match_all($regex, $payload, $found)) {
+        $count = @preg_match_all($regex, $payload, $found);
+
+        if ($count === false) {
+            $this->notePatternFailure($label, preg_last_error_msg());
+
+            return false;
+        }
+
+        if ($count === 0) {
             return false;
         }
 
@@ -2227,6 +2319,7 @@ class ThreatDetectionService
     public function detectThreatPatterns(string $payload, string $source = 'default', bool $isAuthPath = false): array
     {
         $matches = [];
+        $this->patternFailures = [];
 
         foreach ($this->getDefaultThreatPatterns() as $regex => $label) {
             if ($this->patternMatches($regex, $payload, $label)) {
@@ -2258,6 +2351,10 @@ class ThreatDetectionService
 
                 $matches[] = [$label, $spec['level'] ?? $this->getThreatLevelByType($label), 'custom'];
             }
+        }
+
+        if ($this->patternFailures !== []) {
+            $matches[] = [self::PATTERN_FAILURE_LABEL, 'medium', 'engine'];
         }
 
         return $matches;
