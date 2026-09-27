@@ -3,6 +3,7 @@
 namespace JayAnta\ThreatDetection\Services;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Read-only reporting over the threat log.
@@ -188,12 +189,205 @@ class ThreatCorrelationService
         })->toArray();
     }
 
+    /**
+     * Actors iterating on a payload: many distinct surface forms of one attack
+     * from one actor inside a window.
+     *
+     * This is the signature the whole AI-attacker line is named for. A human
+     * with a scanner sends a fixed list; something adapting to your defences
+     * sends a payload, sees it fail, rewrites it and sends it again — which
+     * shows up as the variant count climbing while the fingerprint stays put.
+     *
+     * Reading it requires both hashes and nothing else. Distinct *variants*
+     * per (actor, fingerprint) is the count: distinct fingerprints would score
+     * a bypass loop as one event, because normalisation is exactly what makes
+     * the mutations converge.
+     *
+     * Returns [] unless actor signals are enabled and the table exists — a
+     * reporting call must never be the thing that breaks a dashboard.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function detectMutationChains(int $minutesBack = 60, int $minVariants = 5): array
+    {
+        $table = $this->signalsTable();
+
+        if ($table === null) {
+            return [];
+        }
+
+        $chains = DB::table($table)
+            ->select(
+                'actor_key',
+                'fingerprint',
+                'label',
+                DB::raw('COUNT(DISTINCT variant) as variant_count'),
+                DB::raw('MIN(created_at) as first_seen'),
+                DB::raw('MAX(created_at) as last_seen')
+            )
+            ->where('created_at', '>=', now()->subMinutes(max($minutesBack, 1)))
+            ->groupBy('actor_key', 'fingerprint', 'label')
+            ->havingRaw('COUNT(DISTINCT variant) >= ?', [max($minVariants, 2)])
+            ->orderByDesc('variant_count')
+            ->limit(20)
+            ->get();
+
+        return $chains->map(function ($chain) {
+            $seconds = max(strtotime((string) $chain->last_seen) - strtotime((string) $chain->first_seen), 1);
+
+            return [
+                'actor_key' => $chain->actor_key,
+                'fingerprint' => $chain->fingerprint,
+                'label' => $chain->label,
+                'variant_count' => (int) $chain->variant_count,
+                'first_seen' => $chain->first_seen,
+                'last_seen' => $chain->last_seen,
+                // How fast they are iterating. A person editing a payload by
+                // hand manages a few a minute; a loop manages more.
+                'variants_per_minute' => round($chain->variant_count / max($seconds / 60, 1), 2),
+            ];
+        })->toArray();
+    }
+
+    /**
+     * One payload seen from many actors: a campaign whose egress rotates.
+     *
+     * Clustering on the *fingerprint* is what makes this work. Serverless and
+     * worker-pool egress gives an attacker a fresh IP per request almost for
+     * free, so grouping by address finds nothing — but the payload still means
+     * the same thing after normalisation however many addresses it arrives
+     * from.
+     *
+     * A single shared fingerprint is weak evidence: every install on the
+     * internet is hit by the same handful of off-the-shelf scanner strings.
+     * The interesting case is *several* fingerprints shared by the same set of
+     * actors, so minFingerprints defaults above one.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function detectPayloadClusters(int $minutesBack = 60, int $minActors = 3, int $minFingerprints = 2): array
+    {
+        $table = $this->signalsTable();
+
+        if ($table === null) {
+            return [];
+        }
+
+        $since = now()->subMinutes(max($minutesBack, 1));
+
+        $shared = DB::table($table)
+            ->select('fingerprint', 'label', DB::raw('COUNT(DISTINCT actor_key) as actor_count'))
+            ->where('created_at', '>=', $since)
+            ->groupBy('fingerprint', 'label')
+            ->havingRaw('COUNT(DISTINCT actor_key) >= ?', [max($minActors, 2)])
+            ->orderByDesc('actor_count')
+            ->limit(50)
+            ->get();
+
+        if ($shared->isEmpty()) {
+            return [];
+        }
+
+        // Which actors each shared fingerprint came from. One extra query
+        // rather than one per fingerprint.
+        $actorsByFingerprint = DB::table($table)
+            ->select('fingerprint', 'actor_key')
+            ->where('created_at', '>=', $since)
+            ->whereIn('fingerprint', $shared->pluck('fingerprint')->all())
+            ->distinct()
+            ->get()
+            ->groupBy('fingerprint');
+
+        $clusters = [];
+
+        foreach ($shared as $row) {
+            $actors = ($actorsByFingerprint[$row->fingerprint] ?? collect())
+                ->pluck('actor_key')
+                ->unique()
+                ->sort()
+                ->values();
+
+            // Group fingerprints by the exact set of actors that sent them, so
+            // one campaign spread over five addresses reads as one cluster
+            // rather than as five unrelated coincidences.
+            $key = $actors->implode(',');
+
+            if (!isset($clusters[$key])) {
+                $clusters[$key] = [
+                    'actors' => $actors->all(),
+                    'actor_count' => $actors->count(),
+                    'fingerprints' => [],
+                    'labels' => [],
+                ];
+            }
+
+            $clusters[$key]['fingerprints'][] = $row->fingerprint;
+            $clusters[$key]['labels'][] = $row->label;
+        }
+
+        $result = [];
+
+        foreach ($clusters as $cluster) {
+            if (count($cluster['fingerprints']) < max($minFingerprints, 1)) {
+                continue;
+            }
+
+            $cluster['labels'] = array_values(array_unique($cluster['labels']));
+            $cluster['fingerprint_count'] = count($cluster['fingerprints']);
+            $result[] = $cluster;
+        }
+
+        usort($result, fn ($a, $b) => $b['fingerprint_count'] <=> $a['fingerprint_count']);
+
+        return array_slice($result, 0, 20);
+    }
+
+    /**
+     * The actor-signals table, or null when it cannot be read.
+     *
+     * Both analyses above are optional extras over an opt-in feature. If the
+     * feature is off, or the migration has not been run, they report nothing
+     * rather than raising — the correlation endpoint and the dashboard call
+     * these, and neither should fail because a later feature is not set up.
+     */
+    private function signalsTable(): ?string
+    {
+        if (!config('threat-detection.actor_signals.enabled', false)) {
+            return null;
+        }
+
+        $table = config('threat-detection.actor_signals.table', 'threat_actor_signals');
+
+        if (!is_string($table) || $table === '' || !Schema::hasTable($table)) {
+            return null;
+        }
+
+        return $table;
+    }
+
     public function getCorrelationSummary(): array
     {
-        return [
+        $summary = [
             'coordinated_attacks' => count($this->detectCoordinatedAttacks(15, 3)),
             'active_campaigns' => count($this->detectAttackCampaigns(24)),
             'rapid_attackers' => count($this->detectRapidAttacks(5, 10)),
         ];
+
+        /*
+         * The two signal-backed counts appear only when actor signals are
+         * available, so the summary an existing install receives is exactly
+         * the summary it received before this release — same keys, same order.
+         *
+         * Adding keys that are always zero would have been easier and is
+         * usually harmless, but this array is compared whole by the package's
+         * own tests and may be by somebody else's. "Off by default" should
+         * mean the shape does not move either.
+         */
+        if ($this->signalsTable() !== null) {
+            $summary['mutation_chains'] = count($this->detectMutationChains(60, 5));
+            $summary['payload_clusters'] = count($this->detectPayloadClusters(60, 3, 2));
+        }
+
+        return $summary;
     }
 }

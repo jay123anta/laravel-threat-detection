@@ -1155,6 +1155,52 @@ contain credentials. A hash can be compared but not read back. The stored
 columns are the actor key (the IP), the two hashes, the detection label, the
 context (`query`, `body`, `headers`, `path`) and a date.
 
+### Reading the signals
+
+Two analyses read the table. Both are read-only aggregates that run on request
+to the API, not during request handling, and both return an empty list when
+signals are off or unmigrated.
+
+**Mutation chains** — one actor, many surface forms of the same attack:
+
+```
+GET /api/threat-detection/correlation?type=mutations
+```
+
+```json
+{
+  "actor_key": "203.0.113.5",
+  "label": "SQL Injection UNION",
+  "variant_count": 11,
+  "variants_per_minute": 4.2
+}
+```
+
+Eleven different spellings of one injection in under three minutes is not
+somebody typing. A scanner sends a fixed list; something adapting to your
+defences sends a payload, sees it fail, rewrites it, and sends it again.
+
+The count is distinct **variants**, not rows and not fingerprints. Counting
+fingerprints would score the whole loop as one event — normalisation is exactly
+what makes the mutations converge.
+
+**Payload clusters** — one attack, many actors:
+
+```
+GET /api/threat-detection/correlation?type=clusters
+```
+
+Serverless and worker-pool egress gives an attacker a fresh address per request
+almost for free, so grouping by IP finds nothing. Grouping by fingerprint still
+works, because the payload means the same thing after normalisation however
+many addresses it arrives from. A *single* shared fingerprint is ignored: every
+install on the internet is hit by the same off-the-shelf scanner strings. The
+report needs several payloads shared by the same set of actors.
+
+Both counts also appear in `correlation?type=all` and in the summary — but only
+when signals are enabled, so the summary an existing install receives keeps
+exactly the keys it had before.
+
 [^mutation]: *The Infinite Mutation Engine? Measuring Polymorphism in
 LLM-Generated Offensive Code* — Universidad Carlos III de Madrid, 2026.
 [arXiv:2605.03619](https://arxiv.org/abs/2605.03619)

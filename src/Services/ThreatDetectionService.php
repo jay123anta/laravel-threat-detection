@@ -2438,6 +2438,16 @@ class ThreatDetectionService
         return $this->correlation->detectRapidAttacks($minutesBack, $minThreshold);
     }
 
+    public function detectMutationChains(int $minutesBack = 60, int $minVariants = 5): array
+    {
+        return $this->correlation->detectMutationChains($minutesBack, $minVariants);
+    }
+
+    public function detectPayloadClusters(int $minutesBack = 60, int $minActors = 3, int $minFingerprints = 2): array
+    {
+        return $this->correlation->detectPayloadClusters($minutesBack, $minActors, $minFingerprints);
+    }
+
     public function getCorrelationSummary(): array
     {
         return $this->correlation->getCorrelationSummary();

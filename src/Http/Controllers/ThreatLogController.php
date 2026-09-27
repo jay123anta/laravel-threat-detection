@@ -290,7 +290,7 @@ class ThreatLogController extends Controller
 
     public function correlation(Request $request, ThreatDetectionService $service): JsonResponse
     {
-        $request->validate(['type' => 'sometimes|in:all,coordinated,campaigns,rapid']);
+        $request->validate(['type' => 'sometimes|in:all,coordinated,campaigns,rapid,mutations,clusters']);
 
         return $this->safe(function () use ($request, $service) {
             $type = $request->input('type', 'all');
@@ -306,6 +306,17 @@ class ThreatLogController extends Controller
 
             if ($type === 'all' || $type === 'rapid') {
                 $data['rapid_attackers'] = $service->detectRapidAttacks(5, 10);
+            }
+
+            // Both read the actor-signals table and return [] when it is off
+            // or unmigrated, so including them in 'all' cannot break an
+            // install that has not opted in.
+            if ($type === 'all' || $type === 'mutations') {
+                $data['mutation_chains'] = $service->detectMutationChains(60, 5);
+            }
+
+            if ($type === 'all' || $type === 'clusters') {
+                $data['payload_clusters'] = $service->detectPayloadClusters(60, 3, 2);
             }
 
             if ($type === 'all') {

@@ -24,6 +24,25 @@ All notable changes to `jayanta/laravel-threat-detection` will be documented in 
 
   Turn it off, or use `skip_paths`, if your app genuinely serves an LLM API.
 
+- **Mutation-chain and payload-cluster detection**, reading the actor-signals
+  table. Both are read-only aggregates on `ThreatCorrelationService`, exposed as
+  `correlation?type=mutations` and `correlation?type=clusters`, and both return
+  an empty list when signals are off or unmigrated.
+
+  A mutation chain is one actor sending many distinct surface forms of the same
+  attack — the bypass loop an adaptive attacker produces and a fixed scanner
+  list does not. The reported figure is distinct *variants*: counting
+  fingerprints would score the loop as a single event, since normalisation is
+  what makes the mutations converge, and counting rows would overstate it.
+
+  A payload cluster is one fingerprint arriving from many actors, which is how a
+  campaign behind rotating egress still shows up. A single shared fingerprint is
+  ignored as background noise; the report requires several payloads shared by
+  the same set of actors.
+
+  `getCorrelationSummary()` gains `mutation_chains` and `payload_clusters`
+  **only when signals are enabled**, so an install that has not opted in
+  receives exactly the keys it did before.
 - **Actor signals, opt-in via `THREAT_DETECTION_ACTOR_SIGNALS=true`.** A new
   `threat_actor_signals` table recording attempt-level evidence that
   `threat_logs` cannot hold, written *before* both the confidence floor and the
