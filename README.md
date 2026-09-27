@@ -1207,6 +1207,88 @@ LLM-Generated Offensive Code* — Universidad Carlos III de Madrid, 2026.
 
 ---
 
+## Actor risk score (opt-in)
+
+Which of today's attackers deserves your attention first? Sorting by severity
+answers that badly: across eight alert datasets from five environments,
+prioritising by rule severity scored **AUROC 0.72**, while a weighted
+combination of severity, accumulation, variety, rarity and periodicity scored
+**0.92**.[^rba] Severity is one dimension of several — and it is the only one
+this package used to offer.
+
+```env
+THREAT_DETECTION_ACTOR_SCORE=true
+```
+
+Read-only and computed on demand from `threat_logs`, plus `threat_actor_signals`
+when those are enabled too. Nothing is written and nothing runs during a
+request.
+
+```
+GET /api/threat-detection/correlation?type=actors
+```
+
+```json
+{
+  "actor_key": "203.0.113.21",
+  "score": 87,
+  "detections": 14,
+  "distinct_types": 4,
+  "peak_variants": 7,
+  "reached_recon": true,
+  "reached_exploit": true,
+  "components": {
+    "peak": 0.6, "persistence": 0.45, "diversity": 0.45,
+    "progression": 0.2, "mutation": 0.3, "cadence": 0.0
+  }
+}
+```
+
+### The terms add; they never average
+
+This is the part worth understanding, because the obvious design is broken. A
+weighted average of per-event scores has a **mathematical ceiling**: when every
+event scores the same *s*, the average is *s* no matter how many events there
+are. A twenty-request persistent attack therefore scores identically to one
+suspicious request, and neither can cross a threshold above *s* — the exact
+opposite of what "risk" should mean. Accumulating fixes it, and the shape used
+here reached **90.8% recall at 1.20% false positives** over 10,654 cases.[^peak]
+
+| Term | What it means |
+|---|---|
+| **peak** | the most severe single detection — a lower bound on attention |
+| **persistence** | how many detections, saturating, and scaled by peak severity |
+| **diversity** | how many different weaknesses were probed |
+| **progression** | reconnaissance *and* an exploit attempt — movement along the kill chain |
+| **mutation** | many surface forms of one payload (needs actor signals) |
+| **cadence** | machine-regular spacing between attempts |
+
+**Persistence is scaled by severity deliberately.** Repetition should amplify
+real evidence, not manufacture it. Unscaled, six low-severity detections — what
+a pasted SQL error or a chatty integration produces — reached the same
+persistence value as six confirmed injections and scored 70/100 on their own.
+A test caught that before release.
+
+**Cadence is the weakest term and can never carry a score alone.** A page
+pulling twenty assets looks regular too. It nudges an actor already scoring for
+other reasons and nothing more.
+
+### Read it as a ranking, not a verdict
+
+The defaults come from the source formula, where they were tuned for multi-turn
+LLM conversations rather than HTTP actors. They are a considered starting point,
+not a transferred result — tune the thresholds against your own traffic. Every
+term is returned alongside the score so you can see *why* an actor ranks where
+it does; a number with no visible reasoning is not actionable.
+
+[^rba]: *Can Risk-Based Alerting Mitigate Cybersecurity Alert Fatigue?* 2026.
+[arXiv:2609.02465](https://arxiv.org/abs/2609.02465)
+
+[^peak]: *Peak + Accumulation: A Proxy-Level Scoring Formula for Multi-Turn LLM
+Attack Detection*, 2026. [arXiv:2602.11247](https://arxiv.org/abs/2602.11247)
+
+---
+
 ## Is your threat log safe to paste into an LLM?
 
 Probably not, and that is worth a minute of your time.

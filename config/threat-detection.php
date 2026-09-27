@@ -976,6 +976,103 @@ return [
         'retention_days' => 7,
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Actor risk score (opt-in, off by default)
+    |--------------------------------------------------------------------------
+    |
+    | Read-only. Nothing is written and nothing runs during a request: the
+    | score is computed on demand from threat_logs and, when available,
+    | threat_actor_signals.
+    |
+    | Why a score at all. Sorting by severity alone is a weak way to decide who
+    | to look at first. Evaluated across eight alert datasets from five
+    | environments, prioritising by rule severity reached AUROC 0.72, while a
+    | weighted combination of five dimensions — severity, accumulation,
+    | variety, rarity and periodicity — reached 0.92.
+    |
+    |   Can Risk-Based Alerting Mitigate Cybersecurity Alert Fatigue? 2026.
+    |   arXiv:2609.02465
+    |
+    | Why these weights add rather than average. A weighted average has a
+    | mathematical ceiling: when every event scores the same s, the average is
+    | s no matter how many events there are, so a persistent attacker scores
+    | exactly like a single suspicious request and can never cross a threshold
+    | above s. Accumulating fixes it. The peak + accumulation shape below —
+    | peak, persistence, diversity, plus additive bonuses — reached 90.8%
+    | recall at 1.20% false positives over 10,654 cases.
+    |
+    |   Peak + Accumulation: A Proxy-Level Scoring Formula for Multi-Turn LLM
+    |   Attack Detection, 2026. arXiv:2602.11247
+    |
+    | The default weights are that paper's, and they were tuned for multi-turn
+    | LLM conversations rather than for HTTP actors. They are a considered
+    | starting point, not a transferred result: treat the thresholds as
+    | something to tune against your own traffic, and read the score as a
+    | ranking rather than a verdict.
+    |
+    */
+    'actor_score' => [
+        'enabled' => env('THREAT_DETECTION_ACTOR_SCORE', false),
+
+        // How far back an actor's behaviour is considered.
+        'window_minutes' => 60,
+
+        /*
+         * Peak severity contributes its full value on its own, so one
+         * confirmed high-severity detection already scores 0.6 before any
+         * accumulation. A lone low-severity match cannot reach the threshold
+         * by itself, which is the intent.
+         */
+        'severity_weight' => [
+            'high' => 0.6,
+            'medium' => 0.35,
+            'low' => 0.15,
+        ],
+
+        /*
+         * Persistence. The count is saturating rather than linear: the
+         * difference between one detection and six matters, the difference
+         * between sixty and six hundred does not, and an unbounded term would
+         * let volume alone dominate every other signal.
+         */
+        'persistence_factor' => 0.45,
+        'persistence_saturation' => 6,
+
+        // Variety. Probing several different weaknesses is more deliberate
+        // than repeating one.
+        'diversity_factor' => 0.15,
+
+        /*
+         * Kill-chain progression: reconnaissance *and* an exploit attempt from
+         * the same actor inside the window. Someone who probes /.env and then
+         * sends an injection has moved along the chain, which is a different
+         * thing from doing either alone.
+         */
+        'progression_bonus' => 0.2,
+
+        /*
+         * Mutation. Confirmed retry behaviour is the strongest single
+         * indicator in the source formula, and it is this package's own
+         * speciality: many surface forms of one attack means something is
+         * adapting to what you rejected. Requires actor signals.
+         */
+        'mutation_bonus' => 0.3,
+        'mutation_min_variants' => 5,
+
+        /*
+         * Periodicity — the weakest term deliberately, and never enough to
+         * matter on its own. Machine-regular spacing between attempts is
+         * suggestive, but a page pulling twenty assets looks regular too, so
+         * it only nudges an actor already scoring for other reasons.
+         *
+         * Needs at least this many timestamps before it is computed at all.
+         */
+        'cadence_bonus' => 0.1,
+        'cadence_min_samples' => 5,
+        'cadence_max_variation' => 0.25,
+    ],
+
     'llm_log_safety' => [
         'detect_injection' => env('THREAT_DETECTION_LLM_INJECTION', false),
 

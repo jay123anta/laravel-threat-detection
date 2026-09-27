@@ -8,6 +8,7 @@ use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Response;
+use JayAnta\ThreatDetection\Services\ActorRiskScorer;
 use JayAnta\ThreatDetection\Services\ExclusionRuleService;
 use JayAnta\ThreatDetection\Services\ThreatDetectionService;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
@@ -290,7 +291,7 @@ class ThreatLogController extends Controller
 
     public function correlation(Request $request, ThreatDetectionService $service): JsonResponse
     {
-        $request->validate(['type' => 'sometimes|in:all,coordinated,campaigns,rapid,mutations,clusters']);
+        $request->validate(['type' => 'sometimes|in:all,coordinated,campaigns,rapid,mutations,clusters,actors']);
 
         return $this->safe(function () use ($request, $service) {
             $type = $request->input('type', 'all');
@@ -317,6 +318,12 @@ class ThreatLogController extends Controller
 
             if ($type === 'all' || $type === 'clusters') {
                 $data['payload_clusters'] = $service->detectPayloadClusters(60, 3, 2);
+            }
+
+            // Returns [] unless actor scoring is enabled, so including it in
+            // 'all' cannot change what an existing install receives.
+            if ($type === 'all' || $type === 'actors') {
+                $data['risky_actors'] = app(ActorRiskScorer::class)->topActors(null, 10);
             }
 
             if ($type === 'all') {

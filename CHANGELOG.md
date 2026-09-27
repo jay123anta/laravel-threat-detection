@@ -24,6 +24,30 @@ All notable changes to `jayanta/laravel-threat-detection` will be documented in 
 
   Turn it off, or use `skip_paths`, if your app genuinely serves an LLM API.
 
+- **Actor risk scoring, opt-in via `THREAT_DETECTION_ACTOR_SCORE=true`.**
+  Read-only ranking of who to look at first, computed on demand from
+  `threat_logs` plus `threat_actor_signals` when available. Exposed at
+  `correlation?type=actors`. Nothing is written; nothing runs during a request.
+
+  Six terms — peak severity, persistence, diversity, kill-chain progression,
+  mutation, cadence — which **add rather than average**. A weighted average has
+  a proven ceiling: when every event scores the same value, the average equals
+  that value however many events there are, so a persistent attacker scores
+  like a single request and can never cross a higher threshold. The additive
+  shape used here reached 90.8% recall at 1.20% false positives over 10,654
+  cases ([arXiv:2602.11247](https://arxiv.org/abs/2602.11247)), and the
+  multi-dimensional approach it follows measured AUROC 0.92 against 0.72 for
+  severity alone ([arXiv:2609.02465](https://arxiv.org/abs/2609.02465)).
+
+  Persistence saturates and is scaled by peak severity, so repetition amplifies
+  real evidence instead of manufacturing it — unscaled, six low-severity
+  detections scored 70/100 on their own. Cadence is the weakest term by design
+  and cannot carry a score alone. Every term is returned with the score, since
+  a ranking heuristic that will not explain itself is not actionable.
+
+  The default weights come from the source formula, where they were tuned for
+  multi-turn LLM conversations rather than HTTP actors: a considered starting
+  point, not a transferred result.
 - **Mutation-chain and payload-cluster detection**, reading the actor-signals
   table. Both are read-only aggregates on `ThreatCorrelationService`, exposed as
   `correlation?type=mutations` and `correlation?type=clusters`, and both return

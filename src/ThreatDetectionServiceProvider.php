@@ -13,6 +13,7 @@ use JayAnta\ThreatDetection\Console\Commands\PurgeThreatLogsCommand;
 use JayAnta\ThreatDetection\Console\Commands\ThreatStatsCommand;
 use JayAnta\ThreatDetection\Http\Middleware\ThreatDashboardAuthMiddleware;
 use JayAnta\ThreatDetection\Http\Middleware\ThreatDetectionMiddleware;
+use JayAnta\ThreatDetection\Services\ActorRiskScorer;
 use JayAnta\ThreatDetection\Services\ActorSignalRecorder;
 use JayAnta\ThreatDetection\Services\ConfidenceScorer;
 use JayAnta\ThreatDetection\Services\ExclusionRuleService;
@@ -34,6 +35,7 @@ class ThreatDetectionServiceProvider extends ServiceProvider
         $this->app->singleton(ProbeDetectorService::class, fn () => new ProbeDetectorService);
         $this->app->singleton(ThreatCorrelationService::class, fn () => new ThreatCorrelationService);
         $this->app->singleton(ActorSignalRecorder::class, fn () => new ActorSignalRecorder);
+        $this->app->singleton(ActorRiskScorer::class, fn () => new ActorRiskScorer);
 
         $this->app->singleton('threat-detection', function ($app) {
             return new ThreatDetectionService(
