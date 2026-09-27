@@ -1281,6 +1281,61 @@ not a transferred result — tune the thresholds against your own traffic. Every
 term is returned alongside the score so you can see *why* an actor ranks where
 it does; a number with no visible reasoning is not actionable.
 
+### Second-source identity (optional, reads ai-guard)
+
+If you also run [`jayanta/laravel-ai-guard`](https://github.com/jay123anta/laravel-ai-guard)
+3.1+, the score can take into account who a client *claims* to be and whether
+that claim survived a check — a verified crawler, or one caught impersonating
+one.
+
+```env
+THREAT_DETECTION_AI_GUARD=true
+```
+
+There is **no dependency in either direction**. ai-guard publishes its verdicts
+as a convention (`ai-guard.verdict/1`: three named events and a request
+attribute), and this package reads them by name. Nothing is imported, and with
+ai-guard absent the listeners are simply never called. For the strongest
+signals, enable `bot_verification` in ai-guard too; without it every status is
+unknown and this changes nothing.
+
+Two terms join the score, and they are deliberately lopsided:
+
+| Term | Effect | Why |
+|---|---|---|
+| **impersonation** | `+0.25` when the claimed identity failed every check | Attackers impersonate crawlers to inherit the trust sites extend to them. 16.3% of 1,000 sites saw Googlebot impersonation;[^imperva] one published audit found only 107 of 799 requests carrying Googlebot's name were genuine.[^forrester] |
+| **attribution** | `−0.25` when the identity held up | A discount, never an exemption — and withdrawn entirely once the actor reaches the exploitation stage. |
+
+**Why verification never exempts.** The tempting design lets verified crawlers
+skip scoring, and it rebuilds the exact hole impersonation exists to find.
+Research on bot defences puts the security boundary at environment
+authenticity and shows accumulated trust signals are imitable;[^gates]
+identity-based classification catches 8–18% of bots.[^shy] So a verified
+Googlebot sending `UNION SELECT` gets no discount at all: it is compromised,
+proxied or wrongly verified, and none of those earns the benefit of the doubt.
+
+The discount applies only to `search_engines`, `ai_training`, `ai_search` and
+`ai_agents`. A *verified* scraper is still a scraper — verification confirms
+who it is, not that it is welcome. And an identity verdict never scores an
+actor this package detected nothing from: that finding is ai-guard's to
+report.
+
+With the integration off, the `components` object has exactly the six keys
+shown above.
+
+[^imperva]: Imperva (Incapsula), *Was that really a Google bot crawling my site?*
+[imperva.com](https://www.imperva.com/blog/was-that-really-a-google-bot-crawling-my-site/)
+
+[^forrester]: D. Forrester, *81.8% Of My "AI Assistant" Traffic Was Fake. The
+Googlebot Number Was Worse.* Search Engine Journal.
+[searchenginejournal.com](https://www.searchenginejournal.com/my-ai-assistant-traffic-was-fake-the-googlebot-number-was-worse/580052/)
+
+[^gates]: Ousat et al., *Broken Gates: Re-evaluating Web Bot Defenses in the Age
+of LLM Agents*, 2026. [arXiv:2607.18659](https://arxiv.org/abs/2607.18659)
+
+[^shy]: Van Boxem et al., *Shy Guys: A Light-Weight Approach to Detecting Robots
+on Websites*, 2026. [arXiv:2603.28546](https://arxiv.org/abs/2603.28546)
+
 [^rba]: *Can Risk-Based Alerting Mitigate Cybersecurity Alert Fatigue?* 2026.
 [arXiv:2609.02465](https://arxiv.org/abs/2609.02465)
 

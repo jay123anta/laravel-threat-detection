@@ -38,6 +38,17 @@ use Illuminate\Support\Facades\Schema;
  */
 class ActorRiskScorer
 {
+    private ?ActorAttributionStore $attribution;
+
+    /**
+     * The store is optional so `new ActorRiskScorer` keeps working; the
+     * container injects the shared instance.
+     */
+    public function __construct(?ActorAttributionStore $attribution = null)
+    {
+        $this->attribution = $attribution;
+    }
+
     /**
      * Score one actor's behaviour in the window.
      *
@@ -120,7 +131,12 @@ class ActorRiskScorer
         // Periodicity: the weakest term, and never decisive alone.
         $cadence = $this->cadenceBonus($rows->pluck('created_at')->all());
 
-        $total = $peak + $persistence + $diversity + $progression + $mutation + $cadence['bonus'];
+        // Identity, when a second source has an opinion about it. Empty —
+        // and absent from the output — unless the integration is enabled.
+        $identity = $this->identityTerms($actorKey, $exploit);
+
+        $total = $peak + $persistence + $diversity + $progression + $mutation + $cadence['bonus']
+            + array_sum($identity);
         $score = (int) round(min(1.0, max(0.0, $total)) * 100);
 
         return [
@@ -139,7 +155,7 @@ class ActorRiskScorer
                 'progression' => round($progression, 3),
                 'mutation' => round($mutation, 3),
                 'cadence' => round($cadence['bonus'], 3),
-            ],
+            ] + array_map(fn (float $value) => round($value, 3), $identity),
             'cadence_variation' => $cadence['variation'],
         ];
     }
@@ -180,6 +196,74 @@ class ActorRiskScorer
         usort($scored, fn ($a, $b) => $b['score'] <=> $a['score']);
 
         return array_slice($scored, 0, max($limit, 1));
+    }
+
+    /**
+     * What a second source says about who this actor is.
+     *
+     * Two terms, and the asymmetry between them is the whole design:
+     *
+     * **impersonation** adds. A client that claimed a verifiable identity and
+     * failed every check is doing something deliberate. Imperva found 16.3% of
+     * 1,000 sites subject to Googlebot impersonation; one published audit
+     * found 107 of 799 requests bearing Googlebot's name were genuine. The
+     * reason attackers do it is to inherit the trust sites extend to crawlers
+     * — so next to detections of our own it is corroboration, not noise.
+     *
+     * **attribution** subtracts, and only ever subtracts a little. The
+     * tempting version of this feature exempts verified crawlers outright,
+     * which rebuilds precisely the hole the impersonation is hunting for.
+     * Trust signals are imitable once an attacker accumulates them
+     * (arXiv:2607.18659), and identity-based classification catches 8–18% of
+     * bots (arXiv:2603.28546), so a verified verdict lowers the ranking rather
+     * than clearing it — and not at all for an actor that already reached the
+     * exploitation stage. A verified Googlebot sending UNION SELECT is
+     * compromised, proxied or wrongly verified; none of those earns a
+     * discount.
+     *
+     * @return array<string, float> Empty when the integration is off, which
+     *                              keeps the output shape byte-identical.
+     */
+    private function identityTerms(string $actorKey, bool $reachedExploit): array
+    {
+        if (!config('threat-detection.ai_guard.enabled', false)) {
+            return [];
+        }
+
+        $terms = ['impersonation' => 0.0, 'attribution' => 0.0];
+
+        $known = $this->attributionStore()->forActor($actorKey);
+        $status = $known['status'] ?? null;
+
+        if ($status === ActorAttributionStore::STATUS_SPOOFED) {
+            $terms['impersonation'] = $this->aiGuardFloat('spoofed_bonus', 0.25);
+
+            return $terms;
+        }
+
+        if ($status !== ActorAttributionStore::STATUS_VERIFIED || $reachedExploit) {
+            return $terms;
+        }
+
+        $categories = config('threat-detection.ai_guard.discount_categories', []);
+
+        if (is_array($categories) && in_array($known['category'] ?? null, $categories, true)) {
+            $terms['attribution'] = -1 * abs($this->aiGuardFloat('verified_discount', 0.25));
+        }
+
+        return $terms;
+    }
+
+    private function attributionStore(): ActorAttributionStore
+    {
+        return $this->attribution ??= new ActorAttributionStore;
+    }
+
+    private function aiGuardFloat(string $key, float $default): float
+    {
+        $value = config("threat-detection.ai_guard.{$key}", $default);
+
+        return is_numeric($value) ? (float) $value : $default;
     }
 
     /**
@@ -273,7 +357,17 @@ class ActorRiskScorer
         return ['bonus' => $bonus, 'variation' => round($variation, 3)];
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * An actor this package never detected anything from.
+     *
+     * The identity terms are reported as zero rather than applied, even for
+     * an actor caught impersonating a crawler. That finding belongs to the
+     * other package; scoring it here would mean this one reporting a detection
+     * it did not make. The terms adjust our own evidence — they never stand in
+     * for it.
+     *
+     * @return array<string, mixed>
+     */
     private function emptyScore(string $actorKey, int $minutes): array
     {
         return [
@@ -292,7 +386,9 @@ class ActorRiskScorer
                 'progression' => 0.0,
                 'mutation' => 0.0,
                 'cadence' => 0.0,
-            ],
+            ] + (config('threat-detection.ai_guard.enabled', false)
+                ? ['impersonation' => 0.0, 'attribution' => 0.0]
+                : []),
             'cadence_variation' => null,
         ];
     }

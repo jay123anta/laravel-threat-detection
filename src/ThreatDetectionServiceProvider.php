@@ -13,6 +13,9 @@ use JayAnta\ThreatDetection\Console\Commands\PurgeThreatLogsCommand;
 use JayAnta\ThreatDetection\Console\Commands\ThreatStatsCommand;
 use JayAnta\ThreatDetection\Http\Middleware\ThreatDashboardAuthMiddleware;
 use JayAnta\ThreatDetection\Http\Middleware\ThreatDetectionMiddleware;
+use JayAnta\ThreatDetection\Integration\AiGuardContract;
+use JayAnta\ThreatDetection\Integration\AiGuardVerdictListener;
+use JayAnta\ThreatDetection\Services\ActorAttributionStore;
 use JayAnta\ThreatDetection\Services\ActorRiskScorer;
 use JayAnta\ThreatDetection\Services\ActorSignalRecorder;
 use JayAnta\ThreatDetection\Services\ConfidenceScorer;
@@ -35,7 +38,9 @@ class ThreatDetectionServiceProvider extends ServiceProvider
         $this->app->singleton(ProbeDetectorService::class, fn () => new ProbeDetectorService);
         $this->app->singleton(ThreatCorrelationService::class, fn () => new ThreatCorrelationService);
         $this->app->singleton(ActorSignalRecorder::class, fn () => new ActorSignalRecorder);
-        $this->app->singleton(ActorRiskScorer::class, fn () => new ActorRiskScorer);
+        $this->app->singleton(ActorAttributionStore::class, fn () => new ActorAttributionStore);
+        $this->app->singleton(ActorRiskScorer::class, fn ($app) => new ActorRiskScorer($app->make(ActorAttributionStore::class)));
+        $this->app->singleton(AiGuardVerdictListener::class, fn ($app) => new AiGuardVerdictListener($app->make(ActorAttributionStore::class)));
 
         $this->app->singleton('threat-detection', function ($app) {
             return new ThreatDetectionService(
@@ -58,6 +63,29 @@ class ThreatDetectionServiceProvider extends ServiceProvider
         $this->registerCommands();
         $this->registerViews();
         $this->registerSchedule();
+        $this->registerAiGuardListeners();
+    }
+
+    /**
+     * Subscribe to ai-guard's interop events, if the operator asked for it.
+     *
+     * The event names are strings and the classes are never loaded, so this
+     * registers identically whether or not ai-guard is installed. With it
+     * absent nothing ever dispatches them and the listeners are dead weight
+     * measured in three array entries.
+     */
+    protected function registerAiGuardListeners(): void
+    {
+        if (!config('threat-detection.ai_guard.enabled', false)) {
+            return;
+        }
+
+        foreach (AiGuardContract::events() as $event) {
+            $this->app['events']->listen(
+                $event,
+                fn (mixed $payload = null) => $this->app->make(AiGuardVerdictListener::class)->handle($payload)
+            );
+        }
     }
 
     protected function registerPublishes(): void

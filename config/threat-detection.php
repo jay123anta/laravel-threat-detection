@@ -1073,6 +1073,70 @@ return [
         'cadence_max_variation' => 0.25,
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Second-Source Bot Identity (optional)
+    |--------------------------------------------------------------------------
+    |
+    | Reads the `ai-guard.verdict/1` convention published by
+    | jayanta/laravel-ai-guard: who a client claims to be, and whether that
+    | claim survived a check. There is no Composer dependency in either
+    | direction and no class is imported — see Integration\AiGuardContract.
+    | With ai-guard absent, nothing fires and nothing costs anything.
+    |
+    | This only ever adjusts the actor score. It never creates a detection,
+    | never suppresses a threat_logs row, and never touches a request.
+    |
+    | ── Why impersonation *adds* to the score ─────────────────────────────
+    |
+    | Because it is a deliberate technique, not noise. Imperva found 16.3% of
+    | 1,000 sites subject to Googlebot impersonation; HUMAN Security measured
+    | roughly 1 in 18 requests bearing an AI-crawler user-agent as forged; one
+    | published site audit found 107 of 799 requests carrying Googlebot's name
+    | were genuine. Attackers impersonate crawlers precisely to inherit the
+    | trust sites extend to them, so a failed identity check next to our own
+    | detections is corroboration we cannot derive on our own.
+    |
+    | ── Why verification only *discounts*, and never exempts ──────────────
+    |
+    | A blanket exemption rebuilds the hole the impersonation exists to find.
+    | Research on bot defences (arXiv:2607.18659) locates the security boundary
+    | at environment authenticity and shows trust signals are imitable once an
+    | attacker accumulates them; identity-list defences catch 8–18% of bots
+    | (arXiv:2603.28546). So a verified crawler's score is damped, not zeroed,
+    | and the damping is withdrawn entirely from an actor that reached the
+    | exploitation stage. A verified Googlebot sending UNION SELECT is either
+    | compromised or verified wrongly, and neither deserves a discount.
+    |
+    */
+    'ai_guard' => [
+        'enabled' => env('THREAT_DETECTION_AI_GUARD', false),
+
+        // How long one verdict describes an actor. Matches the score window.
+        'ttl_minutes' => 60,
+
+        // Added when a client claimed a verifiable identity and failed every
+        // check ai-guard could run.
+        'spoofed_bonus' => 0.25,
+
+        // Subtracted when the identity held up. Never below zero, and never
+        // applied to an actor with a high-severity non-probe detection.
+        'verified_discount' => 0.25,
+
+        /*
+         * Only these categories earn the discount. A *verified* scraper or
+         * data harvester is still a scraper — verification confirms who it
+         * is, not that it is welcome — so the benefit of the doubt is
+         * restricted to the categories whose traffic is ordinarily wanted.
+         */
+        'discount_categories' => [
+            'search_engines',
+            'ai_training',
+            'ai_search',
+            'ai_agents',
+        ],
+    ],
+
     'llm_log_safety' => [
         'detect_injection' => env('THREAT_DETECTION_LLM_INJECTION', false),
 

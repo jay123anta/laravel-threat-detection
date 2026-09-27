@@ -5,6 +5,7 @@ namespace JayAnta\ThreatDetection\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use JayAnta\ThreatDetection\Integration\AiGuardVerdictListener;
 use JayAnta\ThreatDetection\Services\ProbeDetectorService;
 use JayAnta\ThreatDetection\Services\ThreatDetectionService;
 
@@ -82,6 +83,23 @@ class ThreatDetectionMiddleware
             $probeResult = $this->probeDetector->detect($request->path());
             if ($probeResult) {
                 $request->attributes->set('threat-detection:probe', $probeResult);
+            }
+
+            // If ai-guard's middleware already evaluated this request, take
+            // its verdict from the request rather than waiting for an event.
+            // Costs one attribute lookup, and only when the operator asked.
+            //
+            // Guarded separately from detection, which runs next. Sharing the
+            // outer try would mean any failure here — malformed data from
+            // another package, say — silently skipped detection for the
+            // request, and an optional hint must never cost the core its
+            // evidence.
+            if (config('threat-detection.ai_guard.enabled', false)) {
+                try {
+                    app(AiGuardVerdictListener::class)->ingestRequest($request);
+                } catch (\Throwable $e) {
+                    Log::error('Threat detection: reading the ai-guard verdict failed: ' . $e->getMessage());
+                }
             }
 
             $this->detector->detectAndLogFromRequest($request);

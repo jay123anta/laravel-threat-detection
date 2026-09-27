@@ -98,12 +98,6 @@ All notable changes to `jayanta/laravel-threat-detection` will be documented in 
   migrate. Off by default; verified unchanged against the previous release
   across 692 detection, export and redaction tests compared case by case.
 
-### Fixed
-
-- `threat-detection:purge` now sweeps actor signals even when no `threat_logs`
-  rows aged out. The command returns early when nothing matches `--days`, so an
-  install whose logs were all recent would never have purged the table that
-  grows fastest.
 - **The threat log treated as an injection vector, opt-in.** Two independent
   switches, both off by default:
 
@@ -138,9 +132,37 @@ All notable changes to `jayanta/laravel-threat-detection` will be documented in 
 - **Per-path probe severity.** A `probe_tracking.paths` value may now be
   `['label' => ..., 'level' => ...]` as well as a plain string, so one path can
   differ from `default_level`. The string form is unchanged.
+- **Second-source bot identity, opt-in via `THREAT_DETECTION_AI_GUARD=true`.**
+  Reads the `ai-guard.verdict/1` convention published by
+  `jayanta/laravel-ai-guard` 3.1+ and adds two terms to the actor score:
+  `impersonation` (+0.25) when a client's claimed identity failed every check,
+  and `attribution` (−0.25) when it held up.
+
+  No dependency in either direction. The events and request attribute are read
+  by name; nothing is imported, and with ai-guard absent the listeners are never
+  called. Every payload is checked against the schema string, so a future
+  `verdict/2` is ignored rather than misread.
+
+  The asymmetry is the design. Crawler impersonation is a deliberate technique —
+  16.3% of 1,000 sites saw Googlebot impersonation — and it exists to inherit
+  the trust sites extend to crawlers. So verification only *discounts*, never
+  exempts, and the discount is withdrawn entirely from an actor that reached
+  the exploitation stage: trust signals are imitable
+  ([arXiv:2607.18659](https://arxiv.org/abs/2607.18659)), and identity-based
+  classification catches 8–18% of bots
+  ([arXiv:2603.28546](https://arxiv.org/abs/2603.28546)). A verified scraper
+  earns no discount, and an identity verdict never scores an actor this package
+  detected nothing from.
+
+  Off by default, and with it off the score's `components` keep exactly their
+  six keys.
 
 ### Fixed
 
+- `threat-detection:purge` now sweeps actor signals even when no `threat_logs`
+  rows aged out. The command returns early when nothing matches `--days`, so an
+  install whose logs were all recent would never have purged the table that
+  grows fastest.
 - A malformed `probe_tracking.paths` entry — no label, empty label, or a
   non-string — is now skipped instead of being indexed. Previously a malformed
   *wildcard* entry that matched a request produced a probe row with an empty
