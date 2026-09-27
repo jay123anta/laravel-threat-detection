@@ -225,17 +225,49 @@ class ActorRiskScorerTest extends TestCase
     }
 
     // ── cadence: deliberately weak ─────────────────────────────────────────
+    //
+    // Measured on the first sighting of each distinct variant in
+    // threat_actor_signals, never on threat_logs rows: those are deduplicated
+    // to one per type per five minutes, so a repeated attack leaves rows 300 s
+    // apart whatever the attacker's pace. The fixtures below seed what the
+    // scorer actually reads; CadenceArtefactTest drives it through HTTP.
+
+    /** One distinct variant this actor sent, first seen at $at. */
+    private function sighting(string $ip, string $variant, string $at): void
+    {
+        DB::table(self::SIGNALS)->insert([
+            'actor_key' => $ip,
+            'fingerprint' => 'fp-' . $variant,
+            'variant' => $variant,
+            'label' => 'SQL Injection UNION',
+            'context' => 'query',
+            'observed_on' => substr($at, 0, 10),
+            'created_at' => $at,
+        ]);
+    }
+
+    /**
+     * A detection, so the actor is scored at all, plus first sightings at
+     * these offsets.
+     *
+     * @param  array<int, int>  $secondsAgo
+     */
+    private function actorWithSightings(string $ip, array $secondsAgo): void
+    {
+        $this->detection($ip, '[middleware] SQL Injection UNION', 'low');
+
+        foreach ($secondsAgo as $i => $offset) {
+            $this->sighting($ip, "v{$i}", now()->subSeconds($offset)->toDateTimeString());
+        }
+    }
 
     #[Test]
     public function metronomic_spacing_adds_a_little_and_irregular_spacing_adds_nothing(): void
     {
-        for ($i = 0; $i < 6; $i++) {
-            $this->detection('203.0.113.14', '[middleware] SQL Injection UNION', 'low', now()->subSeconds(300 - $i * 30)->toDateTimeString());
-        }
+        $this->createSignalsTable();
 
-        foreach ([300, 297, 250, 120, 119, 5] as $offset) {
-            $this->detection('203.0.113.15', '[middleware] SQL Injection UNION', 'low', now()->subSeconds($offset)->toDateTimeString());
-        }
+        $this->actorWithSightings('203.0.113.14', [300, 270, 240, 210, 180, 150]);
+        $this->actorWithSightings('203.0.113.15', [300, 297, 250, 120, 119, 5]);
 
         $regular = $this->scorer->score('203.0.113.14');
         $irregular = $this->scorer->score('203.0.113.15');
@@ -246,14 +278,13 @@ class ActorRiskScorerTest extends TestCase
 
     /**
      * Cadence must never be enough on its own. A handful of low-severity
-     * detections at a steady rhythm is a cron job, not an attacker.
+     * events at a steady rhythm is a cron job, not an attacker.
      */
     #[Test]
     public function cadence_alone_cannot_produce_a_high_score(): void
     {
-        for ($i = 0; $i < 6; $i++) {
-            $this->detection('203.0.113.16', '[middleware] SQL SELECT Query', 'low', now()->subSeconds(300 - $i * 30)->toDateTimeString());
-        }
+        $this->createSignalsTable();
+        $this->actorWithSightings('203.0.113.16', [300, 270, 240, 210, 180, 150]);
 
         $this->assertLessThan(
             70,
@@ -265,8 +296,8 @@ class ActorRiskScorerTest extends TestCase
     #[Test]
     public function too_few_samples_means_no_cadence_verdict(): void
     {
-        $this->detection('203.0.113.17', '[middleware] SQL Injection UNION', 'low');
-        $this->detection('203.0.113.17', '[middleware] SQL Injection UNION', 'low');
+        $this->createSignalsTable();
+        $this->actorWithSightings('203.0.113.17', [60, 30]);
 
         $result = $this->scorer->score('203.0.113.17');
 
@@ -275,7 +306,7 @@ class ActorRiskScorerTest extends TestCase
     }
 
     /**
-     * Four perfectly even detections, one below the minimum of five.
+     * Four perfectly even sightings, one below the minimum of five.
      *
      * This is the case that makes the minimum observable. At two samples there
      * is only one gap, so a later guard refuses anyway and the threshold could
@@ -286,14 +317,52 @@ class ActorRiskScorerTest extends TestCase
     #[Test]
     public function an_evenly_spaced_run_just_below_the_minimum_earns_no_cadence(): void
     {
-        for ($i = 0; $i < 4; $i++) {
-            $this->detection('203.0.113.24', '[middleware] SQL Injection UNION', 'low', now()->subSeconds(200 - $i * 30)->toDateTimeString());
-        }
+        $this->createSignalsTable();
+        $this->actorWithSightings('203.0.113.24', [200, 170, 140, 110]);
 
         $result = $this->scorer->score('203.0.113.24');
 
-        $this->assertSame(4, $result['detections'], 'the fixture did not create four detections');
         $this->assertNull($result['cadence_variation'], 'cadence was computed below the minimum sample count');
+        $this->assertSame(0.0, $result['components']['cadence']);
+    }
+
+    /**
+     * Exactly the rows deduplication produces for one attack repeated for half
+     * an hour: 300 seconds apart. Scored from threat_logs, this earned the
+     * bonus for the package's own dedup window. Without signals there is no
+     * honest measurement, so there is no cadence.
+     */
+    #[Test]
+    public function deduplicated_log_rows_never_produce_cadence(): void
+    {
+        for ($i = 0; $i < 7; $i++) {
+            $this->detection('203.0.113.25', '[middleware] SQL Injection UNION', 'low', now()->subSeconds(1800 - $i * 300)->toDateTimeString());
+        }
+
+        $result = $this->scorer->score('203.0.113.25');
+
+        $this->assertSame(7, $result['detections'], 'the fixture did not create the dedup-shaped rows');
+        $this->assertNull($result['cadence_variation'], 'cadence was computed from deduplicated log rows');
+        $this->assertSame(0.0, $result['components']['cadence']);
+    }
+
+    /**
+     * Re-sightings of one variant after its signal dedup expires are the same
+     * artefact at an hourly period. Only first sightings count.
+     */
+    #[Test]
+    public function repeated_sightings_of_one_variant_are_not_a_rhythm(): void
+    {
+        $this->createSignalsTable();
+        $this->detection('203.0.113.26', '[middleware] SQL Injection UNION', 'low');
+
+        foreach ([3600, 2880, 2160, 1440, 720, 0] as $offset) {
+            $this->sighting('203.0.113.26', 'the-same-variant', now()->subSeconds($offset)->toDateTimeString());
+        }
+
+        $result = $this->scorer->score('203.0.113.26', 120);
+
+        $this->assertNull($result['cadence_variation'], 'one variant seen repeatedly was scored as a rhythm');
         $this->assertSame(0.0, $result['components']['cadence']);
     }
 

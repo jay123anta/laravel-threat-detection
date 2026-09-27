@@ -128,8 +128,10 @@ class ActorRiskScorer
             ? $this->floatSetting('mutation_bonus', 0.3)
             : 0.0;
 
-        // Periodicity: the weakest term, and never decisive alone.
-        $cadence = $this->cadenceBonus($rows->pluck('created_at')->all());
+        // Periodicity: the weakest term, and never decisive alone. Measured on
+        // first sightings, never on threat_logs rows — see
+        // firstSightingTimes() for why.
+        $cadence = $this->cadenceBonus($this->firstSightingTimes($actorKey, $since));
 
         // Identity, when a second source has an opinion about it. Empty —
         // and absent from the output — unless the integration is enabled.
@@ -297,7 +299,62 @@ class ActorRiskScorer
     }
 
     /**
+     * When this actor first sent each distinct thing — the only timestamps
+     * the package records that the attacker's pace alone produced.
+     *
+     * Not threat_logs rows. Those are deduplicated to one per IP per type per
+     * five minutes, so an actor repeating one attack for half an hour leaves
+     * rows almost exactly 300 seconds apart whatever its real pace — near-zero
+     * variation, and the cadence bonus awarded for the package's own dedup
+     * window. And not raw signal rows either: those are deduplicated per
+     * variant for an hour, so the same artefact returns at a longer period.
+     * The first sighting of each variant is set by the attacker and nothing
+     * else, which makes the gaps between them the real iteration pace.
+     *
+     * Empty — and the term therefore zero — without actor signals. Better no
+     * cadence than a measurement of ourselves.
+     *
+     * @return array<int, mixed>
+     */
+    private function firstSightingTimes(string $actorKey, \DateTimeInterface $since): array
+    {
+        if (!config('threat-detection.actor_signals.enabled', false)) {
+            return [];
+        }
+
+        $table = config('threat-detection.actor_signals.table', 'threat_actor_signals');
+
+        if (!is_string($table) || $table === '' || !Schema::hasTable($table)) {
+            return [];
+        }
+
+        $firstSeen = DB::table($table)
+            ->select(DB::raw('MIN(created_at) as first_seen'))
+            ->where('actor_key', $actorKey)
+            ->where('created_at', '>=', $since)
+            ->groupBy('variant')
+            ->orderBy('first_seen')
+            ->limit(500)
+            ->pluck('first_seen')
+            ->all();
+
+        // Distinct moments, not distinct rows. One request matching three
+        // labels, or carrying payloads in two places, is one event; left as
+        // three same-second timestamps its zero gaps swamp the variation and
+        // hide a genuinely scripted rhythm.
+        return array_values(array_unique(array_map('strval', $firstSeen)));
+    }
+
+    /**
      * How machine-regular the spacing between attempts is.
+     *
+     * Read this as *scripted regularity*, never as a sign of AI. All four
+     * "pause-think-act" timing features were removed by backward elimination
+     * with no loss of agent recall (arXiv:2607.26935, browser telemetry);
+     * GPT-4o agents averaged 1.20 s between replies in the calibration of an
+     * SSH honeypot, against 0.67 s for bots in the wild (arXiv:2410.13919);
+     * and timestamps here are whole seconds, too coarse to separate those
+     * even if it were meaningful. Metronomic spacing is what scripts do.
      *
      * Measured as the coefficient of variation of the gaps: near zero means
      * metronomic. Deliberately the weakest term in the score, because a page

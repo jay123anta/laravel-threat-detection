@@ -1283,7 +1283,16 @@ A test caught that before release.
 
 **Cadence is the weakest term and can never carry a score alone.** A page
 pulling twenty assets looks regular too. It nudges an actor already scoring for
-other reasons and nothing more.
+other reasons and nothing more. It is measured on the moments an actor first
+sent each distinct payload, which needs actor signals — never on `threat_logs`
+rows, whose five-minute deduplication would make any repeated attack look
+metronomic. Read it as *scripted* regularity, not as a sign of AI: timing
+features added nothing to AI-agent detection once removed by backward
+elimination,[^timing] and metronomic spacing is what scripts do.
+
+[^timing]: Choudhary et al., *What Does It Take to Detect an AI Agent? Minimal
+Feature Sets for Behavioral Detection under Browser Automation*, 2026.
+[arXiv:2607.26935](https://arxiv.org/abs/2607.26935)
 
 ### Read it as a ranking, not a verdict
 

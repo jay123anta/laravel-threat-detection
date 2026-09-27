@@ -111,6 +111,15 @@ All notable changes to `jayanta/laravel-threat-detection` will be documented in 
   and cannot carry a score alone. Every term is returned with the score, since
   a ranking heuristic that will not explain itself is not actionable.
 
+  Cadence is measured on the moments an actor first sent each distinct
+  payload, which needs actor signals, and is zero without them. It is never
+  computed from `threat_logs` rows: their five-minute deduplication leaves one
+  row per type per window, so a probe re-requested for half an hour produced
+  rows 300 seconds apart and earned the bonus for the package's own dedup
+  window. It is scripted regularity, not a sign of AI — timing features added
+  nothing to agent detection once removed by backward elimination
+  ([arXiv:2607.26935](https://arxiv.org/abs/2607.26935)).
+
   The default weights come from the source formula, where they were tuned for
   multi-turn LLM conversations rather than HTTP actors: a considered starting
   point, not a transferred result.
