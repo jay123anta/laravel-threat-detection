@@ -123,6 +123,31 @@ class ActorRiskScorerTest extends TestCase
         $this->assertSame($atSaturation, $farPast, 'persistence kept climbing, so sheer volume drowns the other terms');
     }
 
+    /**
+     * Repetition is worth as much as the thing repeated. Unscaled, six
+     * low-severity detections — a pasted SQL error, a chatty integration —
+     * earned the same persistence as six confirmed injections.
+     *
+     * Pinned directly on the component. An earlier cadence test caught this
+     * as a side effect of seeding six low rows; when cadence moved to first
+     * sightings that fixture changed and the check went with it, which the
+     * mutation harness then reported.
+     */
+    #[Test]
+    public function persistence_is_scaled_by_the_severity_being_repeated(): void
+    {
+        for ($i = 0; $i < 6; $i++) {
+            $this->detection('203.0.113.40', '[middleware] SQL SELECT Query', 'low', now()->subSeconds($i * 400)->toDateTimeString());
+            $this->detection('203.0.113.41', '[middleware] SQL Injection UNION', 'high', now()->subSeconds($i * 400)->toDateTimeString());
+        }
+
+        $low = $this->scorer->score('203.0.113.40')['components']['persistence'];
+        $high = $this->scorer->score('203.0.113.41')['components']['persistence'];
+
+        $this->assertSame(0.45, $high, 'six high-severity detections should reach full persistence');
+        $this->assertLessThan(0.2, $low, 'six low-severity detections earned the persistence of six confirmed attacks');
+    }
+
     // ── the individual dimensions ──────────────────────────────────────────
 
     #[Test]
