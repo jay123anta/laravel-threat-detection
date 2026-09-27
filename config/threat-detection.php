@@ -909,6 +909,73 @@ return [
     | the full pattern set, because category-mapped patterns still skip.
     |
     */
+    /*
+    |--------------------------------------------------------------------------
+    | Actor signals (opt-in, off by default)
+    |--------------------------------------------------------------------------
+    |
+    | Substrate, not a detection. Nothing here reports a threat; it records the
+    | attempt-level evidence that threat_logs deliberately cannot hold, so the
+    | detections built on top of it have something to read.
+    |
+    | Why a second table. A detection is written to threat_logs once per IP per
+    | type per five minutes, which is what stops a flood becoming a write per
+    | request. It also means twenty distinct encodings of one injection collapse
+    | into a single row — and those nineteen suppressed attempts are precisely
+    | the evidence that somebody is iterating on a payload until it lands.
+    |
+    | Why fingerprints rather than payloads. An LLM asked for variants of a
+    | payload produces output whose *structural* distance is high while its
+    | *semantic* distance stays low: the implementations diverge widely without
+    | changing behaviour, which is what defeats signature matching and
+    | similarity clustering. The measured recommendation is to compare meaning
+    | instead of surface — and this package already normalises payloads to a
+    | fixed point before matching, so the fingerprint is taken there.
+    |
+    |   The Infinite Mutation Engine? Measuring Polymorphism in LLM-Generated
+    |   Offensive Code — Universidad Carlos III de Madrid, 2026.
+    |   arXiv:2605.03619
+    |
+    | Write profile. One row per *distinct* normalised payload per actor per
+    | window: a repeat adds nothing, a new variant adds one row. Nothing is
+    | written for a request that matched no pattern, so clean traffic never
+    | touches this table.
+    |
+    | Requires the create_threat_actor_signals_table migration:
+    |
+    |   php artisan vendor:publish --tag=threat-detection-migrations
+    |   php artisan migrate
+    |
+    */
+    'actor_signals' => [
+        'enabled' => env('THREAT_DETECTION_ACTOR_SIGNALS', false),
+
+        'table' => env('THREAT_DETECTION_ACTOR_SIGNALS_TABLE', 'threat_actor_signals'),
+
+        // How long one fingerprint counts as "already seen" for an actor.
+        // Inside this window a repeat of the same normalised payload is not
+        // written again.
+        'dedupe_minutes' => 60,
+
+        /*
+         * Hard ceiling on rows one actor can add per window, so an attacker
+         * cannot turn this table into a write amplifier by sending endless
+         * random payloads that each hash differently.
+         *
+         * Enforced with the cache, like the DDoS counter, which means it is
+         * per-process on the array driver and only properly effective on a
+         * shared store (Redis, Memcached, database). That is the same caveat
+         * the DDoS counter already carries.
+         */
+        'max_per_actor_per_window' => 200,
+        'window_minutes' => 60,
+
+        // Rows older than this are removed by threat-detection:purge, whatever
+        // --days is set to for threat_logs. Attempt-level evidence is only
+        // useful while it is recent, and it accumulates faster.
+        'retention_days' => 7,
+    ],
+
     'llm_log_safety' => [
         'detect_injection' => env('THREAT_DETECTION_LLM_INJECTION', false),
 

@@ -24,6 +24,43 @@ All notable changes to `jayanta/laravel-threat-detection` will be documented in 
 
   Turn it off, or use `skip_paths`, if your app genuinely serves an LLM API.
 
+- **Actor signals, opt-in via `THREAT_DETECTION_ACTOR_SIGNALS=true`.** A new
+  `threat_actor_signals` table recording attempt-level evidence that
+  `threat_logs` cannot hold, written *before* both the confidence floor and the
+  five-minute deduplication — the two gates that otherwise destroy it.
+
+  Substrate, not a detection: nothing reports a threat or changes what
+  `threat_logs` receives. The detections that read it come later; this fills it.
+
+  Each row carries two hashes. The **fingerprint** hashes the payload after
+  normalisation and so collapses encoding differences; the **variant** hashes it
+  as it arrived and collapses nothing. A mutation chain is many variants sharing
+  one fingerprint — counting fingerprints would score it as a single event,
+  because normalisation is what makes them converge. Measuring LLM-generated
+  payload variants found structural distance high while semantic distance stayed
+  low, and recommended shifting from syntactic to semantic similarity
+  ([arXiv:2605.03619](https://arxiv.org/abs/2605.03619)); this package has
+  normalised to a fixed point since v1.3.0, so the fingerprint is taken there.
+
+  Bounded three ways: clean traffic writes nothing, a repeated variant writes
+  nothing inside the dedupe window, and `max_per_actor_per_window` caps one
+  actor. The cap uses the cache like the DDoS counter, so it is per-process on
+  the `array` driver.
+
+  The payload itself is never stored — only truncated SHA-256 hashes, because
+  normalisation runs before redaction and the hashed text can contain
+  credentials.
+
+  Requires `php artisan vendor:publish --tag=threat-detection-migrations` and a
+  migrate. Off by default; verified unchanged against the previous release
+  across 692 detection, export and redaction tests compared case by case.
+
+### Fixed
+
+- `threat-detection:purge` now sweeps actor signals even when no `threat_logs`
+  rows aged out. The command returns early when nothing matches `--days`, so an
+  install whose logs were all recent would never have purged the table that
+  grows fastest.
 - **The threat log treated as an injection vector, opt-in.** Two independent
   switches, both off by default:
 

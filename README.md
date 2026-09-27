@@ -1083,6 +1083,84 @@ University of Denmark, 2026. [arXiv:2609.29757](https://arxiv.org/abs/2609.29757
 
 ---
 
+## Actor signals (opt-in)
+
+Substrate rather than a feature. Nothing here reports a threat — it records the
+attempt-level evidence that `threat_logs` deliberately cannot hold, so the
+detections built on it in later releases have something to read. Turn it on
+early if you want history to look back at; nothing reads it yet.
+
+```env
+THREAT_DETECTION_ACTOR_SIGNALS=true
+```
+
+Requires the new migration:
+
+```bash
+php artisan vendor:publish --tag=threat-detection-migrations
+php artisan migrate
+```
+
+### Why a second table
+
+A detection is written to `threat_logs` once per IP per type per five minutes.
+That is what stops a flood becoming a write per request, and it stays. But it
+means twenty distinct encodings of one injection collapse into **one row** — and
+those nineteen suppressed attempts are exactly the evidence that somebody is
+iterating on a payload until it lands. That signal has to be counted somewhere
+else, before the deduplication gate.
+
+### Two hashes, and why both
+
+Each row stores a **fingerprint** and a **variant**:
+
+| | what it hashes | collapses |
+|---|---|---|
+| `fingerprint` | the payload **after** normalisation | encoding differences |
+| `variant` | the payload **as it arrived** | nothing |
+
+A mutation chain is *many variants sharing one fingerprint*: the attacker keeps
+changing the surface while the meaning stays the same. Counting fingerprints
+would count that as one event, because normalisation is precisely what makes
+them converge.
+
+That split is the package's edge, and it is the defence the literature points
+at. Measuring 100 LLM-generated variants of one payload found that "structural
+distances are high while semantic distances remain low — implementations
+diverge widely without changing high-level behavior", defeating signature rules
+and similarity clustering, and concluded that "shifting from syntactic to
+semantic similarity is a promising defensive direction".[^mutation] This package
+has normalised payloads to a fixed point since v1.3.0; the fingerprint is simply
+taken there.
+
+### What it costs
+
+- **Clean traffic writes nothing.** A request that matched no pattern records
+  nothing at all.
+- **Repeats write nothing.** A variant already seen for that actor inside
+  `dedupe_minutes` is not recorded again, so the table grows with *variety*, not
+  with volume.
+- **One actor cannot write without limit.** `max_per_actor_per_window` caps it.
+  The counter lives in the cache, like the DDoS counter, so on the `array`
+  driver it is per-process and only binds properly on a shared store.
+- **Signals expire faster than logs.** `threat-detection:purge` removes them on
+  their own `retention_days` (7 by default) whatever `--days` you pass, because
+  attempt-level rows accumulate faster and go stale sooner.
+
+### Privacy
+
+The payload is never stored — only truncated SHA-256 hashes of it. That is
+deliberate: normalisation runs *before* redaction, so the text being hashed can
+contain credentials. A hash can be compared but not read back. The stored
+columns are the actor key (the IP), the two hashes, the detection label, the
+context (`query`, `body`, `headers`, `path`) and a date.
+
+[^mutation]: *The Infinite Mutation Engine? Measuring Polymorphism in
+LLM-Generated Offensive Code* — Universidad Carlos III de Madrid, 2026.
+[arXiv:2605.03619](https://arxiv.org/abs/2605.03619)
+
+---
+
 ## Is your threat log safe to paste into an LLM?
 
 Probably not, and that is worth a minute of your time.

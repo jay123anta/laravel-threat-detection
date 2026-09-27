@@ -26,6 +26,13 @@ class PurgeThreatLogsCommand extends Command
         if ($count === 0) {
             $this->info("No threat logs found older than {$days} days.");
 
+            // Actor signals keep a separate, shorter retention, so they are
+            // swept whether or not any log rows aged out. Doing this only
+            // inside the delete branch meant an install whose threat_logs were
+            // all recent never purged its signals at all — and signals are the
+            // table that grows fastest.
+            $this->purgeActorSignals();
+
             return 0;
         }
 
@@ -54,11 +61,42 @@ class PurgeThreatLogsCommand extends Command
                 }
             }
 
+            $this->purgeActorSignals();
+
             return 0;
         }
 
         $this->info('Purge cancelled.');
 
         return 0;
+    }
+
+    /**
+     * Sweep actor signals on their own retention.
+     *
+     * They are attempt-level evidence — one row per distinct payload variant,
+     * rather than one per detection — so they accumulate faster and go stale
+     * sooner than the log they support. Tying them to --days would force an
+     * operator to choose between a year of threat_logs and a year of raw
+     * attempt rows.
+     *
+     * Cancelling the confirmation cancels this too: a "no" means no deletion.
+     */
+    private function purgeActorSignals(): void
+    {
+        $table = config('threat-detection.actor_signals.table', 'threat_actor_signals');
+        $days = (int) config('threat-detection.actor_signals.retention_days', 7);
+
+        if ($days < 0 || !Schema::hasTable($table)) {
+            return;
+        }
+
+        $removed = DB::table($table)
+            ->where('created_at', '<', now()->subDays($days))
+            ->delete();
+
+        if ($removed > 0) {
+            $this->info("Removed {$removed} actor signal(s) older than {$days} days.");
+        }
     }
 }

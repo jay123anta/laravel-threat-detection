@@ -5,6 +5,7 @@ namespace JayAnta\ThreatDetection\Tests;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
+use JayAnta\ThreatDetection\Services\ActorSignalRecorder;
 use JayAnta\ThreatDetection\Services\ProbeDetectorService;
 use JayAnta\ThreatDetection\Services\ThreatDetectionService;
 use JayAnta\ThreatDetection\ThreatDetectionServiceProvider;
@@ -27,6 +28,7 @@ abstract class TestCase extends OrchestraTestCase
 
         ThreatDetectionService::flushCaches();
         ProbeDetectorService::flushCaches();
+        ActorSignalRecorder::flushCaches();
 
         // No test may reach the network. threat-detection:enrich calls a
         // third-party geo API, and an unfaked test of it would hit that API
@@ -39,6 +41,7 @@ abstract class TestCase extends OrchestraTestCase
     {
         ThreatDetectionService::flushCaches();
         ProbeDetectorService::flushCaches();
+        ActorSignalRecorder::flushCaches();
 
         parent::tearDown();
     }

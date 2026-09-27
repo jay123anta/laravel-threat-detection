@@ -13,6 +13,7 @@ use JayAnta\ThreatDetection\Console\Commands\PurgeThreatLogsCommand;
 use JayAnta\ThreatDetection\Console\Commands\ThreatStatsCommand;
 use JayAnta\ThreatDetection\Http\Middleware\ThreatDashboardAuthMiddleware;
 use JayAnta\ThreatDetection\Http\Middleware\ThreatDetectionMiddleware;
+use JayAnta\ThreatDetection\Services\ActorSignalRecorder;
 use JayAnta\ThreatDetection\Services\ConfidenceScorer;
 use JayAnta\ThreatDetection\Services\ExclusionRuleService;
 use JayAnta\ThreatDetection\Services\ProbeDetectorService;
@@ -32,6 +33,7 @@ class ThreatDetectionServiceProvider extends ServiceProvider
         $this->app->singleton(ExclusionRuleService::class, fn () => new ExclusionRuleService);
         $this->app->singleton(ProbeDetectorService::class, fn () => new ProbeDetectorService);
         $this->app->singleton(ThreatCorrelationService::class, fn () => new ThreatCorrelationService);
+        $this->app->singleton(ActorSignalRecorder::class, fn () => new ActorSignalRecorder);
 
         $this->app->singleton('threat-detection', function ($app) {
             return new ThreatDetectionService(
@@ -84,6 +86,7 @@ class ThreatDetectionServiceProvider extends ServiceProvider
             'create_threat_logs_table' => __DIR__ . '/../database/migrations/create_threat_logs_table.php.stub',
             'add_confidence_to_threat_logs_table' => __DIR__ . '/../database/migrations/add_confidence_to_threat_logs_table.php.stub',
             'create_threat_exclusion_rules_table' => __DIR__ . '/../database/migrations/create_threat_exclusion_rules_table.php.stub',
+            'create_threat_actor_signals_table' => __DIR__ . '/../database/migrations/create_threat_actor_signals_table.php.stub',
         ];
 
         $map = [];

@@ -28,10 +28,13 @@ class ThreatDetectionService
 
     protected ThreatCorrelationService $correlation;
 
+    protected ActorSignalRecorder $actorSignals;
+
     public function __construct(
         ?ConfidenceScorer $confidenceScorer = null,
         ?ExclusionRuleService $exclusionRuleService = null,
-        ?ThreatCorrelationService $correlation = null
+        ?ThreatCorrelationService $correlation = null,
+        ?ActorSignalRecorder $actorSignals = null
     ) {
         // Both have a floor of 1. A threshold of 0 or below makes every single
         // request a flood; a window of 0 or below expires the counter as fast
@@ -42,6 +45,7 @@ class ThreatDetectionService
         $this->confidenceScorer = $confidenceScorer ?? new ConfidenceScorer;
         $this->exclusionRuleService = $exclusionRuleService ?? new ExclusionRuleService;
         $this->correlation = $correlation ?? new ThreatCorrelationService;
+        $this->actorSignals = $actorSignals ?? new ActorSignalRecorder;
     }
 
     /** @var array<string, bool> Settings already reported as unusable */
@@ -218,6 +222,16 @@ class ThreatDetectionService
          * is still much stricter than balanced: its severity filter, not its
          * confidence floor, is what does the work.
          */
+        /*
+         * Recorded here, above the confidence floor and above the five-minute
+         * dedup, because both of those gates exist to keep threat_logs small
+         * and both destroy the evidence of an actor iterating on a payload.
+         *
+         * A request that matched nothing reaches this with an empty array and
+         * writes nothing, so clean traffic is untouched. Off by default.
+         */
+        $this->actorSignals->record((string) $ip, $contextMatches);
+
         $modeMinConfidence = match ($mode) {
             'strict' => 0,
             'relaxed' => 25,
@@ -1525,6 +1539,31 @@ class ThreatDetectionService
 
             $normalizedPayload = $this->normalizeForDetection($segmentPayload);
 
+            /*
+             * The semantic identity of this segment: what the payload *means*
+             * once decoded, not what it looked like on the wire.
+             *
+             * Computed once per segment and carried on every match from it, so
+             * ActorSignalRecorder can count distinct meanings per actor without
+             * re-normalising or storing the text. Callers that do not know the
+             * key simply ignore it.
+             *
+             * Only the normalised stage gets one. An evasion match describes
+             * the encoding rather than the payload, and the whole point of the
+             * fingerprint is that encoding is the part that varies.
+             */
+            $fingerprint = $this->fingerprintOf($normalizedPayload);
+
+            /*
+             * And the surface form, which is the half that varies.
+             *
+             * A mutation chain is many *different* raw payloads that mean the
+             * *same* thing, so counting distinct fingerprints would count it
+             * as one: normalisation is what collapses them. The signal is the
+             * number of distinct variants sharing one fingerprint.
+             */
+            $variant = $this->variantOf($segmentPayload);
+
             // Category-based lazy loading: only run regex for categories whose
             // keywords appear in the payload. Skips ~80% of patterns on average.
             $relevantCategories = $prescreened ? $this->getRelevantCategories($normalizedPayload) : [];
@@ -1551,6 +1590,8 @@ class ThreatDetectionService
                         'threat_level' => $level,
                         'source' => $source,
                         'context' => $context,
+                        'fingerprint' => $fingerprint,
+                        'variant' => $variant,
                     ];
                 }
             }
@@ -1586,6 +1627,8 @@ class ThreatDetectionService
                         'threat_level' => $level,
                         'source' => 'custom',
                         'context' => $context,
+                        'fingerprint' => $fingerprint,
+                        'variant' => $variant,
                     ];
                 }
             }
@@ -1701,6 +1744,43 @@ class ThreatDetectionService
         }
 
         return false;
+    }
+
+    /**
+     * What the payload *means*: a short identity for its normalised form.
+     *
+     * Two requests share this when they decode to the same thing, however they
+     * were encoded — the property the mutation-chain signal is built on.
+     *
+     * No canonicalisation here: normalizeForDetection() already collapses
+     * whitespace and trims as its final step, so re-indenting a JSON body
+     * cannot reach this method as a different string. An earlier version
+     * repeated that collapse and it was dead code — mutation testing caught it
+     * by removing it and watching nothing fail.
+     *
+     * Truncated SHA-256 rather than the text, for two reasons. Normalisation
+     * runs before redaction, so the text can contain credentials; and 16 hex
+     * characters is 64 bits, ample for grouping attempts inside an hour and
+     * narrow enough to index on every supported database.
+     */
+    private function fingerprintOf(string $normalizedPayload): string
+    {
+        return substr(hash('sha256', $normalizedPayload), 0, 16);
+    }
+
+    /**
+     * What the payload *looked like*: a short identity for the bytes as they
+     * arrived, before any decoding.
+     *
+     * Deliberately not canonicalised. Re-spacing a payload to slip a signature
+     * is a surface mutation like any other, and collapsing whitespace here
+     * would hide exactly the variation this column exists to count. That is
+     * the whole split: the fingerprint is meant to collapse, the variant is
+     * meant not to.
+     */
+    private function variantOf(string $rawPayload): string
+    {
+        return substr(hash('sha256', $rawPayload), 0, 16);
     }
 
     private function isRecentlyLogged(string $ip, string $type): bool

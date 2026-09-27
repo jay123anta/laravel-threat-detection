@@ -1,0 +1,78 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+/**
+ * Attempt-level signals, which threat_logs deliberately cannot hold.
+ *
+ * A detection is written to threat_logs once per IP per type per five minutes.
+ * That is what stops a flood becoming a write per request, and it must stay —
+ * but it also means twenty distinct encodings of one injection collapse to a
+ * single row. The nineteen suppressed attempts are exactly the evidence that
+ * somebody is iterating on a payload until it lands, so that signal has to be
+ * counted somewhere else, before the deduplication gate.
+ *
+ * This table is that somewhere. One row per *distinct* normalised payload per
+ * actor per window: repeats add nothing, a new variant adds one row.
+ *
+ * Nothing here is written unless actor_signals.enabled is true.
+ *
+ * Privacy: `fingerprint` is a truncated SHA-256 of the normalised payload, and
+ * the payload itself is never stored. Normalisation runs *before* redaction,
+ * so the text it hashes can contain credentials — a hash can be compared but
+ * not read back.
+ */
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create(config('threat-detection.actor_signals.table', 'threat_actor_signals'), function (Blueprint $table) {
+            $table->id();
+
+            // Who. IP today; named actor_key so a future definition — IP plus
+            // user-agent hash, ASN, an account id — is a value change rather
+            // than a migration.
+            $table->string('actor_key', 100);
+
+            // What the payload *means* after normalisation, not what it looked
+            // like on the wire. Two requests that decode to the same attack
+            // share a fingerprint however differently they were encoded.
+            $table->string('fingerprint', 32);
+
+            // The surface form: a hash of the payload as it arrived, before
+            // normalisation. A mutation chain is many variants sharing one
+            // fingerprint, so this is the column that counts.
+            $table->string('variant', 32);
+
+            // Which detection the normalised payload tripped.
+            $table->string('label', 100);
+
+            // Where it arrived: path, query, body, headers.
+            $table->string('context', 20);
+
+            // Date-only column so daily rollups never need DATE(created_at),
+            // which is not portable across MySQL, PostgreSQL, SQLite and SQL
+            // Server.
+            $table->date('observed_on');
+
+            $table->timestamp('created_at')->nullable();
+
+            // Mutation chains: distinct variants sharing one fingerprint for
+            // one actor inside a window.
+            $table->index(['actor_key', 'fingerprint', 'created_at'], 'tas_actor_fp_time');
+
+            // Cross-IP clustering: one fingerprint seen from many actors.
+            $table->index(['fingerprint', 'created_at'], 'tas_fingerprint_time');
+
+            // Retention purge, and daily rollups.
+            $table->index('observed_on', 'tas_observed_on');
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists(config('threat-detection.actor_signals.table', 'threat_actor_signals'));
+    }
+};
