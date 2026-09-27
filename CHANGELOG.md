@@ -4,6 +4,28 @@ All notable changes to `jayanta/laravel-threat-detection` will be documented in 
 
 ## [Unreleased]
 
+### Security
+
+- **One invalid byte in the User-Agent stopped a request's attacks being
+  logged.** Every detection in a request is written in one batched INSERT, and
+  the User-Agent was stored exactly as sent. A strict MySQL connection —
+  Laravel's default — rejects a string that is not valid UTF-8 for a text
+  column, so appending `\xFF` to the header failed the whole statement and the
+  attack beside it was never recorded. PostgreSQL rejects the same bytes. The
+  test suite ran on SQLite, which stores anything, so nothing noticed.
+  Reproduced on MariaDB 10.4 before the fix and verified after it; the test
+  now runs in CI against MySQL 8.0.
+
+  Invalid sequences are now replaced before storing, and control characters —
+  C0, DEL, and the C1 range some terminals honour as escape introducers — are
+  stored as visible `\xNN` / `\uNNNN` text, so a stored header cannot repaint
+  the terminal of whoever reads it later. Ordinary traffic, including valid
+  non-ASCII, is stored exactly as before, and detection is unchanged: the
+  scanner in `sqlmap/1.8 \x1b[2J\xFF` is still identified.
+
+  The stored URL gets the same treatment. Symfony already normalises a URL
+  that arrives through the server, so that half is defence in depth.
+
 ### Added
 
 - **AI-infrastructure probe tracking, opt-in via `THREAT_DETECTION_AI_PROBES=true`.**

@@ -152,11 +152,11 @@ class ThreatDetectionService
     public function detectAndLogFromRequest(Request $request): void
     {
         $ip = $request->ip();
-        $url = $request->fullUrl();
+        $url = $this->storable($request->fullUrl());
         // Route path only (never the query string) so api_route_filtering
         // cannot be toggled on/off by an attacker appending ?x=/api/ to the URL.
         $isApiRoute = str_contains('/' . trim($request->path(), '/') . '/', '/api/');
-        $userAgent = $request->userAgent() ?? 'N/A';
+        $userAgent = $this->storable($request->userAgent() ?? 'N/A');
         $isAuthPath = $request->attributes->get('threat-detection:auth-path', false);
         $isContentPath = $request->attributes->get('threat-detection:content-path', false);
         $mode = config('threat-detection.detection_mode', 'balanced');
@@ -635,7 +635,10 @@ class ThreatDetectionService
         }
         self::$writeFailureWarned = true;
 
-        $message = $e->getMessage();
+        // A query exception quotes its bound values, and those are request
+        // data. Unescaped, they would put an attacker's control sequences
+        // into laravel.log for whoever tails it.
+        $message = $this->storable($e->getMessage());
         $table = config('threat-detection.table_name', 'threat_logs');
 
         if (preg_match('/(no column named|has no column|unknown column|column not found|no such column)/i', $message)) {
@@ -652,6 +655,43 @@ class ThreatDetectionService
             "Threat detection: writing to '{$table}' failed, so threats are not being recorded. "
             . "Original error: {$message}"
         );
+    }
+
+    /**
+     * A value off the wire, made safe to store and to read later.
+     *
+     * Two separate problems, both in fields this package stores as sent:
+     *
+     * **Bytes that are not UTF-8.** A strict MySQL connection — Laravel's
+     * default — and PostgreSQL both reject them for a text column, and every
+     * detection in a request is written in one batched INSERT. So a single
+     * \xFF in the User-Agent failed the whole statement, and the attack in the
+     * same request was never logged: a one-byte bypass, invisible on the
+     * SQLite the test suite ran on. They are replaced, not dropped, so the
+     * row still shows that something was there.
+     *
+     * **Control characters.** The row is read later by a human — in a
+     * terminal, a log tail, a pager — and an escape sequence stored raw can
+     * repaint what they see (the class behind CVE-2025-55193). C0 controls,
+     * DEL and the C1 range, which some terminals honour as escape
+     * introducers, become visible `\xNN` / `\uNNNN` text. Tab is left alone.
+     *
+     * Everything else is untouched, so ordinary traffic is stored exactly as
+     * before.
+     */
+    private function storable(string $value): string
+    {
+        if (!mb_check_encoding($value, 'UTF-8')) {
+            $value = mb_scrub($value, 'UTF-8');
+        }
+
+        return preg_replace_callback(
+            '/[\x00-\x08\x0A-\x1F\x7F]|\xC2[\x80-\x9F]/',
+            fn (array $m) => strlen($m[0]) === 1
+                ? sprintf('\x%02X', ord($m[0]))
+                : sprintf('\u%04X', mb_ord($m[0], 'UTF-8')),
+            $value
+        ) ?? $value;
     }
 
     private function markTypesLogged(string $ip, array $types): void
