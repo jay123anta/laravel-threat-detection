@@ -18,6 +18,7 @@ Route::prefix(config('threat-detection.api.prefix', 'api/threat-detection'))
         Route::get('/by-cloud-provider', [ThreatLogController::class, 'byCloudProvider']);
         Route::get('/top-ips', [ThreatLogController::class, 'topIps']);
         Route::get('/timeline', [ThreatLogController::class, 'timeline']);
+        Route::get('/ai-threats', [ThreatLogController::class, 'aiThreats']);
 
         Route::get('/ip-stats', [ThreatLogController::class, 'ipStats']);
         Route::get('/correlation', [ThreatLogController::class, 'correlation']);

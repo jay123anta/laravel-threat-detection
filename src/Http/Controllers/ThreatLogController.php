@@ -2,6 +2,7 @@
 
 namespace JayAnta\ThreatDetection\Http\Controllers;
 
+use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
@@ -9,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Response;
 use JayAnta\ThreatDetection\Services\ActorRiskScorer;
+use JayAnta\ThreatDetection\Services\AiThreatCatalog;
 use JayAnta\ThreatDetection\Services\ExclusionRuleService;
 use JayAnta\ThreatDetection\Services\ThreatDetectionService;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
@@ -64,6 +66,125 @@ class ThreatLogController extends Controller
         $response->headers->set('Referrer-Policy', 'no-referrer');
     }
 
+    /**
+     * Narrow a query to AI-related or traditional threats.
+     *
+     * No parameter means everything, exactly as before, so an existing
+     * consumer of these endpoints sees no change. The split is by exact
+     * stored type against the AI packs — see AiThreatCatalog — so it uses
+     * the type column directly and applies to rows logged before it existed.
+     */
+    private function scopeCategory(Builder $query, Request $request): void
+    {
+        $category = $request->input('category');
+
+        if ($category !== 'ai' && $category !== 'traditional') {
+            return;
+        }
+
+        $types = app(AiThreatCatalog::class)->typeList();
+
+        $category === 'ai'
+            ? $query->whereIn('type', $types)
+            : $query->whereNotIn('type', $types);
+    }
+
+    /**
+     * Everything the dashboard's AI section shows, in one call.
+     *
+     * Three kinds of evidence, kept apart because they mean different things:
+     *
+     *   - **AI-targeted** rows — probes for model infrastructure, and content
+     *     aimed at an LLM. These describe what was *targeted*, not who sent
+     *     it: the largest campaigns against LLM endpoints were ordinary
+     *     scanners (GreyNoise, 2026).
+     *   - **Adaptive behaviour** — mutation chains and payload clusters. What
+     *     an automated or iterating attacker leaves, whoever or whatever is
+     *     driving it. Not evidence of AI on its own.
+     *   - **Actors** — the risk ranking, which carries a second source's
+     *     identity verdict when ai-guard is present.
+     *
+     * `enabled` says which of these are switched on, so a panel can say "off"
+     * rather than show a zero that reads as "nothing happened".
+     */
+    public function aiThreats(Request $request, ThreatDetectionService $service, AiThreatCatalog $catalog): JsonResponse
+    {
+        $request->validate(['days' => 'sometimes|integer|min:1|max:365']);
+
+        return $this->safe(function () use ($request, $service, $catalog) {
+            $days = (int) $request->input('days', 7);
+            $since = now()->subDays($days);
+            $families = $catalog->types();
+            $types = array_keys($families);
+
+            $byType = $types === [] ? collect() : DB::table($this->table)
+                ->select(
+                    'type',
+                    DB::raw('COUNT(*) as count'),
+                    DB::raw('COUNT(DISTINCT ip_address) as unique_ips'),
+                    DB::raw('MAX(created_at) as last_seen')
+                )
+                ->whereIn('type', $types)
+                ->where('created_at', '>=', $since)
+                ->groupBy('type')
+                ->orderByDesc('count')
+                ->get();
+
+            $totals = [
+                AiThreatCatalog::FAMILY_INFRASTRUCTURE => 0,
+                AiThreatCatalog::FAMILY_LLM_INJECTION => 0,
+            ];
+
+            $rows = $byType->map(function ($row) use ($families, &$totals) {
+                $family = $families[$row->type];
+                $totals[$family] += (int) $row->count;
+
+                return [
+                    'type' => $row->type,
+                    'label' => preg_replace('/^\[[^\]]*\]\s*/', '', (string) $row->type),
+                    'family' => $family,
+                    'count' => (int) $row->count,
+                    'unique_ips' => (int) $row->unique_ips,
+                    'last_seen' => $row->last_seen,
+                ];
+            })->values()->all();
+
+            $uniqueIps = $types === [] ? 0 : (int) DB::table($this->table)
+                ->whereIn('type', $types)
+                ->where('created_at', '>=', $since)
+                ->distinct()
+                ->count('ip_address');
+
+            $signalsOn = (bool) config('threat-detection.actor_signals.enabled', false);
+            $scoreOn = (bool) config('threat-detection.actor_score.enabled', false);
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'window_days' => $days,
+                    'enabled' => [
+                        'ai_probes' => (bool) config('threat-detection.probe_tracking.ai_infrastructure.enabled', false),
+                        'llm_injection' => (bool) config('threat-detection.llm_log_safety.detect_injection', false),
+                        'actor_signals' => $signalsOn,
+                        'actor_score' => $scoreOn,
+                        'ai_guard' => (bool) config('threat-detection.ai_guard.enabled', false),
+                    ],
+                    'totals' => [
+                        'infrastructure_probes' => $totals[AiThreatCatalog::FAMILY_INFRASTRUCTURE],
+                        'llm_injection' => $totals[AiThreatCatalog::FAMILY_LLM_INJECTION],
+                        'unique_ips' => $uniqueIps,
+                    ],
+                    'by_type' => $rows,
+                    // null, not [], when the feature is off: "not measured"
+                    // and "measured, nothing found" are different answers.
+                    'mutation_chains' => $signalsOn ? $service->detectMutationChains(60, 5) : null,
+                    'payload_clusters' => $signalsOn ? $service->detectPayloadClusters(60, 3, 2) : null,
+                    'risky_actors' => $scoreOn ? app(ActorRiskScorer::class)->topActors(null, 10) : null,
+                ],
+            ]);
+        });
+    }
+
     public function index(Request $request): JsonResponse
     {
         $request->validate([
@@ -71,6 +192,7 @@ class ThreatLogController extends Controller
             'level' => 'sometimes|in:high,medium,low',
             'date_from' => 'sometimes|date',
             'date_to' => 'sometimes|date',
+            'category' => 'sometimes|in:ai,traditional',
         ]);
 
         return $this->safe(function () use ($request) {
@@ -114,9 +236,18 @@ class ThreatLogController extends Controller
                 $query->where('created_at', '<=', $request->input('date_to'));
             }
 
+            $this->scopeCategory($query, $request);
+
+            $catalog = app(AiThreatCatalog::class);
+
             return response()->json([
                 'success' => true,
-                'data' => $query->latest()->paginate($request->get('per_page', 20)),
+                'data' => $query->latest()->paginate($request->get('per_page', 20))
+                    ->through(function ($row) use ($catalog) {
+                        $row->ai_family = $catalog->familyOf($row->type);
+
+                        return $row;
+                    }),
             ]);
         });
     }
@@ -181,13 +312,18 @@ class ThreatLogController extends Controller
         });
     }
 
-    public function stats(): JsonResponse
+    public function stats(Request $request): JsonResponse
     {
-        return $this->safe(function () {
+        $request->validate(['category' => 'sometimes|in:ai,traditional']);
+
+        return $this->safe(function () use ($request) {
             $today = today()->toDateString();
             $lastHour = now()->subHour();
 
-            $row = DB::table($this->table)
+            $query = DB::table($this->table);
+            $this->scopeCategory($query, $request);
+
+            $row = $query
                 ->selectRaw('COUNT(*) as total_threats')
                 ->selectRaw("SUM(CASE WHEN threat_level = 'high' THEN 1 ELSE 0 END) as high_severity")
                 ->selectRaw("SUM(CASE WHEN threat_level = 'medium' THEN 1 ELSE 0 END) as medium_severity")
@@ -423,10 +559,15 @@ class ThreatLogController extends Controller
         }
     }
 
-    public function byCountry(): JsonResponse
+    public function byCountry(Request $request): JsonResponse
     {
-        return $this->safe(function () {
-            $data = DB::table($this->table)
+        $request->validate(['category' => 'sometimes|in:ai,traditional']);
+
+        return $this->safe(function () use ($request) {
+            $query = DB::table($this->table);
+            $this->scopeCategory($query, $request);
+
+            $data = $query
                 ->select('country_code', 'country_name', DB::raw('COUNT(*) as count'), DB::raw('COUNT(DISTINCT ip_address) as unique_ips'))
                 ->whereNotNull('country_code')
                 ->groupBy('country_code', 'country_name')
@@ -460,12 +601,18 @@ class ThreatLogController extends Controller
 
     public function topIps(Request $request): JsonResponse
     {
-        $request->validate(['limit' => 'sometimes|integer|min:1|max:100']);
+        $request->validate([
+            'limit' => 'sometimes|integer|min:1|max:100',
+            'category' => 'sometimes|in:ai,traditional',
+        ]);
 
         return $this->safe(function () use ($request) {
             $limit = $request->get('limit', 20);
 
-            $data = DB::table($this->table)
+            $query = DB::table($this->table);
+            $this->scopeCategory($query, $request);
+
+            $data = $query
                 ->select('ip_address', 'country_name', 'cloud_provider', 'is_foreign', DB::raw('COUNT(*) as threat_count'))
                 ->groupBy('ip_address', 'country_name', 'cloud_provider', 'is_foreign')
                 ->orderByDesc('threat_count')
@@ -481,12 +628,18 @@ class ThreatLogController extends Controller
 
     public function timeline(Request $request): JsonResponse
     {
-        $request->validate(['days' => 'sometimes|integer|min:1|max:365']);
+        $request->validate([
+            'days' => 'sometimes|integer|min:1|max:365',
+            'category' => 'sometimes|in:ai,traditional',
+        ]);
 
         return $this->safe(function () use ($request) {
             $days = $request->get('days', 7);
 
-            $data = DB::table($this->table)
+            $query = DB::table($this->table);
+            $this->scopeCategory($query, $request);
+
+            $data = $query
                 ->selectRaw('CAST(created_at AS DATE) as date, threat_level, COUNT(*) as count')
                 ->where('created_at', '>=', now()->subDays($days))
                 ->groupByRaw('CAST(created_at AS DATE), threat_level')

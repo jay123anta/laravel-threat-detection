@@ -86,11 +86,14 @@ class ApiAuthorizationTest extends TestCase
     {
         $routes = $this->packageApiRoutes();
 
-        $this->assertCount(15, $routes, 'the API surface changed: ' . json_encode($routes));
+        // 16 since GET ai-threats, the dashboard's AI section: read-only, and
+        // behind the same read guard as every other GET, which the assertions
+        // below check for it like the rest.
+        $this->assertCount(16, $routes, 'the API surface changed: ' . json_encode($routes));
     }
 
     /**
-     * The core assertion. Not one of the fifteen may answer an anonymous
+     * The core assertion. Not one of the sixteen may answer an anonymous
      * caller once a guard is configured.
      */
     #[Test]

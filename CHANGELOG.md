@@ -232,6 +232,33 @@ All notable changes to `jayanta/laravel-threat-detection` will be documented in 
   Off by default, and with it off the score's `components` keep exactly their
   six keys.
 
+- **The dashboard shows web attacks and AI-related threats in separate
+  sections.** A health strip says which detection features are on — a
+  switched-off feature reads *off*, never *0* — then web attacks, then
+  AI-related threats in two panels (probes for model infrastructure; content
+  written for an LLM to read), then adaptive behaviour, the actor ranking, and
+  volume last.
+
+  "AI-related" describes what was *targeted*, not who attacked: the largest
+  campaigns against LLM endpoints have been ordinary scanners, and a
+  three-month honeypot deployment found 8 possible AI agents in 8.1 million
+  interactions ([arXiv:2410.13919](https://arxiv.org/abs/2410.13919)). So
+  mutation chains and payload clusters sit in their own section, labelled
+  *possibly automated — not evidence of AI*, and nothing is labelled an AI
+  attacker on behaviour alone.
+
+  Behind it: `/threats`, `/stats`, `/timeline`, `/top-ips` and `/by-country`
+  take an optional `category=ai|traditional` and return exactly what they
+  did without it; `/threats` rows carry `ai_family`; and a new
+  `GET /ai-threats` feeds the AI section and reports which features are on,
+  with `null` rather than `[]` for an analysis that never ran. Rows are
+  classified by exact stored type against the AI packs, so no column is added
+  and rows logged before the split are classified too, including after a pack
+  is switched off.
+
+  The false-positive dialog now states what it creates before creating it: a
+  permanent exclusion for that label, on that path only.
+
 ### Fixed
 
 - `threat-detection:purge` now sweeps actor signals even when no `threat_logs`

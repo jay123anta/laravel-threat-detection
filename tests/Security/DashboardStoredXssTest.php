@@ -159,7 +159,7 @@ class DashboardStoredXssTest extends TestCase
 
         $missing = [];
 
-        foreach (['/threats', '/stats', '/summary', '/top-ips', '/by-country', '/timeline', '/export'] as $endpoint) {
+        foreach (['/threats', '/stats', '/summary', '/top-ips', '/by-country', '/timeline', '/export', '/ai-threats'] as $endpoint) {
             $response = $this->get('/api/threat-detection' . $endpoint);
 
             if ($response->headers->get('X-Content-Type-Options') !== 'nosniff') {

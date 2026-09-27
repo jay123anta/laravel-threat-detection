@@ -700,26 +700,28 @@ composer require laravel/slack-notification-channel
 
 The package ships with a built-in dark-mode dashboard (Alpine.js + Tailwind CDN -  no build step required).
 
-```
-+-------------------------------------------------------------------------+
-|  Threat Detection Dashboard                                              |
-+-------------------------------------------------------------------------+
-|  Total: 847  |  High: 23  |  Med: 156  |  Low: 668  |  IPs: 94         |
-+-------------------------------------------------------------------------+
-|  [Timeline Chart - 7 Day Stacked Bar]                                   |
-+-------------------------------------------------------------------------+
-|  Search: [___________]  Level: [All]                                    |
-|  Time         IP             Type            Level  Confidence  Actions  |
-|  Mar 2 14:02  185.220.101.4  SQL Injection   HIGH   80%         [FP]    |
-|  Mar 2 13:58  45.33.32.156   XSS Script Tag  HIGH   65%         [FP]    |
-|  Mar 2 13:45  192.168.1.10   Scanner: Nikto  MED    35%         [FP]    |
-+-------------------------------------------------------------------------+
-|  Top IPs              |  Threats by Country                              |
-|  185.220.101.4  [23]  |  US  234                                        |
-|  45.33.32.156   [18]  |  CN  156                                        |
-|  103.152.220.1  [12]  |  RU  98                                         |
-+-------------------------------------------------------------------------+
-```
+Web attacks and AI-related threats are shown in **separate sections**, because
+they need different responses and often different people:
+
+| Section | What it shows |
+|---|---|
+| Health strip | Which detection features are on. A switched-off feature says *off*, never *0* — a zero reads as "nothing happened". |
+| **Web attacks** | Stats, 7-day timeline and the detection log for classic attacks: injection, XSS, traversal, scanners, ordinary reconnaissance. |
+| **AI-related threats** | Probes for exposed model infrastructure, and content written for an LLM to read — each in its own panel, plus the latest such rows. |
+| Adaptive behaviour | Mutation chains and payload clusters, labelled *possibly automated — not evidence of AI*. |
+| Actors | The risk ranking across both sections, with every term that produced each score. |
+| Volume | Top IPs and countries, across both sections, last. |
+
+"AI-related" describes what was **targeted**, not who attacked. The largest
+campaigns against LLM endpoints have been ordinary scanners, and a three-month
+honeypot deployment found 8 possible AI agents in 8.1 million interactions,[^palisade]
+so the dashboard never labels anyone an AI attacker on behaviour alone.
+
+Marking a row as a false positive says what it creates before it creates it: a
+permanent exclusion for that label, on that path only.
+
+[^palisade]: Reworr & Volkov, *LLM Agent Honeypot: Monitoring AI Hacking Agents
+in the Wild*, Palisade Research, 2025. [arXiv:2410.13919](https://arxiv.org/abs/2410.13919)
 
 ### Enable the dashboard
 
@@ -820,11 +822,17 @@ Both are additionally checked against `api.write_guard`
 | GET | `/api/threat-detection/by-cloud-provider` | Grouped by cloud provider |
 | GET | `/api/threat-detection/top-ips` | Top offending IPs |
 | GET | `/api/threat-detection/timeline` | Threat timeline (for charts) |
+| GET | `/api/threat-detection/ai-threats` | The dashboard's AI section: AI-targeted rows by family, adaptive behaviour, actors, and which features are on |
 | GET | `/api/threat-detection/ip-stats?ip=x.x.x.x` | Stats for specific IP |
 | GET | `/api/threat-detection/correlation` | Correlation analysis |
 | GET | `/api/threat-detection/export` | Export to CSV |
 | GET | `/api/threat-detection/exclusion-rules` | List exclusion rules |
 | DELETE | `/api/threat-detection/exclusion-rules/{id}` | Delete an exclusion rule |
+
+`/threats`, `/stats`, `/timeline`, `/top-ips` and `/by-country` also take
+`category=ai` or `category=traditional`. Without it they return everything,
+exactly as before. Rows from `/threats` carry `ai_family`
+(`ai_infrastructure_probe`, `llm_injection`, or `null`).
 
 ### Query Parameters for `/threats`
 
