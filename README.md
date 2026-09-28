@@ -923,6 +923,13 @@ php artisan threat-detection:export-blocklist --format=apache > .htaccess-deny
 php artisan threat-detection:export-blocklist --format=csv --since=7d
 ```
 
+The exports never include an address on `whitelisted_ips`, and rows you marked as
+false positives neither produce a ban nor count toward `--min-hits`. A private or
+reserved address is still exported, since some installs mean to ban internal
+clients, but the file opens with a `# WARNING` comment naming it. The usual way one
+gets there is a proxy that `TrustProxies` does not know about, where every request
+appears to come from the proxy and banning it blocks everyone.
+
 ---
 
 ## Acting on the Data (Operator-Side Blocking)
@@ -976,12 +983,15 @@ class EnforceThreatDecisions
 > should not, an attacker sets `X-Forwarded-For` and walks straight through
 > the blocklist.
 >
-> This matters more here than for `whitelisted_ips`. A wrong whitelist match
-> only means the package scans a request it might have skipped: it fails safe.
-> A denylist used to refuse traffic fails *open* — you believe an address is
-> blocked when it is not. Check `app/Http/Middleware/TrustProxies.php` (or the
-> `trustProxies` call in `bootstrap/app.php` on Laravel 11+) before relying on
-> either helper for enforcement.
+> The same applies to `whitelisted_ips`, in the direction that matters more: a
+> whitelisted address is never scanned. If an attacker can set the address the app
+> sees, they can claim a whitelisted one and nothing they send is recorded — and
+> if the whitelist covers your proxy's own address while TrustProxies is not set,
+> *every* request is skipped. A denylist used to refuse traffic fails open the same
+> way: you believe an address is blocked when it is not. Check
+> `app/Http/Middleware/TrustProxies.php` (or the `trustProxies` call in
+> `bootstrap/app.php` on Laravel 11+) before relying on either.
+> `threat-detection:doctor` warns when IP decisions sit behind `TrustProxies` at `*`.
 
 Register it globally (before the detection middleware is fine — the helpers read config and
 cache, they don't depend on middleware order):
@@ -1570,7 +1580,10 @@ redaction never ran, and a password on any request that tripped some *other*
 pattern was stored in cleartext. See the [v1.8.0 advisory](https://github.com/jay123anta/laravel-threat-detection/security/advisories/GHSA-9jh8-pj82-6ccg).
 
 Names are compared after folding case, treating `-` and `_` alike, and dropping a
-leading `x-`, so `X-Api-Key`, `api-key` and `api_key` are one entry. The default
+leading `x-`, so `X-Api-Key`, `api-key` and `api_key` are one entry. Since v1.9.0 a
+listed name also covers any longer name that *ends* in it, so `api_key` masks
+`X-Partner-Api-Key` and `token` masks `X-Vault-Token` and `session_token`. A name
+that only *starts* with a listed word, such as `password_hint`, is kept. The default
 list lives in code, so a config published before v1.8.0 — which has no `fields`
 key — is protected without being re-published.
 
@@ -1601,6 +1614,14 @@ THREAT_DETECTION_DASHBOARD_IPS=127.0.0.1,10.0.0.0/8
 ```
 
 The same options are available for API routes with `THREAT_DETECTION_API_GUARD`.
+
+> **The `ip` guard is only as good as your `TrustProxies` setting.** It checks
+> `$request->ip()`, which honours `X-Forwarded-For` from any proxy the app trusts.
+> With `TrustProxies` at `*`, that is whoever connects directly — so if the app can
+> be reached without going through your proxy, a client can claim `127.0.0.1` and be
+> let in. List your proxy's addresses, or make sure the origin is reachable only
+> through it. `threat-detection:doctor` warns when an `ip` guard or
+> `whitelisted_ips` sits behind wildcard proxy trust.
 
 When `guard=none` (default), the package logs a warning once per day to remind you to configure authentication.
 

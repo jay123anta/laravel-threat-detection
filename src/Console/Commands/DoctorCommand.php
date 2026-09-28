@@ -5,6 +5,7 @@ namespace JayAnta\ThreatDetection\Console\Commands;
 use Composer\InstalledVersions;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Http\Kernel;
+use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Support\Facades\Schema;
 use JayAnta\ThreatDetection\Http\Middleware\ThreatDetectionMiddleware;
 use JayAnta\ThreatDetection\Services\ThreatDetectionService;
@@ -59,6 +60,8 @@ class DoctorCommand extends Command
         $this->checkCacheDriver();
         $this->checkHttpClient();
         $this->checkDashboardExposure();
+        $this->checkProxyTrust();
+        $this->checkRetention();
 
         return $this->summarise();
     }
@@ -503,6 +506,101 @@ class DoctorCommand extends Command
         $this->reportPass('Disabling a detection requires elevated access');
     }
 
+    /**
+     * The whitelist and the `ip` guards key off $request->ip(), which honours
+     * X-Forwarded-For from any proxy the app trusts. TrustProxies at '*'
+     * trusts whoever connects directly, so if the app can be reached without
+     * passing through the proxy, a client names its own address: a
+     * whitelisted one is never scanned, an allowed one opens the dashboard.
+     *
+     * Only reported when an IP decision exists to subvert. Whether the origin
+     * is reachable around the proxy is not something this command can see, so
+     * this is a warning, never a failure.
+     */
+    private function checkProxyTrust(): void
+    {
+        $decisions = [];
+
+        if (!empty(config('threat-detection.whitelisted_ips', []))) {
+            $decisions[] = 'whitelisted_ips';
+        }
+
+        foreach (['dashboard' => false, 'api' => true] as $surface => $enabledByDefault) {
+            if (config("threat-detection.{$surface}.enabled", $enabledByDefault)
+                && config("threat-detection.{$surface}.guard") === 'ip') {
+                $decisions[] = "{$surface}.guard=ip";
+            }
+        }
+
+        if (config('threat-detection.api.enabled', true) && config('threat-detection.api.write_guard', 'role') === 'ip') {
+            $decisions[] = 'api.write_guard=ip';
+        }
+
+        if ($decisions === [] || !$this->trustsEveryProxy()) {
+            return;
+        }
+
+        $this->reportWarning(
+            'IP decisions trust X-Forwarded-For from any client (TrustProxies is *): ' . implode(', ', $decisions),
+            'Make sure the app is reachable only through your proxy, or list the proxy addresses in TrustProxies.'
+        );
+    }
+
+    /**
+     * Whether TrustProxies is set to trust any caller.
+     *
+     * Read the way the framework reads it: from each TrustProxies middleware
+     * in the kernel's global stack, which covers Laravel 11+'s
+     * bootstrap/app.php (applied when the kernel is built) and Laravel 10's
+     * app subclass alike, then config('trustedproxy.proxies'). Anything that
+     * cannot be read is treated as not a wildcard: this check may miss a
+     * case, never invent one.
+     */
+    private function trustsEveryProxy(): bool
+    {
+        $candidates = [config('trustedproxy.proxies')];
+
+        try {
+            foreach ($this->globalMiddleware() as $middleware) {
+                if (is_a($middleware, TrustProxies::class, true)) {
+                    $candidates[] = (new \ReflectionMethod($middleware, 'proxies'))
+                        ->invoke($this->laravel->make($middleware));
+                }
+            }
+        } catch (\Throwable) {
+            // Unreadable: fall through with what was collected.
+        }
+
+        foreach ($candidates as $proxies) {
+            foreach ((array) $proxies as $proxy) {
+                if ($proxy === '*' || $proxy === '**') {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Retention is off by default, so threat_logs keeps every IP address, URL
+     * and user agent indefinitely. In the EU those are personal data, and
+     * storage has to be limited (GDPR Art. 5(1)(e)). Reported in production
+     * only: a development database may keep what it likes.
+     */
+    private function checkRetention(): void
+    {
+        if (!$this->laravel->environment('production') || config('threat-detection.retention.enabled', false)) {
+            return;
+        }
+
+        $this->reportWarning(
+            'Retention is off: threat_logs keeps IP addresses, URLs and user agents indefinitely',
+            'Set THREAT_DETECTION_RETENTION=true and THREAT_DETECTION_RETENTION_DAYS, and run the scheduler. '
+            . 'IP addresses are personal data under GDPR, which requires a storage limit.'
+        );
+    }
+
     // ── output ──────────────────────────────────────────────────────────────
 
     /*
@@ -604,20 +702,34 @@ class DoctorCommand extends Command
         }
     }
 
+    /**
+     * The HTTP kernel's global middleware, or none when it cannot say.
+     *
+     * @return array<int, mixed>
+     */
+    private function globalMiddleware(): array
+    {
+        try {
+            $kernel = $this->laravel->make(Kernel::class);
+
+            return method_exists($kernel, 'getGlobalMiddleware') ? $kernel->getGlobalMiddleware() : [];
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+
     private function middlewareIsActive(): bool
     {
         $needles = [ThreatDetectionMiddleware::class, 'threat-detect'];
 
+        foreach ($this->globalMiddleware() as $m) {
+            if (in_array($m, $needles, true)) {
+                return true;
+            }
+        }
+
         try {
             $kernel = $this->laravel->make(Kernel::class);
-
-            if (method_exists($kernel, 'getGlobalMiddleware')) {
-                foreach ($kernel->getGlobalMiddleware() as $m) {
-                    if (in_array($m, $needles, true)) {
-                        return true;
-                    }
-                }
-            }
 
             if (method_exists($kernel, 'getMiddlewareGroups')) {
                 foreach ($kernel->getMiddlewareGroups() as $group) {

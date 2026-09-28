@@ -45,7 +45,11 @@ class StoreThreatLog implements ShouldQueue
     private function sendNotification(): void
     {
         try {
-            $webhookUrl = $this->notificationData['webhook_url'] ?? null;
+            // Read when the job runs, not carried in it: the URL is a
+            // credential, and the payload is stored by the queue. A job
+            // queued by an earlier version still carries one, and is honoured.
+            $webhookUrl = config('threat-detection.notifications.slack_webhook')
+                ?: ($this->notificationData['webhook_url'] ?? null);
             if (!$webhookUrl) {
                 return;
             }

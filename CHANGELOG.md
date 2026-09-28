@@ -10,9 +10,11 @@ Two things in one release.
 do.** One invalid byte in the User-Agent, or a header long enough, stopped a
 request's attacks being logged on strict MySQL. A false-positive click could
 create a site-wide exclusion on a path the attacker chose, or on the site root.
-A detection regex that failed was read as clean. Slack alerts rendered markup
-from the request, and the CSV export could split a cell where a spreadsheet
-evaluates it. `/stats` failed on PostgreSQL, and the timeline put a whole year
+A detection regex that failed was read as clean. A credential sent under a
+prefixed name, such as `X-Partner-Api-Key`, was stored in cleartext. The exports
+could ban addresses the operator had whitelisted or marked as false positives.
+Slack alerts rendered markup from the request, and the CSV export could split a
+cell where a spreadsheet evaluates it. `/stats` failed on PostgreSQL, and the timeline put a whole year
 in one bucket on SQLite. All are under Security and Fixed below.
 
 **An AI-attacker detection line, every part of it opt-in and off by default:**
@@ -25,7 +27,7 @@ was checked against its source. With everything off, 1,863 of the 1,864 tests
 that shipped with 1.8.0 pass unchanged. The other is the inventory of API
 routes, which exists to fail when one is added, and did for `/ai-threats`.
 
-The suite grew to 2,272 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
+The suite grew to 2,312 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
 and 13.33.0, on MariaDB 10.4 and PostgreSQL 16, and with PCRE JIT disabled —
 where everything passes but the 1 MB timing budgets, which are set for the
 JIT; at the 8 KB the package actually scans, every pattern stays in budget.
@@ -113,6 +115,36 @@ behaviours changed.
   emptied the payload, so every pattern saw nothing. Reproducible with PCRE
   JIT disabled, as on some hardened hosts; a failed step now leaves the text
   as it was. CI runs that test with JIT off.
+
+- **A credential under a prefixed name was stored in cleartext.** Masking by
+  field name compared names exactly, so `api_key` was masked and
+  `X-Partner-Api-Key` was not — nor `X-Vault-Token`, `X-Amz-Security-Token`,
+  `X-Webhook-Secret`, `Proxy-Authorization`, or a body field such as
+  `stripe_secret`. Every header but `Cookie` and `Authorization` is kept with
+  the row, so a legitimate client whose request tripped a pattern left its key
+  in `threat_logs`, readable by default by any signed-in user of the API: the
+  class of the 1.8.0 advisory, one naming convention over. A listed name now
+  also covers any name ending in `_<name>`; one that only starts with it, such
+  as `password_hint`, is still kept. In the URL the prefix is matched by a run
+  of at most 64 characters, because an unbounded one backtracked once per
+  character and a long enough parameter name made redaction, which fails
+  closed, blank the whole URL.
+
+- **The exports banned addresses the operator had cleared.** A row marked as a
+  false positive — the operator's own statement that it was not an attack —
+  still produced a ban and counted toward `--min-hits`, and an address on
+  `whitelisted_ips` was exported like any other. Both are now left out. A
+  private or reserved address is still exported, because some installs mean to
+  ban internal clients, but under a `# WARNING` comment and a log line: the
+  usual way one gets there is a proxy `TrustProxies` does not know about, where
+  every request appears to come from the proxy and banning it blocks everyone.
+
+- **Queued alerts carried the Slack webhook URL.** The URL is a credential —
+  anyone holding it can post to the channel — and it was serialised into every
+  alerting job, so on a database or Redis queue it was written to `jobs`, and
+  to `failed_jobs`, which nothing prunes. The job now reads it from config when
+  it runs; a job queued by an earlier version still carries one and is still
+  honoured.
 
 - **Slack alerts rendered markup from the request.** Slack reads `&`, `<` and
   `>` as markup in attachment fields, and its documentation says values must
@@ -380,6 +412,15 @@ behaviours changed.
   headline cards returned an error. The value is now bound as a boolean.
   Verified on PostgreSQL 16, where a new test file sweeps every read endpoint,
   the write paths and the actor-signal queries; it runs in a new CI job.
+- **`threat-detection:doctor` checks two things the package depends on but
+  cannot see from a request.** It warns when `whitelisted_ips` or an `ip` guard
+  sits behind `TrustProxies` at `*`, which honours `X-Forwarded-For` from
+  whoever connects directly — so an app reachable around its proxy lets a
+  client claim a whitelisted address, which is never scanned, or an allowed
+  one, which opens the dashboard. And in production it warns when retention is
+  off, since IP addresses, URLs and user agents are then kept indefinitely and
+  are personal data under GDPR. The README said a wrong whitelist match "fails
+  safe"; it fails open, and now says so.
 - **`threat-detection:doctor` missed options added inside an existing config
   block.** It compared top-level keys only, so a published config lacking
   `probe_tracking.ai_infrastructure` was reported as current. It now compares

@@ -55,6 +55,18 @@ php artisan threat-detection:doctor
 9. **API inputs are validated.** `keyword`, `ip`, `type`, `country` and
    `cloud_provider` accept strings of up to 255 characters, and a
    false-positive `reason` up to 1,000; anything else answers 422.
+10. **More credential names are masked.** A listed `redact.fields` name also
+    covers any name ending in `_<name>`, so `X-Partner-Api-Key`,
+    `X-Vault-Token` and `stripe_secret` are stored as `[REDACTED]`. If you
+    customised `fields`, the rule applies to your list too.
+11. **The exports skip addresses you cleared.** Rows marked as false positives
+    no longer produce bans or count toward `--min-hits`, and `whitelisted_ips`
+    are never exported. Private and reserved addresses are still exported,
+    now under a `# WARNING` comment.
+12. **Queued alerts read the Slack webhook from config** when the job runs,
+    rather than carrying it. Jobs already queued still work.
+13. **`doctor` has two new warnings:** IP decisions behind `TrustProxies` at
+    `*`, and, in production, retention switched off.
 
 ### If you published the dashboard view
 

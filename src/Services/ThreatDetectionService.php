@@ -345,8 +345,10 @@ class ThreatDetectionService
         // Batch write: one INSERT or one queue job for all threats in this request
         if (!empty($batchLogData)) {
             if (config('threat-detection.queue.enabled', false)) {
+                // The webhook URL is a credential and is not put in the job:
+                // it would be written to the queue store, and to failed_jobs
+                // when a job fails. The job reads it from config when it runs.
                 $job = new StoreThreatLog($batchLogData, !empty($notificationQueue) ? [
-                    'webhook_url' => config('threat-detection.notifications.slack_webhook'),
                     'alert_data' => [
                         'ip_address' => $ip,
                         'url' => $storedUrl,
@@ -458,9 +460,13 @@ class ThreatDetectionService
      * Only the value is replaced — the field name stays, so an operator can
      * still see that a credential was present and where.
      *
-     * The pattern is a plain negated class with no nesting and no alternation
-     * inside a quantifier, so it cannot backtrack. That matters: redaction
-     * fails closed, and a regex that gave up would blank the entire row.
+     * A listed name also covers a longer name ending in it — `partner_api_key`,
+     * `vault_token` — through one optional run of at most 64 of the name's own
+     * characters. There is no nested quantifier and no alternation inside a
+     * repetition, and the run is bounded because an unbounded one backtracks
+     * once per character: a parameter name a million characters long would
+     * reach pcre.backtrack_limit. That matters, because redaction fails closed
+     * and a regex that gave up would blank the entire row.
      */
     private function redactSensitiveFields(string $text): string
     {
@@ -480,7 +486,7 @@ class ThreatDetectionService
         // The value runs to the next separator; a percent-encoded '&' inside
         // the value is not a separator, which is why '%26' does not end it.
         return $this->replaceOrMask(
-            '/(?<![A-Za-z0-9_])(' . $alternation . ')(=)[^&\s"\\\\]*/i',
+            '/(?<![A-Za-z0-9_-])((?:[A-Za-z0-9_-]{0,64}[-_])?(?:' . $alternation . '))(=)[^&\s"\\\\]*/i',
             fn (array $m): string => $m[1] . $m[2] . $mask,
             $text,
             $mask
@@ -807,7 +813,7 @@ class ThreatDetectionService
         $out = [];
 
         foreach ($data as $key => $value) {
-            if (isset($sensitive[$this->normaliseFieldName((string) $key)])) {
+            if ($this->isSensitiveName($this->normaliseFieldName((string) $key), $sensitive)) {
                 $out[$key] = $mask;
                 $changed = true;
 
@@ -818,6 +824,32 @@ class ThreatDetectionService
         }
 
         return $out;
+    }
+
+    /**
+     * A listed name, or a longer one ending in `_<listed>`.
+     *
+     * Exact matching let a credential through under any prefix: `api_key` was
+     * masked and `partner_api_key` — `X-Partner-Api-Key` as a header — was
+     * not, nor `vault_token`, `webhook_secret` or `proxy_authorization`. A
+     * name that only *starts* with a listed word, such as `password_hint`,
+     * is still not a match.
+     *
+     * @param  array<string, true>  $sensitive
+     */
+    private function isSensitiveName(string $name, array $sensitive): bool
+    {
+        if (isset($sensitive[$name])) {
+            return true;
+        }
+
+        foreach ($sensitive as $listed => $unused) {
+            if (str_ends_with($name, '_' . $listed)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function normaliseFieldName(string $name): string
