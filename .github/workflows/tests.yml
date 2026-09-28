@@ -142,6 +142,57 @@ jobs:
             exit 1
           fi
 
+  # PostgreSQL is stricter than SQLite and MySQL about types and encoding. The
+  # suite's SQLite hid `boolean = integer` in /stats, which failed the whole
+  # endpoint on every PostgreSQL install. Like the MySQL job, a skip here
+  # means the tests never ran anywhere, so it fails.
+  postgres:
+    runs-on: ubuntu-latest
+    name: PostgreSQL
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: threat_detection_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.4
+          extensions: mbstring, sqlite3, pdo_pgsql
+          coverage: none
+
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction --no-progress
+
+      - name: Run the PostgreSQL tests
+        env:
+          THREAT_DETECTION_PGSQL: '1'
+          THREAT_DETECTION_PGSQL_HOST: 127.0.0.1
+          THREAT_DETECTION_PGSQL_PORT: '5432'
+          THREAT_DETECTION_PGSQL_DATABASE: threat_detection_test
+          THREAT_DETECTION_PGSQL_USERNAME: postgres
+          THREAT_DETECTION_PGSQL_PASSWORD: postgres
+        run: |
+          set -o pipefail
+          vendor/bin/phpunit tests/Security/PostgresCompatibilityTest.php | tee pg-result.txt
+          if grep -qi 'skipped' pg-result.txt; then
+            echo "::error::The PostgreSQL tests skipped instead of running. They execute nowhere else, so a skip means they never ran at all."
+            exit 1
+          fi
+
   quality:
     runs-on: ubuntu-latest
     name: Lint & static analysis

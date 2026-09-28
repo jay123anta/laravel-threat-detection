@@ -347,7 +347,11 @@ class ThreatLogController extends Controller
                 ->selectRaw("SUM(CASE WHEN threat_level = 'medium' THEN 1 ELSE 0 END) as medium_severity")
                 ->selectRaw("SUM(CASE WHEN threat_level = 'low' THEN 1 ELSE 0 END) as low_severity")
                 ->selectRaw('COUNT(DISTINCT ip_address) as unique_ips')
-                ->selectRaw('COUNT(DISTINCT CASE WHEN is_foreign = 1 THEN ip_address END) as foreign_ips')
+                // Bound, not written as 1: PostgreSQL has a real boolean type
+                // and rejects `boolean = integer`, which failed this whole
+                // endpoint — the dashboard's headline cards — on every
+                // PostgreSQL install. MySQL and SQLite receive 1 either way.
+                ->selectRaw('COUNT(DISTINCT CASE WHEN is_foreign = ? THEN ip_address END) as foreign_ips', [true])
                 ->selectRaw('SUM(CASE WHEN cloud_provider IS NOT NULL THEN 1 ELSE 0 END) as cloud_attacks')
                 ->selectRaw('SUM(CASE WHEN DATE(created_at) = ? THEN 1 ELSE 0 END) as today', [$today])
                 ->selectRaw('SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as last_hour', [$lastHour])

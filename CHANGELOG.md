@@ -90,6 +90,13 @@ All notable changes to `jayanta/laravel-threat-detection` will be documented in 
   probed through misconfigured proxies for leaked paid keys (GreyNoise: 80,469
   sessions in 11 days across 73+ model endpoints).
 
+  Works with a config published before this release. The pack lives inside
+  `probe_tracking`, which every published config already has, and Laravel
+  merges package config at the top level only — so the published block would
+  have hidden the pack and `THREAT_DETECTION_AI_PROBES=true` done nothing. The
+  provider fills that one key from the package when it is missing, and leaves
+  everything the operator wrote as written.
+
 - **Actor risk scoring, opt-in via `THREAT_DETECTION_ACTOR_SCORE=true`.**
   Read-only ranking of who to look at first, computed on demand from
   `threat_logs` plus `threat_actor_signals` when available. Exposed at
@@ -286,6 +293,19 @@ All notable changes to `jayanta/laravel-threat-detection` will be documented in 
 
 ### Fixed
 
+- **`/stats` failed on every PostgreSQL install.** It counted foreign IPs
+  with `is_foreign = 1`, and PostgreSQL, which has a real boolean type,
+  rejects `boolean = integer` — so the endpoint behind the dashboard's
+  headline cards returned an error. The value is now bound as a boolean.
+  Verified on PostgreSQL 16, where a new test file sweeps every read endpoint,
+  the write paths and the actor-signal queries; it runs in a new CI job.
+- **`threat-detection:doctor` missed options added inside an existing config
+  block.** It compared top-level keys only, so a published config lacking
+  `probe_tracking.ai_infrastructure` was reported as current. It now compares
+  blocks of named options at any depth — never data maps such as probe paths
+  or patterns — and checks the opt-in features that are switched on: a
+  missing actor-signals table, scoring without signals, the AI pack with
+  probe tracking off, and the ai-guard integration without ai-guard.
 - **The timeline and summary put a whole year in one bucket on SQLite** — the
   default database for a new Laravel app. Both grouped by
   `CAST(created_at AS DATE)`, and SQLite, which has no DATE type, returns the
