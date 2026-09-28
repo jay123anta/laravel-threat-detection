@@ -9,6 +9,7 @@ use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Support\Facades\Schema;
 use JayAnta\ThreatDetection\Http\Middleware\ThreatDetectionMiddleware;
 use JayAnta\ThreatDetection\Services\ThreatDetectionService;
+use JayAnta\ThreatDetection\ThreatDetectionServiceProvider;
 
 /**
  * Checks that threat detection is actually working, not merely installed.
@@ -590,6 +591,15 @@ class DoctorCommand extends Command
      */
     private function checkRetention(): void
     {
+        if (config('threat-detection.retention.enabled', false) && ThreatDetectionServiceProvider::retentionDays() === null) {
+            $this->reportFailure(
+                'Retention is on but its period is not a number of days: '
+                . var_export(config('threat-detection.retention.days'), true) . ' — nothing is being purged',
+                'Set THREAT_DETECTION_RETENTION_DAYS to a whole number of days, 1 or more.'
+            );
+
+            return;
+        }
         if (!$this->laravel->environment('production') || config('threat-detection.retention.enabled', false)) {
             return;
         }

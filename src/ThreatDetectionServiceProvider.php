@@ -6,6 +6,7 @@ use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Foundation\CachesConfiguration;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
 use JayAnta\ThreatDetection\Console\Commands\DoctorCommand;
 use JayAnta\ThreatDetection\Console\Commands\EnrichThreatLogsCommand;
@@ -255,6 +256,17 @@ class ThreatDetectionServiceProvider extends ServiceProvider
         }
     }
 
+    /**
+     * The retention period in whole days, or null when the configured value
+     * is not one (1 or more). Shared with `doctor`.
+     */
+    public static function retentionDays(): ?int
+    {
+        $days = filter_var(config('threat-detection.retention.days', 90), FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+
+        return $days === false ? null : $days;
+    }
+
     protected function registerSchedule(): void
     {
         if (!config('threat-detection.retention.enabled', false)) {
@@ -262,7 +274,23 @@ class ThreatDetectionServiceProvider extends ServiceProvider
         }
 
         $this->app->booted(function () {
-            $days = (int) config('threat-detection.retention.days', 90);
+            $days = self::retentionDays();
+
+            /*
+             * Scheduled only for a whole number of days, 1 or more. The value
+             * comes from .env and used to be cast with (int): "ninety" became
+             * 0 and "-1" a cutoff in the future, and either one purged every
+             * row, every night. Nothing is purged until it is fixed, and
+             * `doctor` reports it.
+             */
+            if ($days === null) {
+                if ($this->app->runningInConsole()) {
+                    Log::warning('Threat detection: retention is on but THREAT_DETECTION_RETENTION_DAYS is not a whole '
+                        . 'number of days (1 or more), so no purge is scheduled.');
+                }
+
+                return;
+            }
 
             $schedule = $this->app->make(Schedule::class);
 

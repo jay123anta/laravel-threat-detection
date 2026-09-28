@@ -265,7 +265,7 @@ class ThreatLogController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => $query->latest()->paginate($request->get('per_page', 20))
+                'data' => $query->latest()->paginate($request->input('per_page', 20))
                     ->through(function ($row) use ($catalog) {
                         $row->ai_family = $catalog->familyOf($row->type);
 
@@ -358,7 +358,8 @@ class ThreatLogController extends Controller
                 // PostgreSQL install. MySQL and SQLite receive 1 either way.
                 ->selectRaw('COUNT(DISTINCT CASE WHEN is_foreign = ? THEN ip_address END) as foreign_ips', [true])
                 ->selectRaw('SUM(CASE WHEN cloud_provider IS NOT NULL THEN 1 ELSE 0 END) as cloud_attacks')
-                ->selectRaw('SUM(CASE WHEN DATE(created_at) = ? THEN 1 ELSE 0 END) as today', [$today])
+                // day(), not DATE(): SQL Server has no DATE() function.
+                ->selectRaw('SUM(CASE WHEN ' . $this->day() . ' = ? THEN 1 ELSE 0 END) as today', [$today])
                 ->selectRaw('SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as last_hour', [$lastHour])
                 ->first();
 
@@ -645,7 +646,7 @@ class ThreatLogController extends Controller
         ]);
 
         return $this->safe(function () use ($request) {
-            $limit = $request->get('limit', 20);
+            $limit = $request->input('limit', 20);
 
             $query = DB::table($this->table);
             $this->scopeCategory($query, $request);
@@ -672,7 +673,7 @@ class ThreatLogController extends Controller
         ]);
 
         return $this->safe(function () use ($request) {
-            $days = $request->get('days', 7);
+            $days = $request->input('days', 7);
 
             $query = DB::table($this->table);
             $this->scopeCategory($query, $request);
@@ -763,10 +764,6 @@ class ThreatLogController extends Controller
     }
 
     /**
-     * Sanitize a CSV cell to prevent formula injection in spreadsheet applications.
-     * Prefixes cells starting with =, +, -, @, \t, \r with a single quote.
-     */
-    /**
      * TD-005. An ip_address cell that is not an address is replaced rather
      * than escaped.
      *
@@ -818,11 +815,21 @@ class ThreatLogController extends Controller
 
         // A payload that contains the closing marker could otherwise appear to
         // end the untrusted region early and have the rest read as trusted.
-        $value = str_replace([$open, $close], '', $value);
+        // Repeated until nothing changes: in one pass, a marker nested inside
+        // the other lost the inner one and the pieces either side joined into
+        // a whole closing marker.
+        do {
+            $before = $value;
+            $value = str_replace([$open, $close], '', $value);
+        } while ($value !== $before);
 
         return $open . ' ' . $value . ' ' . $close;
     }
 
+    /**
+     * Sanitize a CSV cell to prevent formula injection in spreadsheet applications.
+     * Prefixes cells starting with =, +, -, @, \t, \r with a single quote.
+     */
     private function sanitizeCsvCell(?string $value): string
     {
         if ($value === null) {

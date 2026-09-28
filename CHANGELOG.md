@@ -27,7 +27,7 @@ was checked against its source. With everything off, 1,863 of the 1,864 tests
 that shipped with 1.8.0 pass unchanged. The other is the inventory of API
 routes, which exists to fail when one is added, and did for `/ai-threats`.
 
-The suite grew to 2,317 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
+The suite grew to 2,348 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
 and 13.33.0, on MariaDB 10.4 and PostgreSQL 16, and with PCRE JIT disabled —
 where everything passes but the 1 MB timing budgets, which are set for the
 JIT; at the 8 KB the package actually scans, every pattern stays in budget.
@@ -145,6 +145,13 @@ behaviours changed.
   to `failed_jobs`, which nothing prunes. The job now reads it from config when
   it runs; a job queued by an earlier version still carries one and is still
   honoured.
+
+- **A nested marker could end the spotlighted region early.** Spotlighting
+  wraps attacker text in markers so an LLM reading the export can tell data
+  from instructions, and removes any marker the text already carries — in
+  one pass. A marker nested inside the other, twice, lost the inner ones and
+  the pieces joined into a whole closing marker, so the text after it read as
+  outside the untrusted region. Removal now repeats until nothing changes.
 
 - **Slack alerts rendered markup from the request.** Slack reads `&`, `<` and
   `>` as markup in attachment fields, and its documentation says values must
@@ -412,6 +419,33 @@ behaviours changed.
   headline cards returned an error. The value is now bound as a boolean.
   Verified on PostgreSQL 16, where a new test file sweeps every read endpoint,
   the write paths and the actor-signal queries; it runs in a new CI job.
+- **A retention period that was not a number of days deleted everything.**
+  `threat-detection:purge` cast `--days` with `(int)`: a negative value put the
+  cutoff in the future and a word became 0, and both delete every row. The
+  scheduler passes `THREAT_DETECTION_RETENTION_DAYS` straight through, so a
+  typo in `.env` — `ninety`, `-1` — emptied the log every night. `--days` must
+  now be a whole number, 0 or more (0 by hand still empties the table, as
+  documented); the scheduled purge needs 1 or more, schedules nothing
+  otherwise, and `doctor` reports it. A non-numeric
+  `actor_signals.retention_days` no longer wipes the signals either.
+- **On memcached, deduplication never engaged.** The five-minute mark was
+  keyed `threat_logged:{ip}:{type}`, and every type contains a space, which
+  memcached's text protocol refuses — so each read and write failed silently
+  and every attacking request wrote its own row and sent its own alert. The
+  key is hashed on memcached; other stores keep the key they had.
+- **`/stats` and `threat-detection:stats` failed on SQL Server**, which the
+  README lists as supported: they counted today's rows with `DATE()`, which
+  SQL Server does not have. They now use the `CAST(... AS DATE)` the other
+  date queries already used.
+- **A probe's level is normalised.** Probe levels were stored as configured,
+  so `High` or a typo was recorded but matched no severity filter, count or
+  `notify_levels` on PostgreSQL and SQLite. They are lower-cased, and a value
+  that is not high, medium or low falls back to the pack's level, then
+  `default_level`, then `medium`, with a warning — as custom patterns already
+  did.
+- The API reads `per_page`, `limit` and `days` with `input()`. It used
+  `Request::get()`, which Symfony 8 removed and Laravel keeps only as a
+  deprecated alias that consults request attributes before the query string.
 - **`threat-detection:doctor` checks two things the package depends on but
   cannot see from a request.** It warns when `whitelisted_ips` or an `ip` guard
   sits behind `TrustProxies` at `*`, which honours `X-Forwarded-For` from

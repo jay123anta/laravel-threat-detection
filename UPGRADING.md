@@ -67,6 +67,14 @@ php artisan threat-detection:doctor
     rather than carrying it. Jobs already queued still work.
 13. **`doctor` has two new warnings:** IP decisions behind `TrustProxies` at
     `*`, and, in production, retention switched off.
+14. **`purge --days` must be a whole number, 0 or more**, and exits 1
+    otherwise; it used to treat anything else as "delete everything". The
+    scheduled purge needs `THREAT_DETECTION_RETENTION_DAYS` of 1 or more and
+    schedules nothing otherwise — `doctor` fails until it is fixed.
+15. **Probe levels are lower-cased**, and one that is not high, medium or low
+    falls back to the pack level, then `default_level`, then `medium`.
+16. **On memcached, the dedup cache key is hashed.** Other stores are
+    unchanged.
 
 ### If you published the dashboard view
 

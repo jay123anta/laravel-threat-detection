@@ -15,7 +15,19 @@ class PurgeThreatLogsCommand extends Command
 
     public function handle(): int
     {
-        $days = (int) $this->option('days');
+        $given = trim((string) $this->option('days'));
+
+        // A whole number of days, 0 or more. This was cast with (int), so a
+        // negative value put the cutoff in the future and a word became 0 —
+        // and both delete every row. 0 itself stays valid: it is the
+        // documented way to empty the table.
+        if (!ctype_digit($given)) {
+            $this->error('--days must be a whole number of days, 0 or more. Given: ' . var_export($this->option('days'), true));
+
+            return 1;
+        }
+
+        $days = (int) $given;
         $table = config('threat-detection.table_name', 'threat_logs');
         $cutoff = now()->subDays($days);
 
@@ -85,7 +97,16 @@ class PurgeThreatLogsCommand extends Command
     private function purgeActorSignals(): void
     {
         $table = config('threat-detection.actor_signals.table', 'threat_actor_signals');
-        $days = (int) config('threat-detection.actor_signals.retention_days', 7);
+        $configured = config('threat-detection.actor_signals.retention_days', 7);
+        $days = filter_var($configured, FILTER_VALIDATE_INT);
+
+        // Not a number of days: cast, it became 0 and removed every signal.
+        if ($days === false) {
+            $this->warn('actor_signals.retention_days is not a whole number of days ('
+                . var_export($configured, true) . '); actor signals were not purged.');
+
+            return;
+        }
 
         if ($days < 0 || !Schema::hasTable($table)) {
             return;

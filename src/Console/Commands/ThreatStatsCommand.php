@@ -19,13 +19,20 @@ class ThreatStatsCommand extends Command
             $todayDate = today()->toDateString();
             $lastHourTime = now()->subHour();
 
+            // created_at's calendar day on every driver. SQL Server has no
+            // DATE() function, and SQLite has no DATE type to CAST to — the
+            // same split ThreatLogController::day() makes.
+            $day = DB::connection()->getDriverName() === 'sqlite'
+                ? 'DATE(created_at)'
+                : 'CAST(created_at AS DATE)';
+
             $row = DB::table($table)
                 ->selectRaw('COUNT(*) as total')
                 ->selectRaw("SUM(CASE WHEN threat_level = 'high' THEN 1 ELSE 0 END) as high")
                 ->selectRaw("SUM(CASE WHEN threat_level = 'medium' THEN 1 ELSE 0 END) as medium")
                 ->selectRaw("SUM(CASE WHEN threat_level = 'low' THEN 1 ELSE 0 END) as low")
                 ->selectRaw('COUNT(DISTINCT ip_address) as unique_ips')
-                ->selectRaw('SUM(CASE WHEN DATE(created_at) = ? THEN 1 ELSE 0 END) as today', [$todayDate])
+                ->selectRaw('SUM(CASE WHEN ' . $day . ' = ? THEN 1 ELSE 0 END) as today', [$todayDate])
                 ->selectRaw('SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as last_hour', [$lastHourTime])
                 ->first();
         } catch (\Throwable $e) {

@@ -2,6 +2,8 @@
 
 namespace JayAnta\ThreatDetection\Services;
 
+use Illuminate\Support\Facades\Log;
+
 class ProbeDetectorService
 {
     /** @var array<string, array{label: string, level: string|null}>|null Exact paths for O(1) lookup */
@@ -48,7 +50,7 @@ class ProbeDetectorService
 
         $uri = '/' . ltrim($uri, '/');
         $uriLower = strtolower($uri);
-        $default = config('threat-detection.probe_tracking.default_level', 'medium');
+        $default = self::level(config('threat-detection.probe_tracking.default_level', 'medium'), 'default_level') ?? 'medium';
 
         // O(1) hash lookup for exact paths
         if (isset(self::$exactPaths[$uriLower])) {
@@ -114,7 +116,7 @@ class ProbeDetectorService
             return $paths;
         }
 
-        $packLevel = config('threat-detection.probe_tracking.ai_infrastructure.level');
+        $packLevel = self::level(config('threat-detection.probe_tracking.ai_infrastructure.level'), 'ai_infrastructure.level');
         $pack = [];
 
         foreach ((array) config('threat-detection.probe_tracking.ai_infrastructure.paths', []) as $pattern => $definition) {
@@ -167,11 +169,7 @@ class ProbeDetectorService
             return null;
         }
 
-        $level = isset($definition['level']) && is_string($definition['level'])
-            ? trim($definition['level'])
-            : null;
-
-        $normalised = ['label' => $label, 'level' => $level === '' ? null : $level];
+        $normalised = ['label' => $label, 'level' => self::level($definition['level'] ?? null, "'{$label}'")];
 
         if (isset($definition['pack']) && is_string($definition['pack'])) {
             $normalised['pack'] = $definition['pack'];
@@ -184,9 +182,43 @@ class ProbeDetectorService
      * Drop the memoised path index so a runtime change to
      * probe_tracking.paths takes effect (tests, Octane reloads).
      */
+    /** @var array<string, true> Unusable levels already reported */
+    private static array $levelWarned = [];
+
+    /**
+     * A severity the rest of the package reads — high, medium or low, in
+     * lower case — or null so the caller falls back to the next one along.
+     *
+     * Everything downstream speaks those three words, and on PostgreSQL and
+     * SQLite compares them case-sensitively: a probe stored as 'High' or
+     * 'hgih' was recorded but counted as nothing and never alerted.
+     */
+    private static function level(mixed $configured, string $where): ?string
+    {
+        if ($configured === null || (is_string($configured) && trim($configured) === '')) {
+            return null;
+        }
+
+        $level = is_string($configured) ? strtolower(trim($configured)) : '';
+
+        if (in_array($level, ['high', 'medium', 'low'], true)) {
+            return $level;
+        }
+
+        $shown = is_scalar($configured) ? (string) $configured : get_debug_type($configured);
+
+        if (!isset(self::$levelWarned[$where . '|' . $shown])) {
+            self::$levelWarned[$where . '|' . $shown] = true;
+            Log::warning("Threat detection: probe level '{$shown}' for {$where} is not high, medium or low; using the fallback.");
+        }
+
+        return null;
+    }
+
     public static function flushCaches(): void
     {
         self::$exactPaths = null;
         self::$wildcardPaths = null;
+        self::$levelWarned = [];
     }
 }

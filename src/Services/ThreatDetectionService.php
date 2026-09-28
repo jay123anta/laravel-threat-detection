@@ -1989,12 +1989,30 @@ class ThreatDetectionService
 
     private function isRecentlyLogged(string $ip, string $type): bool
     {
-        return Cache::has("threat_logged:{$ip}:{$type}");
+        return Cache::has($this->loggedKey($ip, $type));
     }
 
     private function markAsLogged(string $ip, string $type): void
     {
-        Cache::put("threat_logged:{$ip}:{$type}", true, now()->addMinutes(5));
+        Cache::put($this->loggedKey($ip, $type), true, now()->addMinutes(5));
+    }
+
+    /**
+     * The dedup mark's cache key.
+     *
+     * Memcached's text protocol refuses a key containing whitespace or longer
+     * than 250 bytes, and every type contains a space ("[query] SQL Injection
+     * UNION"). There every read and write of the mark failed silently, so
+     * dedup never engaged: a row, and an alert, for every attacking request
+     * instead of one per five minutes. On memcached the key is hashed; other
+     * stores keep the readable key they have always had.
+     */
+    private function loggedKey(string $ip, string $type): string
+    {
+        $key = "threat_logged:{$ip}:{$type}";
+        $driver = config('cache.stores.' . config('cache.default') . '.driver');
+
+        return $driver === 'memcached' ? 'threat_logged:' . sha1($key) : $key;
     }
 
     /**
