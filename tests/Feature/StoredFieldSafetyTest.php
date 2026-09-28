@@ -100,6 +100,10 @@ class StoredFieldSafetyTest extends TestCase
             'null byte' => ["\x00", "\x00", '\x00'],
             'delete' => ["\x7f", "\x7f", '\x7F'],
             'C1 CSI, honoured as ESC [ by some terminals' => ["\u{9B}2J", "\u{9B}", '\u009B'],
+            'right-to-left override' => ["\u{202E}gnp.exe", "\u{202E}", '\u202E'],
+            'left-to-right embedding' => ["\u{202A}x", "\u{202A}", '\u202A'],
+            'right-to-left isolate' => ["\u{2067}x", "\u{2067}", '\u2067'],
+            'pop directional isolate' => ["x\u{2069}", "\u{2069}", '\u2069'],
         ];
     }
 
@@ -115,6 +119,15 @@ class StoredFieldSafetyTest extends TestCase
     }
 
     /** Tab is whitespace, not a control sequence, and is left alone. */
+    /** Right-to-left letters are text, not controls, and are stored as sent. */
+    #[Test]
+    public function right_to_left_text_is_left_alone(): void
+    {
+        $ua = 'Mozilla/5.0 متصفح عربي דפדפן';
+
+        $this->assertSame($ua, $this->storedUserAgent($ua));
+    }
+
     #[Test]
     public function a_tab_is_left_alone(): void
     {

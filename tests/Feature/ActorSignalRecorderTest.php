@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
+use JayAnta\ThreatDetection\Services\ActorSignalRecorder;
 use JayAnta\ThreatDetection\Tests\TestCase;
 use PHPUnit\Framework\Attributes\Test;
 
@@ -401,5 +402,40 @@ class ActorSignalRecorderTest extends TestCase
         Artisan::call('threat-detection:purge', ['--days' => 365, '--no-interaction' => true]);
 
         $this->assertSame(1, $this->signalCount(), 'signals were not purged on their own retention');
+    }
+
+    /**
+     * The ceiling warning is remembered per actor so it is logged once each.
+     * A worker under Octane serves thousands of requests, so that list must be
+     * bounded, or every address that hits the ceiling costs memory for the
+     * life of the process.
+     */
+    #[Test]
+    public function the_warn_once_list_is_bounded_across_many_actors(): void
+    {
+        $this->enable();
+        config([
+            'threat-detection.actor_signals.table' => self::SIGNALS,
+            'threat-detection.actor_signals.max_per_actor_per_window' => 1,
+        ]);
+        ActorSignalRecorder::flushCaches();
+
+        $recorder = new ActorSignalRecorder;
+        $match = fn (string $variant) => [
+            'label' => 'SQL Injection UNION', 'threat_level' => 'high', 'source' => 'middleware',
+            'context' => 'query', 'fingerprint' => 'fp', 'variant' => $variant,
+        ];
+
+        for ($i = 0; $i < 400; $i++) {
+            $actor = '198.51.' . intdiv($i, 250) . '.' . ($i % 250);
+            $recorder->record($actor, [$match('v1'), $match('v2')]);
+        }
+
+        $warned = (new \ReflectionClass(ActorSignalRecorder::class))->getStaticPropertyValue('warned');
+
+        $this->assertLessThanOrEqual(257, count($warned), 'the warn-once list grew with every actor');
+        $this->assertArrayHasKey('__overflow', $warned, 'the suppression was never announced');
+
+        ActorSignalRecorder::flushCaches();
     }
 }

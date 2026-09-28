@@ -676,6 +676,12 @@ class ThreatDetectionService
      * DEL and the C1 range, which some terminals honour as escape
      * introducers, become visible `\xNN` / `\uNNNN` text. Tab is left alone.
      *
+     * **Bidirectional overrides.** U+202A–202E and U+2066–2069 reorder how
+     * the text around them is displayed — the "Trojan Source" class — so a
+     * stored URL could read differently from what it is. They get the same
+     * visible `\uNNNN` treatment. Right-to-left *letters* are untouched; only
+     * the invisible controls that force an order are.
+     *
      * Everything else is untouched, so ordinary traffic is stored exactly as
      * before.
      */
@@ -686,7 +692,7 @@ class ThreatDetectionService
         }
 
         return preg_replace_callback(
-            '/[\x00-\x08\x0A-\x1F\x7F]|\xC2[\x80-\x9F]/',
+            '/[\x00-\x08\x0A-\x1F\x7F]|\xC2[\x80-\x9F]|\xE2\x80[\xAA-\xAE]|\xE2\x81[\xA6-\xA9]/',
             fn (array $m) => strlen($m[0]) === 1
                 ? sprintf('\x%02X', ord($m[0]))
                 : sprintf('\u%04X', mb_ord($m[0], 'UTF-8')),

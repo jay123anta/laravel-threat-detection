@@ -198,6 +198,23 @@ class AiProbeRouteAwarenessTest extends TestCase
         $this->assertSame([], $this->probeTypes());
     }
 
+    /**
+     * Route matching can fail for reasons of the app's own — here a route
+     * whose constraint is not a valid regex. That failure must not reach the
+     * middleware's outer catch, which would skip detection for the whole
+     * request; an unknown answer is treated as unserved.
+     */
+    #[Test]
+    public function a_route_table_that_cannot_be_matched_does_not_cost_the_request_its_detection(): void
+    {
+        $this->app[Kernel::class]->pushMiddleware(ThreatDetectionMiddleware::class);
+        Route::get('/broken/{segment}', fn () => response('OK'))->where('segment', '[unclosed');
+
+        $this->get('/v1/models');
+
+        $this->assertNotEmpty($this->probeTypes(), 'a route-matching failure skipped detection for the request');
+    }
+
     // ── The general list is unchanged ──────────────────────────────────────
 
     #[Test]

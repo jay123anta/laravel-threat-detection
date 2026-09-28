@@ -40,9 +40,11 @@ behaviours changed.
   now runs in CI against MySQL 8.0.
 
   Invalid sequences are now replaced before storing, and control characters —
-  C0, DEL, and the C1 range some terminals honour as escape introducers — are
-  stored as visible `\xNN` / `\uNNNN` text, so a stored header cannot repaint
-  the terminal of whoever reads it later. Ordinary traffic, including valid
+  C0, DEL, the C1 range some terminals honour as escape introducers, and the
+  bidirectional overrides that reorder how text displays ("Trojan Source") —
+  are stored as visible `\xNN` / `\uNNNN` text, so a stored header cannot
+  repaint the terminal, or disguise itself in the log viewer, of whoever reads
+  it later. Right-to-left letters are untouched. Ordinary traffic, including valid
   non-ASCII, is stored exactly as before, and detection is unchanged: the
   scanner in `sqlmap/1.8 \x1b[2J\xFF` is still identified.
 

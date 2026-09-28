@@ -142,10 +142,25 @@ class RegexSafetyTest extends TestCase
             $custom[$regex] = is_array($entry) ? $entry['label'] : $entry;
         }
 
+        // The LLM pack only joins the custom patterns when its switch is on,
+        // so reading custom_patterns alone never saw it. Added in 1.9.0 and
+        // covered from the start.
+        $llm = [];
+        foreach ($config['llm_log_safety']['patterns'] as $regex => $entry) {
+            $llm[$regex] = is_array($entry) ? $entry['label'] : $entry;
+        }
+
         $cases = [];
-        foreach ([['default', $defaults], ['custom', $custom], ['evasion', $evasion]] as [$origin, $set]) {
+        foreach ([['default', $defaults], ['custom', $custom], ['evasion', $evasion], ['llm', $llm]] as [$origin, $set]) {
             foreach ($set as $regex => $label) {
-                $cases["{$origin}: {$label}"] = [$regex, $label, $origin];
+                // Several regexes can share a label (the LLM pack has three
+                // role-marker patterns). Keyed by label alone, all but the
+                // last were silently dropped and never tested.
+                $key = "{$origin}: {$label}";
+                for ($n = 2; isset($cases[$key]); $n++) {
+                    $key = "{$origin}: {$label} #{$n}";
+                }
+                $cases[$key] = [$regex, $label, $origin];
             }
         }
 

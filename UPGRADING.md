@@ -29,8 +29,9 @@ php artisan threat-detection:doctor
    JIT limit), which used to pass silently. On ordinary traffic it points at a
    custom pattern that backtracks badly; the log names which one.
 3. **Stored User-Agents and URLs are cleaned.** Invalid UTF-8 is replaced, and
-   control characters are stored as visible `\xNN` / `\uNNNN` text. Ordinary
-   values are stored exactly as before.
+   control characters and bidirectional overrides are stored as visible
+   `\xNN` / `\uNNNN` text. Ordinary values, including right-to-left text, are
+   stored exactly as before.
 4. **On SQLite, `/timeline` and `/summary` bucket by day** and return
    `YYYY-MM-DD` dates. They returned the year as a number.
 5. **On PostgreSQL, `/stats` works.** It returned an error.

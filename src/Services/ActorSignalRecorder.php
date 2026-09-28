@@ -209,9 +209,26 @@ class ActorSignalRecorder
     /** @var array<string, true> */
     private static array $warned = [];
 
+    /**
+     * Distinct warnings remembered per process. The ceiling warning is keyed
+     * by actor, and under Octane a worker lives for thousands of requests, so
+     * an unbounded list would grow with every address that hit the ceiling.
+     */
+    private const MAX_WARNED = 256;
+
     private function warnOnce(string $key, string $message): void
     {
         if (isset(self::$warned[$key])) {
+            return;
+        }
+
+        if (count(self::$warned) >= self::MAX_WARNED) {
+            // Say once that the rest go unreported, then stay quiet.
+            if (!isset(self::$warned['__overflow'])) {
+                self::$warned['__overflow'] = true;
+                Log::warning('Threat detection: further actor-signal warnings in this process are suppressed.');
+            }
+
             return;
         }
 

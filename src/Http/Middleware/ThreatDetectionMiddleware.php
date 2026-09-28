@@ -141,6 +141,12 @@ class ThreatDetectionMiddleware
             return true;
         } catch (NotFoundHttpException) {
             return false;
+        } catch (\Throwable) {
+            // Anything else — an app route that cannot compile, say — must
+            // not reach the outer catch, which would skip detection for the
+            // whole request. Unknown is treated as unserved: logging a probe
+            // the app might serve beats losing the request's evidence.
+            return false;
         }
 
         if ($route->isFallback) {
