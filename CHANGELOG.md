@@ -22,7 +22,7 @@ attacks and AI-related threats in separate sections. Every figure cited below
 was checked against its source. With everything off, every test that existed
 before this release — 1,864 — passes unchanged.
 
-The suite grew to 2,181 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
+The suite grew to 2,215 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
 and 13.33.0, on MariaDB 10.4 and PostgreSQL 16, and with PCRE JIT disabled.
 See [UPGRADING.md](UPGRADING.md#18x--190) — nothing is required, but a few
 behaviours changed.
