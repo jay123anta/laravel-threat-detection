@@ -589,6 +589,11 @@ function threatDashboard() {
                     alert('You do not have permission to disable a detection.\n\n'
                         + 'This requires the role set in threat-detection.api.role, '
                         + 'or a different THREAT_DETECTION_API_WRITE_GUARD setting.');
+                } else if (r.status === 422) {
+                    // The row's path cannot be stored exactly, so no rule was
+                    // made and the row was left as it was. The server says why.
+                    const body = await r.json().catch(() => ({}));
+                    alert(body.message ?? 'No exclusion was created for this row.');
                 } else {
                     alert('Failed to mark as false positive.');
                 }

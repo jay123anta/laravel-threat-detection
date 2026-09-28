@@ -145,4 +145,39 @@ class MysqlHostileBytesTest extends TestCase
         $this->assertStringNotContainsString("\x07", $stored);
         $this->assertStringContainsString('Mozilla/5.0', $stored, 'the printable part of the header should survive');
     }
+
+    /**
+     * TEXT holds 65,535 bytes. A longer User-Agent failed the batched INSERT
+     * on a strict server and took the attack beside it down with it — a
+     * header size nginx refuses by default but Go-based servers accept.
+     */
+    #[Test]
+    public function an_oversized_user_agent_does_not_cost_the_request_its_detections(): void
+    {
+        $this->withHeaders(['User-Agent' => 'Mozilla/5.0 ' . str_repeat('a', 70000)])
+            ->get('/search?q=' . urlencode(self::INJECTION))
+            ->assertStatus(200);
+
+        $this->assertGreaterThan(0, $this->injectionsLogged(), 'an oversized User-Agent made the attack beside it unloggable');
+    }
+
+    /** Escaping grows a control byte to four characters, so a smaller header reaches the limit. */
+    #[Test]
+    public function a_user_agent_that_escaping_pushes_past_the_column_does_not_either(): void
+    {
+        $this->withHeaders(['User-Agent' => 'Mozilla/5.0 ' . str_repeat("\x01", 20000)])
+            ->get('/search?q=' . urlencode(self::INJECTION))
+            ->assertStatus(200);
+
+        $this->assertGreaterThan(0, $this->injectionsLogged(), 'a 20 KB User-Agent, escaped past 64 KB, made the attack unloggable');
+    }
+
+    #[Test]
+    public function an_oversized_url_does_not_cost_the_request_its_detections(): void
+    {
+        $this->get('/search?q=' . urlencode(self::INJECTION) . '&pad=' . str_repeat('a', 70000))
+            ->assertStatus(200);
+
+        $this->assertGreaterThan(0, $this->injectionsLogged(), 'an oversized URL made its own attack unloggable');
+    }
 }

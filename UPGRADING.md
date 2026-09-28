@@ -20,21 +20,41 @@ php artisan threat-detection:doctor
 
 1. **A false-positive rule matches its row's exact path.** Marking a row as a
    false positive used to create a rule whose path was a glob, written by
-   whoever sent the request. Rules created from a row — including ones you
-   already have — now match that path exactly. If you relied on one to cover
-   other paths, write it by hand in `threat_exclusion_rules` with
-   `created_from_threat_id` left `NULL`; hand-written rules keep glob matching.
+   whoever sent the request — and a row on the site root created a rule with
+   no path, which covered every path. Rules created from a row — including
+   ones you already have — now match that path exactly, and a root row's rule
+   covers the root only. If you relied on one to cover other paths, write it
+   by hand in `threat_exclusion_rules` with `created_from_threat_id` left
+   `NULL`; hand-written rules keep glob matching, and one with no path still
+   covers every path.
+
+   A row whose path cannot be stored exactly — unreadable, or longer than 255
+   characters — is now refused with **422** and left unmarked. The dashboard
+   shows the message; write the rule by hand if you need it.
 2. **A new row type can appear: `[engine] Pattern Evaluation Failure`.** It
    means a pattern could not be evaluated for that request (a backtracking or
    JIT limit), which used to pass silently. On ordinary traffic it points at a
    custom pattern that backtracks badly; the log names which one.
-3. **Stored User-Agents and URLs are cleaned.** Invalid UTF-8 is replaced, and
-   control characters and bidirectional overrides are stored as visible
-   `\xNN` / `\uNNNN` text. Ordinary values, including right-to-left text, are
-   stored exactly as before.
+3. **Stored User-Agents and URLs are cleaned and bounded.** Invalid UTF-8 is
+   replaced, control characters and bidirectional overrides are stored as
+   visible `\xNN` / `\uNNNN` text, and a value over 8 KB is cut on a character
+   boundary and ends `…[truncated]`. Detection still reads the whole value.
+   Ordinary values, including right-to-left text, are stored exactly as
+   before.
 4. **On SQLite, `/timeline` and `/summary` bucket by day** and return
    `YYYY-MM-DD` dates. They returned the year as a number.
 5. **On PostgreSQL, `/stats` works.** It returned an error.
+6. **Slack alerts escape `&`, `<` and `>`**, so markup in a requested URL
+   reaches the channel as text. An `&` in a URL now reads `&amp;` in the raw
+   payload; Slack displays it as `&`.
+7. **The CSV export follows RFC 4180.** Quotes are doubled and a backslash is
+   an ordinary character. Spreadsheets read it as before; a script parsing it
+   with PHP's `fgetcsv()` should pass `escape: ''`.
+8. **`only_paths` also matches the decoded path**, as the router does. If you
+   set it, a percent-encoded spelling of a listed route is now scanned too.
+9. **API inputs are validated.** `keyword`, `ip`, `type`, `country` and
+   `cloud_provider` accept strings of up to 255 characters, and a
+   false-positive `reason` up to 1,000; anything else answers 422.
 
 ### If you published the dashboard view
 

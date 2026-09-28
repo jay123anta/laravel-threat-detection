@@ -39,14 +39,23 @@ class ThreatDetectionMiddleware
 
             $uri = ltrim($request->path(), '/');
 
-            // Whitelist mode: if only_paths is configured, skip everything not matching
+            // Whitelist mode: if only_paths is configured, skip everything not matching.
+            //
+            // The router matches the decoded path, so a scoped route is still
+            // in scope when its path arrives percent-encoded: either spelling
+            // brings it in. The lists below that narrow scanning compare the
+            // raw path only, so an encoding can widen what is scanned and
+            // never narrow it.
             $onlyPaths = config('threat-detection.only_paths', []);
             if (!empty($onlyPaths)) {
+                $spellings = array_unique([$uri, rawurldecode($uri)]);
                 $matched = false;
                 foreach ($onlyPaths as $onlyPath) {
-                    if (fnmatch($onlyPath, $uri)) {
-                        $matched = true;
-                        break;
+                    foreach ($spellings as $spelling) {
+                        if (fnmatch($onlyPath, $spelling)) {
+                            $matched = true;
+                            break 2;
+                        }
                     }
                 }
                 if (!$matched) {

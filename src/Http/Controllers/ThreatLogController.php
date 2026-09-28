@@ -211,6 +211,11 @@ class ThreatLogController extends Controller
             'date_from' => 'sometimes|date',
             'date_to' => 'sometimes|date',
             'category' => 'sometimes|in:ai,traditional',
+            'keyword' => 'sometimes|nullable|string|max:255',
+            'ip' => 'sometimes|nullable|string|max:255',
+            'type' => 'sometimes|nullable|string|max:255',
+            'country' => 'sometimes|nullable|string|max:255',
+            'cloud_provider' => 'sometimes|nullable|string|max:255',
         ]);
 
         return $this->safe(function () use ($request) {
@@ -501,6 +506,8 @@ class ThreatLogController extends Controller
 
     public function export(Request $request)
     {
+        $request->validate(['keyword' => 'sometimes|nullable|string|max:255']);
+
         try {
             $query = DB::table($this->table)
                 ->select('id', 'created_at', 'ip_address', 'url', 'type', 'threat_level', 'confidence_score', 'is_false_positive', 'action_taken', 'country_name', 'cloud_provider');
@@ -552,9 +559,14 @@ class ThreatLogController extends Controller
             $filename = 'threat_logs_' . now()->format('Ymd_His') . '.csv';
 
             $handle = fopen('php://temp', 'r+');
-            fputcsv($handle, $csvHeader);
+            // RFC 4180, as spreadsheets read it: no escape character, every
+            // quote doubled. fputcsv's default backslash escape writes `\"`
+            // undoubled, which Excel and LibreOffice read as the end of the
+            // cell — so a URL carrying `\",=…` became a second cell starting
+            // with `=`, where sanitizeCsvCell() never looked.
+            fputcsv($handle, $csvHeader, ',', '"', '');
             foreach ($csvData as $row) {
-                fputcsv($handle, $row);
+                fputcsv($handle, $row, ',', '"', '');
             }
             rewind($handle);
             $csvOutput = stream_get_contents($handle);
@@ -681,6 +693,8 @@ class ThreatLogController extends Controller
 
     public function markFalsePositive(Request $request, int $id, ExclusionRuleService $exclusionService): JsonResponse
     {
+        $request->validate(['reason' => 'sometimes|nullable|string|max:1000']);
+
         return $this->safe(function () use ($request, $id, $exclusionService) {
             $threat = DB::table($this->table)->where('id', $id)->first();
 
@@ -688,16 +702,28 @@ class ThreatLogController extends Controller
                 return response()->json(['success' => false, 'message' => 'Threat not found'], 404);
             }
 
-            DB::table($this->table)->where('id', $id)->update([
-                'is_false_positive' => true,
-                'updated_at' => now(),
-            ]);
-
+            // The rule first, the mark second: a row is only reported as a
+            // false positive once a rule scoped to it exists. The service
+            // refuses a row whose path it cannot store exactly rather than
+            // widening the rule, and that refusal leaves the row untouched.
             $rule = $exclusionService->createFromThreat(
                 $id,
                 $request->user()?->id,
                 $request->input('reason')
             );
+
+            if ($rule === null) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "This row's URL path cannot be stored exactly, so no rule was created. "
+                        . 'Write one by hand in threat_exclusion_rules if you need it.',
+                ], 422);
+            }
+
+            DB::table($this->table)->where('id', $id)->update([
+                'is_false_positive' => true,
+                'updated_at' => now(),
+            ]);
 
             return response()->json([
                 'success' => true,

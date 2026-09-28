@@ -134,7 +134,11 @@ class ExportBlocklistCommand extends Command
         $parts[] = 'since=' . $this->option('since');
         $parts[] = 'min-hits=' . $this->option('min-hits');
 
-        return implode(', ', $parts);
+        // One line, whatever it was given. This is a comment in a server
+        // config, and --since and --min-hits need not parse for rows to be
+        // exported, so a newline in either would end the comment and put the
+        // rest on a line of its own.
+        return (string) preg_replace('/[^\x20-\x7E]/', '?', implode(', ', $parts));
     }
 
     private function outputPlain($ips, string $filters): void

@@ -117,4 +117,18 @@ class DashboardSectionsTest extends TestCase
         $this->assertStringContainsString('This creates a permanent exclusion', $html);
         $this->assertStringContainsString('will no longer be logged on', $html);
     }
+
+    /**
+     * A row whose path cannot be scoped is refused with 422. The dashboard
+     * shows the server's reason rather than a generic failure, so the
+     * operator knows to write the rule by hand.
+     */
+    #[Test]
+    public function a_refused_false_positive_shows_the_servers_reason(): void
+    {
+        $html = $this->html();
+
+        $this->assertStringContainsString('r.status === 422', $html);
+        $this->assertStringContainsString('alert(body.message', $html);
+    }
 }

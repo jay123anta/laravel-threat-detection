@@ -7,11 +7,13 @@ All notable changes to `jayanta/laravel-threat-detection` will be documented in 
 Two things in one release.
 
 **Fixes to defects that ship in 1.8.0 — upgrade for these whatever else you
-do.** One invalid byte in the User-Agent stopped a request's attacks being
-logged on strict MySQL and PostgreSQL. A false-positive click could create a
-site-wide exclusion on a path the attacker chose. A detection regex that failed
-was read as clean. `/stats` failed on PostgreSQL, and the timeline put a whole
-year in one bucket on SQLite. All are under Security and Fixed below.
+do.** One invalid byte in the User-Agent, or a header long enough, stopped a
+request's attacks being logged on strict MySQL. A false-positive click could
+create a site-wide exclusion on a path the attacker chose, or on the site root.
+A detection regex that failed was read as clean. Slack alerts rendered markup
+from the request, and the CSV export could split a cell where a spreadsheet
+evaluates it. `/stats` failed on PostgreSQL, and the timeline put a whole year
+in one bucket on SQLite. All are under Security and Fixed below.
 
 **An AI-attacker detection line, every part of it opt-in and off by default:**
 probes for exposed model infrastructure, injection aimed at the LLM that will
@@ -22,7 +24,7 @@ attacks and AI-related threats in separate sections. Every figure cited below
 was checked against its source. With everything off, every test that existed
 before this release — 1,864 — passes unchanged.
 
-The suite grew to 2,215 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
+The suite grew to 2,272 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
 and 13.33.0, on MariaDB 10.4 and PostgreSQL 16, and with PCRE JIT disabled.
 See [UPGRADING.md](UPGRADING.md#18x--190) — nothing is required, but a few
 behaviours changed.
@@ -51,6 +53,15 @@ behaviours changed.
   The stored URL gets the same treatment. Symfony already normalises a URL
   that arrives through the server, so that half is defence in depth.
 
+  Length did the same thing. Both columns are TEXT, 65,535 bytes on MySQL,
+  and neither value was bounded — so a User-Agent or URL past that size failed
+  the INSERT, and escaping made it easier to reach: a 20 KB header of control
+  bytes is stored as 80 KB. nginx and Apache refuse headers that long by
+  default, but Go-based servers such as FrankenPHP accept a megabyte, and
+  operators raise nginx's buffers for large cookies. The stored copies are now
+  cut at 8 KB on a character boundary and end `…[truncated]`; detection still
+  reads the whole value. Reproduced on MariaDB 10.4 before the fix.
+
 - **A false-positive click could silence a detection site-wide, on a path the
   attacker chose.** Marking a row as a false positive builds an exclusion rule
   from its label and URL path, and the path was matched with `fnmatch()` — so
@@ -66,6 +77,17 @@ behaviours changed.
   nine years of SigmaHQ rules they were added 5.4 times for every one
   removed, and 64.1% of path exclusions were satisfiable by an unprivileged
   attacker ([arXiv:2608.31062](https://arxiv.org/abs/2608.31062)).
+
+  The site root reached every path by another route. Its path is empty, and
+  the rule stored it as `NULL` — which on a rule means "every path" — so
+  marking a detection on the home page as noise, the most common place for
+  one, silenced that label site-wide. `/0` did the same, and so did a URL
+  `parse_url()` could not read. A rule built from a row now always carries
+  that row's path, the root included; `NULL` on such a rule, including rules
+  earlier versions stored, now means the root. A row whose path cannot be
+  stored exactly — unreadable, or longer than the 255-character column — is
+  refused with 422 and left unmarked rather than given a wider rule, and the
+  rule is created before the row is marked, so a failure leaves neither.
 
 - **A detection regex that failed was read as "no threat".** PHP stops
   catastrophic backtracking with `pcre.backtrack_limit`, and `preg_match()`
@@ -88,6 +110,37 @@ behaviours changed.
   emptied the payload, so every pattern saw nothing. Reproducible with PCRE
   JIT disabled, as on some hardened hosts; a failed step now leaves the text
   as it was. CI runs that test with JIT off.
+
+- **Slack alerts rendered markup from the request.** Slack reads `&`, `<` and
+  `>` as markup in attachment fields, and its documentation says values must
+  escape them. The alert's URL is the requester's, path and all, so a request
+  for `/<!channel>` notified the whole channel, and `<http://…|Open the
+  dashboard>` rendered as a link whose visible text says anything, in the room
+  where the people who respond to attacks read. Defanging the URL's scheme and
+  dots did not reach markup in the middle of it. Every field is now escaped.
+
+- **The CSV export could split a cell where a spreadsheet evaluates it.**
+  `fputcsv()` escapes with a backslash by default, which RFC 4180 does not
+  know: a `"` after a `\` is written undoubled. PHP reads that back, but Excel
+  and LibreOffice end the cell at the quote and start a new one with what
+  follows — so a URL carrying `\",=…` became a cell beginning with `=`, and
+  the formula guard, which checks where each value starts, never saw it. The
+  export is now written to RFC 4180, with every quote doubled.
+
+- **`only_paths` compared the path as sent, still percent-encoded**, while
+  Laravel's router matches the decoded path, so a request could reach a
+  scoped route and fall outside the scope meant to cover it. Either spelling
+  now brings a path into scope. The lists that narrow scanning —
+  `skip_paths`, `content_paths`, `auth_paths` — still compare the raw path,
+  so an encoding can widen what is scanned and never narrow it. Only installs
+  that set `only_paths` are affected; it is empty by default.
+
+- **The exports' `# Filters:` comment repeated `--since` and `--min-hits`
+  verbatim.** Neither has to parse for rows to be exported, so a newline in
+  either put the rest of the value on a line of its own — in the fail2ban
+  format, a line of a script run as root. Operator input, the same trust level
+  as `--jail`, which 1.8.0 already refuses to interpolate; the comment now stays
+  one line.
 
 ### Added
 
@@ -348,6 +401,12 @@ behaviours changed.
   *wildcard* entry that matched a request produced a probe row with an empty
   label; malformed exact paths were already inert, because `isset()` is false
   for null.
+- The API validates its free-text inputs. `keyword`, `ip`, `type`, `country`
+  and `cloud_provider` must be strings of at most 255 characters, and a
+  false-positive `reason` at most 1,000; anything else answers 422. `keyword`
+  went into three `LIKE` clauses at any length, and an array in its place, or
+  in `reason`, answered 500.
+
 ## [1.8.0] - 2026-09-06
 
 Three audits, in sequence: a full audit of the test suite, a second audit of

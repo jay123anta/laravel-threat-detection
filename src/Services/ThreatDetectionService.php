@@ -275,7 +275,8 @@ class ThreatDetectionService
         $truncatedPayload = $this->redactSensitiveFields(
             $this->redact(substr($payload, 0, 2000), $sensitive)
         );
-        $storedUrl = $this->redactSensitiveFields($this->redact($url, $sensitive));
+        $storedUrl = $this->bounded($this->redactSensitiveFields($this->redact($url, $sensitive)));
+        $storedUserAgent = $this->bounded($userAgent);
 
         $now = now();
         $userId = Auth::id();
@@ -311,7 +312,7 @@ class ThreatDetectionService
             $logData = [
                 'ip_address' => $ip,
                 'url' => $storedUrl,
-                'user_agent' => $userAgent,
+                'user_agent' => $storedUserAgent,
                 'type' => $type,
                 'payload' => $truncatedPayload,
                 'threat_level' => $level,
@@ -352,7 +353,7 @@ class ThreatDetectionService
                         'type' => $batchLogData[0]['type'],
                         'threat_level' => $batchLogData[0]['threat_level'],
                         'action_taken' => 'logged',
-                        'user_agent' => $userAgent,
+                        'user_agent' => $storedUserAgent,
                     ],
                 ] : null);
 
@@ -381,7 +382,7 @@ class ThreatDetectionService
                 $this->markTypesLogged($ip, array_keys($seenTypes));
 
                 if (!empty($notificationQueue)) {
-                    $this->sendNotifications($ip, $storedUrl, $batchLogData[0]['type'], $batchLogData[0]['threat_level'], $userAgent);
+                    $this->sendNotifications($ip, $storedUrl, $batchLogData[0]['type'], $batchLogData[0]['threat_level'], $storedUserAgent);
                 }
             }
         }
@@ -698,6 +699,34 @@ class ThreatDetectionService
                 : sprintf('\u%04X', mb_ord($m[0], 'UTF-8')),
             $value
         ) ?? $value;
+    }
+
+    /**
+     * The most of a URL or User-Agent that is stored, in bytes.
+     *
+     * Both columns are TEXT: 65,535 bytes on MySQL, where a strict connection
+     * rejects anything longer — and it rejects the whole INSERT, which carries
+     * every detection in the request. Header size is the web server's limit,
+     * not this package's, and escaping grows a control byte to four
+     * characters, so the stored copy is bounded here. 8 KB is what nginx and
+     * Apache accept by default, so ordinary traffic is never cut.
+     */
+    private const MAX_STORED_BYTES = 8192;
+
+    private const TRUNCATION_MARK = '…[truncated]';
+
+    /**
+     * The stored copy of a value, cut on a character boundary and marked when
+     * cut. Detection has already read the whole value; only what is written
+     * is bounded.
+     */
+    private function bounded(string $value): string
+    {
+        if (strlen($value) <= self::MAX_STORED_BYTES) {
+            return $value;
+        }
+
+        return mb_strcut($value, 0, self::MAX_STORED_BYTES, 'UTF-8') . self::TRUNCATION_MARK;
     }
 
     private function markTypesLogged(string $ip, array $types): void
@@ -2010,8 +2039,8 @@ class ThreatDetectionService
                 // A flood is still a request, and its query string can carry a
                 // credential like any other. This row skipped redaction
                 // entirely because it is written on its own path.
-                'url' => $this->redactSensitiveFields($url),
-                'user_agent' => $userAgent,
+                'url' => $this->bounded($this->redactSensitiveFields($url)),
+                'user_agent' => $this->bounded($userAgent),
                 'type' => $type,
                 'payload' => 'Request frequency exceeded threshold',
                 'threat_level' => $level,
