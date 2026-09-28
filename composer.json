@@ -1,6 +1,6 @@
 {
     "name": "jayanta/laravel-threat-detection",
-    "description": "Real-time threat detection and security logging for Laravel applications. Detects SQL injection, XSS, DDoS, scanner bots, and more.",
+    "description": "Passive intrusion detection for Laravel. Logs SQL injection, XSS, scanners and probes for exposed AI infrastructure, flags prompt injection aimed at your LLM, and ranks attackers. Never blocks a request.",
     "keywords": [
         "laravel",
         "security",
@@ -10,7 +10,13 @@
         "sql-injection",
         "ddos",
         "middleware",
-        "logging"
+        "logging",
+        "ids",
+        "ai-security",
+        "llm-security",
+        "prompt-injection",
+        "mcp",
+        "bot-detection"
     ],
     "homepage": "https://github.com/jay123anta/laravel-threat-detection",
     "license": "MIT",

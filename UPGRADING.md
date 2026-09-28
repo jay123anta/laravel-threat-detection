@@ -5,6 +5,81 @@ without changes.
 
 ---
 
+## 1.8.x → 1.9.0
+
+Security and correctness fixes, plus an AI-attacker detection line that is
+entirely opt-in. **Nothing is required.** With every new feature off, the
+package behaves as 1.8.0 did apart from the fixes below.
+
+```bash
+composer update jayanta/laravel-threat-detection
+php artisan threat-detection:doctor
+```
+
+### What changes on its own
+
+1. **A false-positive rule matches its row's exact path.** Marking a row as a
+   false positive used to create a rule whose path was a glob, written by
+   whoever sent the request. Rules created from a row — including ones you
+   already have — now match that path exactly. If you relied on one to cover
+   other paths, write it by hand in `threat_exclusion_rules` with
+   `created_from_threat_id` left `NULL`; hand-written rules keep glob matching.
+2. **A new row type can appear: `[engine] Pattern Evaluation Failure`.** It
+   means a pattern could not be evaluated for that request (a backtracking or
+   JIT limit), which used to pass silently. On ordinary traffic it points at a
+   custom pattern that backtracks badly; the log names which one.
+3. **Stored User-Agents and URLs are cleaned.** Invalid UTF-8 is replaced, and
+   control characters are stored as visible `\xNN` / `\uNNNN` text. Ordinary
+   values are stored exactly as before.
+4. **On SQLite, `/timeline` and `/summary` bucket by day** and return
+   `YYYY-MM-DD` dates. They returned the year as a number.
+5. **On PostgreSQL, `/stats` works.** It returned an error.
+
+### If you published the dashboard view
+
+The dashboard now shows web attacks and AI-related threats in separate
+sections. A published view keeps the old layout until you re-publish it:
+
+```bash
+php artisan vendor:publish --tag=threat-detection-views --force
+```
+
+### If you published the config
+
+Nothing to do. The one option added inside an existing block,
+`probe_tracking.ai_infrastructure`, is filled from the package when your file
+lacks it, and nothing you wrote is changed. `doctor` now lists options your file
+predates at any depth; re-publish or hand-merge to customise the new blocks.
+
+### Turning on the new features
+
+All optional, all independent, all off by default.
+
+| Setting | What it does | Needs |
+|---|---|---|
+| `THREAT_DETECTION_AI_PROBES=true` | Probes for Ollama, OpenAI-compatible, MCP and agent-config paths, at `high` | Probe tracking on. Paths your app really serves are skipped; to see unrouted probes, use a fallback or catch-all route, or register the middleware globally |
+| `THREAT_DETECTION_LLM_INJECTION=true` | Reports content written for an LLM to read, including invisible-Unicode instructions | — |
+| `THREAT_DETECTION_SPOTLIGHT_EXPORTS=true` | Marks attacker-controlled CSV cells as untrusted for LLM triage | — |
+| `THREAT_DETECTION_ACTOR_SIGNALS=true` | Records attempt-level evidence behind mutation chains, clusters and retry bursts | The migration: `php artisan vendor:publish --tag=threat-detection-migrations && php artisan migrate` |
+| `THREAT_DETECTION_ACTOR_SCORE=true` | Ranks actors by accumulated behaviour | Actor signals, for the mutation and cadence terms |
+| `THREAT_DETECTION_AI_GUARD=true` | Reads bot identity from `jayanta/laravel-ai-guard` | ai-guard 3.1 or later. No dependency either way |
+
+`doctor` checks each one you switch on.
+
+### API additions
+
+All additive; existing requests return what they did.
+
+- `/threats`, `/stats`, `/timeline`, `/top-ips` and `/by-country` accept
+  `category=ai` or `category=traditional`.
+- `/threats` rows carry `ai_family`.
+- `GET /ai-threats` is new, behind the same read guard as every other GET.
+- `correlation?type=` accepts `mutations`, `clusters`, `retries` and `actors`,
+  and `type=all` gains `mutation_chains`, `payload_clusters`, `retry_bursts`
+  and `risky_actors` — empty arrays while those features are off.
+
+---
+
 ## 1.7.x → 1.8.0
 
 A security release. **One step is required of everyone; the rest depend on what

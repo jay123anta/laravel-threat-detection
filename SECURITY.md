@@ -7,8 +7,8 @@ the package itself seriously. Thank you for helping keep it and its users safe.
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 1.3.x   | :white_check_mark: |
-| < 1.3   | :x:                |
+| 1.9.x   | :white_check_mark: |
+| < 1.9   | :x:                |
 
 Security fixes are applied to the latest 1.x release. Please upgrade to the most
 recent version before reporting an issue.
@@ -54,6 +54,10 @@ A few things specific to this package that are worth knowing before reporting:
   side (set `THREAT_DETECTION_DASHBOARD_GUARD` / `THREAT_DETECTION_API_GUARD`), not
   a package vulnerability — but if you find a way to *bypass* a configured guard,
   that absolutely is one, so please report it.
-- Reports of detection **evasion** (a real attack pattern the engine misses) or
-  **false positives** are very welcome — but those can go through normal public
-  issues, since they aren't sensitive.
+- Reports of **false positives**, or of a pattern that misses an attack, are very
+  welcome and can go through normal public issues.
+- **Anything that stops an attack being recorded at all** is different, and
+  should be reported privately: a request that makes the log write fail, an
+  input that switches detection off for the whole request, a way to silence a
+  detection for other requests. Those defeat the package rather than one of its
+  patterns — 1.9.0 fixed one (a single invalid byte in the User-Agent).

@@ -695,7 +695,7 @@ composer require laravel/slack-notification-channel
 ## Dashboard
 
 <p align="center">
-  <img src="art/dashboard.png" alt="Threat Detection Dashboard — stats, 7-day timeline, live threat log, top offending IPs, and threats by country" width="100%">
+  <img src="art/dashboard.png" alt="Threat Detection Dashboard — a health strip, web attacks, AI-related threats, adaptive behaviour, the actor ranking, and volume" width="100%">
 </p>
 
 The package ships with a built-in dark-mode dashboard (Alpine.js + Tailwind CDN -  no build step required).

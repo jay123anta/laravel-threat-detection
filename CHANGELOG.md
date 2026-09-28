@@ -2,7 +2,30 @@
 
 All notable changes to `jayanta/laravel-threat-detection` will be documented in this file.
 
-## [Unreleased]
+## [1.9.0] - 2026-09-28
+
+Two things in one release.
+
+**Fixes to defects that ship in 1.8.0 — upgrade for these whatever else you
+do.** One invalid byte in the User-Agent stopped a request's attacks being
+logged on strict MySQL and PostgreSQL. A false-positive click could create a
+site-wide exclusion on a path the attacker chose. A detection regex that failed
+was read as clean. `/stats` failed on PostgreSQL, and the timeline put a whole
+year in one bucket on SQLite. All are under Security and Fixed below.
+
+**An AI-attacker detection line, every part of it opt-in and off by default:**
+probes for exposed model infrastructure, injection aimed at the LLM that will
+read your logs, attempt-level actor signals with mutation chains, payload
+clusters and retry bursts, a research-backed actor risk score, optional bot
+identity from `jayanta/laravel-ai-guard`, and a dashboard that shows web
+attacks and AI-related threats in separate sections. Every figure cited below
+was checked against its source. With everything off, every test that existed
+before this release — 1,864 — passes unchanged.
+
+The suite grew to 2,181 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
+and 13.33.0, on MariaDB 10.4 and PostgreSQL 16, and with PCRE JIT disabled.
+See [UPGRADING.md](UPGRADING.md#18x--190) — nothing is required, but a few
+behaviours changed.
 
 ### Security
 
