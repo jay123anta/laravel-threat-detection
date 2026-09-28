@@ -21,11 +21,14 @@ read your logs, attempt-level actor signals with mutation chains, payload
 clusters and retry bursts, a research-backed actor risk score, optional bot
 identity from `jayanta/laravel-ai-guard`, and a dashboard that shows web
 attacks and AI-related threats in separate sections. Every figure cited below
-was checked against its source. With everything off, every test that existed
-before this release — 1,864 — passes unchanged.
+was checked against its source. With everything off, 1,863 of the 1,864 tests
+that shipped with 1.8.0 pass unchanged. The other is the inventory of API
+routes, which exists to fail when one is added, and did for `/ai-threats`.
 
 The suite grew to 2,272 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
-and 13.33.0, on MariaDB 10.4 and PostgreSQL 16, and with PCRE JIT disabled.
+and 13.33.0, on MariaDB 10.4 and PostgreSQL 16, and with PCRE JIT disabled —
+where everything passes but the 1 MB timing budgets, which are set for the
+JIT; at the 8 KB the package actually scans, every pattern stays in budget.
 See [UPGRADING.md](UPGRADING.md#18x--190) — nothing is required, but a few
 behaviours changed.
 
