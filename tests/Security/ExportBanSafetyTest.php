@@ -5,6 +5,7 @@ namespace JayAnta\ThreatDetection\Tests\Security;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use JayAnta\ThreatDetection\Tests\TestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
@@ -162,6 +163,37 @@ class ExportBanSafetyTest extends TestCase
         foreach ($lines as $line) {
             $this->assertStringStartsWith('10.0.0.5,', $line);
         }
+    }
+
+    /**
+     * `is_false_positive` arrived with the v1.2 migration. An install that
+     * never ran it still has rows, and exported them before this filter
+     * existed, so the filter must not cost it the export.
+     */
+    #[Test]
+    #[DataProvider('formats')]
+    public function a_table_from_before_the_false_positive_column_still_exports(string $command, array $args): void
+    {
+        Schema::create('legacy_threat_logs', function ($table) {
+            $table->id();
+            $table->string('ip_address');
+            $table->text('url');
+            $table->text('type');
+            $table->string('threat_level')->default('medium');
+            $table->timestamps();
+        });
+        config(['threat-detection.table_name' => 'legacy_threat_logs']);
+
+        DB::table('legacy_threat_logs')->insert([
+            'ip_address' => self::ATTACKER,
+            'url' => 'https://example.com/x',
+            'type' => '[query] SQL Injection UNION',
+            'threat_level' => 'high',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->assertStringContainsString(self::ATTACKER, $this->export($command, $args));
     }
 
     /** Positive control: a public address produces no warning. */

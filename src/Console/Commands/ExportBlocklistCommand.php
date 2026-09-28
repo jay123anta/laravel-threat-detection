@@ -6,6 +6,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use JayAnta\ThreatDetection\Services\ThreatDetectionService;
 
 class ExportBlocklistCommand extends Command
@@ -59,13 +60,18 @@ class ExportBlocklistCommand extends Command
         $query = DB::table($table)
             ->select('ip_address', DB::raw('COUNT(*) as hits'), DB::raw('MAX(created_at) as last_seen'), DB::raw("{$levelRank} as level_rank"))
             ->where('created_at', '>=', $cutoff)
-            // A row the operator marked as a false positive is their own
-            // statement that it was not an attack. It must not ban anyone, nor
-            // count toward --min-hits.
-            ->where('is_false_positive', false)
             ->groupBy('ip_address')
             ->having(DB::raw('COUNT(*)'), '>=', $minHits)
             ->orderByDesc('hits');
+
+        // A row the operator marked as a false positive is their own statement
+        // that it was not an attack. It must not ban anyone, nor count toward
+        // --min-hits. Only where the column exists: it arrived with the v1.2
+        // migration, and an install that never ran it can still export what
+        // it has.
+        if (Schema::hasColumn($table, 'is_false_positive')) {
+            $query->where('is_false_positive', false);
+        }
 
         if ($level) {
             $query->where('threat_level', $level);
