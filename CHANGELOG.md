@@ -27,7 +27,7 @@ was checked against its source. With everything off, 1,863 of the 1,864 tests
 that shipped with 1.8.0 pass unchanged. The other is the inventory of API
 routes, which exists to fail when one is added, and did for `/ai-threats`.
 
-The suite grew to 2,348 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
+The suite grew to 2,356 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
 and 13.33.0, on MariaDB 10.4 and PostgreSQL 16, and with PCRE JIT disabled —
 where everything passes but the 1 MB timing budgets, which are set for the
 JIT; at the 8 KB the package actually scans, every pattern stays in budget.
@@ -443,6 +443,16 @@ behaviours changed.
   that is not high, medium or low falls back to the pack's level, then
   `default_level`, then `medium`, with a warning — as custom patterns already
   did.
+- **A failed geo lookup was cached for seven days.** `enrich` cached each
+  address's result with `Cache::remember()`, and a failed lookup returns a
+  result too — every field null — so after "fix the provider and run it
+  again" the rerun read the cached failures, asked nobody and failed the same
+  way for a week; `--force` re-applied the cache. Only a resolved answer is
+  cached now, and a failure cached by an earlier version counts as a miss.
+- **Deleting an exclusion rule logs the scope it actually had.** The log line
+  wrote `path_pattern ?? '*'`, so a rule built from a site-root row was
+  recorded as covering every path. It now carries a `scope` — `exact path: /…`,
+  `glob: …` or `every path` — computed the way the matcher applies it.
 - The API reads `per_page`, `limit` and `days` with `input()`. It used
   `Request::get()`, which Symfony 8 removed and Laravel keeps only as a
   deprecated alias that consults request attributes before the query string.

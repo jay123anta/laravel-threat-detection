@@ -75,6 +75,10 @@ php artisan threat-detection:doctor
     falls back to the pack level, then `default_level`, then `medium`.
 16. **On memcached, the dedup cache key is hashed.** Other stores are
     unchanged.
+17. **`enrich` retries addresses whose lookup failed**, rather than reusing
+    the cached failure for seven days.
+18. **The "exclusion rule deleted" log line** has a new `scope` field, and
+    `path_pattern` is logged as stored rather than as `*` when empty.
 
 ### If you published the dashboard view
 

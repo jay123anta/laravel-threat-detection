@@ -731,6 +731,11 @@ return [
          * a JSON segment, and field=value in a query string. Only the value is
          * replaced, so you can still see that a credential was present.
          *
+         * A listed name also covers any longer name that ends in it:
+         * 'api_key' masks X-Partner-Api-Key, 'token' masks X-Vault-Token and
+         * session_token. A name that only starts with one, such as
+         * password_hint, is kept.
+         *
          * This is not the same as safe_fields. safe_fields stops a field being
          * *scanned*; this lets you keep scanning it and stop storing it.
          */
@@ -1264,6 +1269,9 @@ return [
     | Automatically purge old threat logs on a daily schedule.
     | Requires Laravel's scheduler to be running (cron).
     | Disabled by default — opt in via .env.
+    |
+    | 'days' must be a whole number, 1 or more. Anything else schedules no
+    | purge at all, and threat-detection:doctor reports it.
     |
     */
     'retention' => [

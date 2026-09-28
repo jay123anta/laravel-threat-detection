@@ -155,11 +155,28 @@ class ExclusionRuleService
             Log::info('Threat exclusion rule deleted', [
                 'rule_id' => $ruleId,
                 'pattern_label' => $rule->pattern_label,
-                'path_pattern' => $rule->path_pattern ?? '*',
+                'path_pattern' => $rule->path_pattern,
+                'scope' => $this->scopeOf($rule),
             ]);
         }
 
         return $deleted > 0;
+    }
+
+    /**
+     * The scope coversPath() gives a rule, in words, for the audit log.
+     *
+     * This line is the only record of what a deletion switched back on, and
+     * it wrote `path_pattern ?? '*'` — so a rule built from a site-root row
+     * was recorded as covering every path when it covered the root alone.
+     */
+    private function scopeOf(object $rule): string
+    {
+        if (!empty($rule->created_from_threat_id)) {
+            return 'exact path: /' . (string) ($rule->path_pattern ?? '');
+        }
+
+        return empty($rule->path_pattern) ? 'every path' : 'glob: ' . $rule->path_pattern;
     }
 
     public function all(): array

@@ -178,25 +178,40 @@ class EnrichThreatLogsCommand extends Command
     {
         $cacheKey = "threat_ip_geo:{$ip}";
 
-        return Cache::remember($cacheKey, now()->addDays(7), function () use ($ip) {
-            $geo = $this->fetchGeoData($ip);
-            $cloudProvider = $this->detectCloudProvider($ip, $geo['isp'] ?? null, $geo['org'] ?? null);
+        // Only an answer is remembered. A failed lookup comes back with every
+        // field null, and Cache::remember() stored that like a result for
+        // seven days — so after "fix the provider and run it again", the
+        // rerun read the cached failures and asked nobody. A null entry left
+        // by an earlier version counts as a miss for the same reason.
+        $cached = Cache::get($cacheKey);
 
-            $homeCountry = config('threat-detection.home_country', 'IN');
-            $countryCode = $geo['country_code'] ?? null;
+        if (is_array($cached) && ($cached['country_code'] ?? null) !== null) {
+            return $cached;
+        }
 
-            return [
-                'country_code' => $countryCode,
-                'country_name' => $geo['country_name'] ?? null,
-                'city' => $geo['city'] ?? null,
-                'isp' => $geo['isp'] ?? null,
-                'cloud_provider' => $cloudProvider,
-                // Only flag as foreign when the country is known AND differs from
-                // home. Unknown geo (failed lookup, private IP) is not "foreign".
-                'is_foreign' => $countryCode !== null && $countryCode !== $homeCountry,
-                'is_cloud_ip' => $cloudProvider !== null,
-            ];
-        });
+        $geo = $this->fetchGeoData($ip);
+        $cloudProvider = $this->detectCloudProvider($ip, $geo['isp'] ?? null, $geo['org'] ?? null);
+
+        $homeCountry = config('threat-detection.home_country', 'IN');
+        $countryCode = $geo['country_code'] ?? null;
+
+        $data = [
+            'country_code' => $countryCode,
+            'country_name' => $geo['country_name'] ?? null,
+            'city' => $geo['city'] ?? null,
+            'isp' => $geo['isp'] ?? null,
+            'cloud_provider' => $cloudProvider,
+            // Only flag as foreign when the country is known AND differs from
+            // home. Unknown geo (failed lookup, private IP) is not "foreign".
+            'is_foreign' => $countryCode !== null && $countryCode !== $homeCountry,
+            'is_cloud_ip' => $cloudProvider !== null,
+        ];
+
+        if ($countryCode !== null) {
+            Cache::put($cacheKey, $data, now()->addDays(7));
+        }
+
+        return $data;
     }
 
     /**

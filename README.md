@@ -628,6 +628,8 @@ THREAT_DETECTION_RETENTION_DAYS=90
 ```
 
 Requires Laravel's scheduler to be running (`php artisan schedule:run`). Runs daily at 02:00 via `threat-detection:purge`.
+`THREAT_DETECTION_RETENTION_DAYS` must be a whole number, 1 or more; anything else
+schedules no purge, and `threat-detection:doctor` reports it.
 
 ### ThreatDetected Event
 
@@ -1059,7 +1061,9 @@ from the rest:
 '/api/pull' => ['label' => 'Ollama Model Pull', 'level' => 'high'],
 ```
 
-The plain-string form is unchanged and takes `default_level`.
+The plain-string form is unchanged and takes `default_level`. A level is `high`,
+`medium` or `low`, in any case; anything else falls back to `default_level`, with a
+warning in the log.
 
 ### AI-infrastructure probes (opt-in)
 
