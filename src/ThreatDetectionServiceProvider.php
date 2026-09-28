@@ -3,7 +3,9 @@
 namespace JayAnta\ThreatDetection;
 
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Contracts\Foundation\CachesConfiguration;
 use Illuminate\Routing\Router;
+use Illuminate\Support\Arr;
 use Illuminate\Support\ServiceProvider;
 use JayAnta\ThreatDetection\Console\Commands\DoctorCommand;
 use JayAnta\ThreatDetection\Console\Commands\EnrichThreatLogsCommand;
@@ -26,12 +28,28 @@ use JayAnta\ThreatDetection\Services\ThreatDetectionService;
 
 class ThreatDetectionServiceProvider extends ServiceProvider
 {
+    /**
+     * Options added *inside* a top-level key that published configs already
+     * have. mergeConfigFrom() merges top-level keys only, so a published file
+     * replaces each of these blocks whole and the new option vanishes — for
+     * the AI pack, THREAT_DETECTION_AI_PROBES=true then did nothing at all.
+     *
+     * Listed explicitly, never inferred. A generic deep merge would re-add
+     * entries an operator deliberately removed from list-like blocks such as
+     * probe_tracking.paths.
+     */
+    private const NESTED_ADDITIONS = [
+        'probe_tracking.ai_infrastructure', // 1.9.0
+    ];
+
     public function register(): void
     {
         $this->mergeConfigFrom(
             __DIR__ . '/../config/threat-detection.php',
             'threat-detection'
         );
+
+        $this->mergeNestedAdditions();
 
         $this->app->singleton(ConfidenceScorer::class, fn () => new ConfidenceScorer);
         $this->app->singleton(ExclusionRuleService::class, fn () => new ExclusionRuleService);
@@ -64,6 +82,37 @@ class ThreatDetectionServiceProvider extends ServiceProvider
         $this->registerViews();
         $this->registerSchedule();
         $this->registerAiGuardListeners();
+    }
+
+    /**
+     * Fill each NESTED_ADDITIONS key the loaded config lacks, from the
+     * package's own file, and touch nothing else.
+     *
+     * Skipped when config is cached, exactly as mergeConfigFrom() is: the
+     * cache was built by this same code, with env() read at cache time.
+     */
+    protected function mergeNestedAdditions(): void
+    {
+        if ($this->app instanceof CachesConfiguration && $this->app->configurationIsCached()) {
+            return;
+        }
+
+        $config = $this->app->make('config');
+        $package = null;
+
+        foreach (self::NESTED_ADDITIONS as $path) {
+            $key = "threat-detection.{$path}";
+            $parent = substr($key, 0, (int) strrpos($key, '.'));
+
+            // Present already, or the operator replaced the parent with
+            // something that is not a block at all — both are their call.
+            if ($config->has($key) || !is_array($config->get($parent))) {
+                continue;
+            }
+
+            $package ??= require __DIR__ . '/../config/threat-detection.php';
+            $config->set($key, Arr::get($package, $path));
+        }
     }
 
     /**

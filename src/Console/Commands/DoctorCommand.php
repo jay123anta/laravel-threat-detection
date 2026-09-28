@@ -2,6 +2,7 @@
 
 namespace JayAnta\ThreatDetection\Console\Commands;
 
+use Composer\InstalledVersions;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Support\Facades\Schema;
@@ -53,6 +54,7 @@ class DoctorCommand extends Command
         $this->checkExclusionTable();
         $this->checkMiddleware();
         $this->checkConfigDrift();
+        $this->checkOptInFeatures();
         $this->checkShadowedPatterns();
         $this->checkCacheDriver();
         $this->checkHttpClient();
@@ -226,7 +228,7 @@ class DoctorCommand extends Command
             return;
         }
 
-        $missing = array_diff(array_keys($ours), array_keys($theirs));
+        $missing = $this->missingOptions($ours, $theirs);
         $obsolete = array_diff(array_keys($theirs), array_keys($ours));
 
         if ($missing === [] && $obsolete === []) {
@@ -248,6 +250,129 @@ class DoctorCommand extends Command
                 'Harmless, but a sign the file is old — see the note above.'
             );
         }
+    }
+
+    /**
+     * Options this version defines that the published file lacks, at any
+     * depth.
+     *
+     * Top-level keys alone missed the case that matters most: an option added
+     * *inside* a block the published file already has. That is how
+     * probe_tracking.ai_infrastructure went missing on every install with a
+     * published config — and this check, comparing top-level keys, reported
+     * the file as current.
+     *
+     * Recurses only into blocks of named options. A map of data — probe
+     * paths, patterns, labels — is the operator's content, and a missing
+     * entry there is a choice, not drift.
+     *
+     * @param  array<mixed>  $ours
+     * @param  array<mixed>  $theirs
+     * @return array<int, string>
+     */
+    private function missingOptions(array $ours, array $theirs, string $prefix = ''): array
+    {
+        $missing = [];
+
+        foreach ($ours as $key => $value) {
+            $path = $prefix === '' ? (string) $key : "{$prefix}.{$key}";
+
+            if (!array_key_exists($key, $theirs)) {
+                $missing[] = $path;
+
+                continue;
+            }
+
+            if (is_array($value) && is_array($theirs[$key]) && $this->isOptionBlock($value)) {
+                array_push($missing, ...$this->missingOptions($value, $theirs[$key], $path));
+            }
+        }
+
+        return $missing;
+    }
+
+    /** @param  array<mixed>  $block */
+    private function isOptionBlock(array $block): bool
+    {
+        if ($block === [] || array_is_list($block)) {
+            return false;
+        }
+
+        foreach (array_keys($block) as $key) {
+            if (!is_string($key) || !preg_match('/^[a-z][a-z0-9_]*$/', $key)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * The opt-in features, checked only when switched on. Each can be on and
+     * still do nothing — a missing table, a missing dependency — and none of
+     * them fails loudly on its own, by design, because they must never cost
+     * the application anything.
+     */
+    private function checkOptInFeatures(): void
+    {
+        if (config('threat-detection.actor_signals.enabled', false)) {
+            $table = (string) config('threat-detection.actor_signals.table', 'threat_actor_signals');
+
+            $this->tableExists($table)
+                ? $this->reportPass("Actor signals are recorded to '{$table}'")
+                : $this->reportFailure("Actor signals are on but the '{$table}' table does not exist — nothing is recorded", $this->migrateHint());
+        }
+
+        if (config('threat-detection.actor_score.enabled', false) && !config('threat-detection.actor_signals.enabled', false)) {
+            $this->reportWarning(
+                'Actor scoring is on without actor signals — the mutation and cadence terms stay at zero',
+                'Set THREAT_DETECTION_ACTOR_SIGNALS=true and run the package migrations.'
+            );
+        }
+
+        if (config('threat-detection.probe_tracking.ai_infrastructure.enabled', false)) {
+            config('threat-detection.probe_tracking.enabled', true)
+                ? $this->reportPass('AI-infrastructure probe pack is on')
+                : $this->reportWarning(
+                    'The AI-infrastructure probe pack is on but probe tracking is off, so it never runs',
+                    'Set THREAT_DETECTION_PROBE_TRACKING=true, or turn the pack off.'
+                );
+        }
+
+        if (config('threat-detection.ai_guard.enabled', false)) {
+            $this->checkAiGuardPresence();
+        }
+    }
+
+    /**
+     * Asked of Composer, never of ai-guard: no ai-guard class is loaded or
+     * class_exists()'d anywhere in this package (see AiGuardContract).
+     */
+    private function checkAiGuardPresence(): void
+    {
+        $package = 'jayanta/laravel-ai-guard';
+
+        if (!class_exists(InstalledVersions::class) || !InstalledVersions::isInstalled($package)) {
+            $this->reportWarning(
+                'The ai-guard integration is on but ai-guard is not installed — it will never receive a verdict',
+                'composer require jayanta/laravel-ai-guard:^3.1, or set THREAT_DETECTION_AI_GUARD=false.'
+            );
+
+            return;
+        }
+
+        $version = ltrim((string) InstalledVersions::getPrettyVersion($package), 'vV');
+
+        if (preg_match('/^\d+\.\d+/', $version) && version_compare($version, '3.1.0', '<')) {
+            $this->reportWarning(
+                "ai-guard {$version} is installed, but the verdict convention this reads arrived in 3.1.0",
+                'composer require jayanta/laravel-ai-guard:^3.1'
+            );
+
+            return;
+        }
+
+        $this->reportPass("ai-guard is installed ({$version}) and its verdicts are read");
     }
 
     /**
