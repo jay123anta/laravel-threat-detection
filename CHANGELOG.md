@@ -15,7 +15,8 @@ prefixed name, such as `X-Partner-Api-Key`, was stored in cleartext. The exports
 could ban addresses the operator had whitelisted or marked as false positives.
 Slack alerts rendered markup from the request, and the CSV export could split a
 cell where a spreadsheet evaluates it. `/stats` failed on PostgreSQL, and the timeline put a whole year
-in one bucket on SQLite. All are under Security and Fixed below.
+in one bucket on SQLite. The dashboard has rendered unstyled since 1.7.0.
+All are under Security and Fixed below.
 
 **An AI-attacker detection line, every part of it opt-in and off by default:**
 probes for exposed model infrastructure, injection aimed at the LLM that will
@@ -27,7 +28,7 @@ was checked against its source. With everything off, 1,863 of the 1,864 tests
 that shipped with 1.8.0 pass unchanged. The other is the inventory of API
 routes, which exists to fail when one is added, and did for `/ai-threats`.
 
-The suite grew to 2,420 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
+The suite grew to 2,423 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
 and 13.33.0, on MariaDB 10.4 and PostgreSQL 16, and with PCRE JIT disabled —
 where everything passes but the 1 MB timing budgets, which are set for the
 JIT; at the 8 KB the package actually scans, every pattern stays in budget.
@@ -436,6 +437,15 @@ behaviours changed.
 
 ### Fixed
 
+- **The dashboard rendered unstyled in every browser since 1.7.0.** 1.7.0
+  pinned Tailwind's CDN script with an integrity hash, which makes the browser
+  fetch it with CORS, and `cdn.tailwindcss.com` sends no
+  `Access-Control-Allow-Origin` header, so the browser refused to run it. The
+  styles are now compiled from the classes the views use and served inline:
+  the page loads nothing from that host, and Alpine and Chart.js, whose host
+  does send the header, keep their hashes. A test fails when a view uses a
+  class the compiled styles lack; `resources/views/layouts/styles.css` says
+  how to rebuild them.
 - **`/stats` failed on every PostgreSQL install.** It counted foreign IPs
   with `is_foreign = 1`, and PostgreSQL, which has a real boolean type,
   rejects `boolean = integer` — so the endpoint behind the dashboard's

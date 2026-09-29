@@ -437,7 +437,7 @@ php artisan route:clear
 - **PII Detection** -  Sensitive data exposure patterns (configurable per region)
 - **Geo-Enrichment** -  Country, city, ISP, cloud provider identification via free API
 - **Slack Alerts** -  Real-time notifications for high-severity threats (works on Laravel 10 and 11+)
-- **Built-in Dashboard** -  Dark-mode Blade dashboard (Alpine.js + Tailwind CDN, zero build step)
+- **Built-in Dashboard** -  Dark-mode Blade dashboard (Alpine.js and Tailwind, styles precompiled, zero build step)
 - **Dashboard Auth Guard** -  Configurable authentication for dashboard and API (none, auth, role, or IP-based)
 - **15 API Endpoints** -  Full REST API for building custom Vue/React/mobile dashboards
 - **Fail2ban Export** -  Export detected IPs in fail2ban-compatible format or plain blocklist
@@ -700,7 +700,7 @@ composer require laravel/slack-notification-channel
   <img src="art/dashboard.png" alt="Threat Detection Dashboard — a health strip, web attacks, AI-related threats, adaptive behaviour, the actor ranking, and volume" width="100%">
 </p>
 
-The package ships with a built-in dark-mode dashboard (Alpine.js + Tailwind CDN -  no build step required).
+The package ships with a built-in dark-mode dashboard (Alpine.js and precompiled Tailwind styles -  no build step required).
 
 Web attacks and AI-related threats are shown in **separate sections**, because
 they need different responses and often different people:

@@ -99,11 +99,15 @@ php artisan threat-detection:doctor
     no longer can.
 26. **A log channel that cannot be written no longer affects requests or
     detections.**
+27. **The dashboard is styled again.** Its styles are served inline instead of
+    by Tailwind's CDN script, which browsers have refused since 1.7.0.
 
 ### If you published the dashboard view
 
 The dashboard now shows web attacks and AI-related threats in separate
-sections. A published view keeps the old layout until you re-publish it:
+sections, and is styled again: a layout published from 1.7 or 1.8 loads
+Tailwind's CDN script with an integrity hash, which browsers refuse. A
+published view keeps the old layout until you re-publish it:
 
 ```bash
 php artisan vendor:publish --tag=threat-detection-views --force

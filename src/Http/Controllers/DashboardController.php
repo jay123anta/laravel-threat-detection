@@ -31,6 +31,9 @@ class DashboardController extends Controller
      * connect-src 'self': even if one of the pinned CDN scripts were replaced,
      * it could not post this application's threat data to another origin.
      *
+     * The package's own layout loads nothing from cdn.tailwindcss.com any more;
+     * it stays allowed for layouts published before 1.9.0, which still do.
+     *
      * Set dashboard.security_headers to false if you have published and
      * customised the view to load assets from elsewhere.
      *

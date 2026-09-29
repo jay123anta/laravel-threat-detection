@@ -194,7 +194,7 @@ class RedactionTest extends TestCase
 
     /**
      * The dashboard renders attacker-supplied payloads, URLs and user agents to
-     * an authenticated admin, and loads three third-party scripts. The headers
+     * an authenticated admin, and loads two third-party scripts. The headers
      * below are what stop a compromised one from shipping this application's
      * threat data somewhere else, and stop the page being framed.
      */
