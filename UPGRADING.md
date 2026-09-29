@@ -79,6 +79,10 @@ php artisan threat-detection:doctor
     the cached failure for seven days.
 18. **The "exclusion rule deleted" log line** has a new `scope` field, and
     `path_pattern` is logged as stored rather than as `*` when empty.
+19. **Nested credentials are masked in the url column** — `user[password]=`
+    and the like, which were stored in cleartext there.
+20. **A false positive on a row whose path was redacted answers 422**, since
+    a rule built from a masked path could never match.
 
 ### If you published the dashboard view
 

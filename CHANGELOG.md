@@ -27,7 +27,7 @@ was checked against its source. With everything off, 1,863 of the 1,864 tests
 that shipped with 1.8.0 pass unchanged. The other is the inventory of API
 routes, which exists to fail when one is added, and did for `/ai-threats`.
 
-The suite grew to 2,356 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
+The suite grew to 2,365 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
 and 13.33.0, on MariaDB 10.4 and PostgreSQL 16, and with PCRE JIT disabled —
 where everything passes but the 1 MB timing budgets, which are set for the
 JIT; at the 8 KB the package actually scans, every pattern stays in budget.
@@ -129,6 +129,13 @@ behaviours changed.
   of at most 64 characters, because an unbounded one backtracked once per
   character and a long enough parameter name made redaction, which fails
   closed, blank the whole URL.
+
+- **A credential nested in a query-string array was stored in the url
+  column.** The payload column masked `user[password]` by key, but the url
+  column is masked by a regex over `name=value`, and Symfony normalises the
+  query to `user%5Bpassword%5D=…` — so the name was preceded by the `B` of
+  `%5B`, read as part of a longer name, and the value was kept in cleartext.
+  A name may now sit inside encoded or literal brackets.
 
 - **The exports banned addresses the operator had cleared.** A row marked as a
   false positive — the operator's own statement that it was not an attack —
@@ -449,6 +456,17 @@ behaviours changed.
   again" the rerun read the cached failures, asked nobody and failed the same
   way for a week; `--force` re-applied the cache. Only a resolved answer is
   cached now, and a failure cached by an earlier version counts as a miss.
+- **A false-positive click on a row with a redacted path did nothing.**
+  Stored URLs are redacted, so `/orders/9876543210` is kept as
+  `/orders/[REDACTED]`, and a rule built from that path could never match the
+  real one: the click reported success and the detection kept firing. Such a
+  row is now refused with 422, like any other path that cannot be stored
+  exactly.
+- **`enrich` paused after every address, not after every request.** The
+  1.4-second rate-limit pause ran for private addresses it never sends and
+  for cached answers it never asks for, so a table of internal traffic took
+  1.4 seconds a row to enrich nothing. It now follows only a request that was
+  actually sent.
 - **Deleting an exclusion rule logs the scope it actually had.** The log line
   wrote `path_pattern ?? '*'`, so a rule built from a site-root row was
   recorded as covering every path. It now carries a `scope` — `exact path: /…`,

@@ -72,6 +72,9 @@ class EnrichThreatLogsCommand extends Command
         );
     }
 
+    /** Whether the last enrichIp() call sent a request to the provider. */
+    private bool $sentRequest = false;
+
     public function handle(): int
     {
         // Laravel's HTTP client is a Guzzle wrapper, and guzzle is a suggest
@@ -123,6 +126,7 @@ class EnrichThreatLogsCommand extends Command
                 $attempted++;
             }
 
+            $this->sentRequest = false;
             $data = $this->enrichIp($ip);
 
             // A lookup that resolved nothing leaves country_code null. Counting
@@ -138,7 +142,15 @@ class EnrichThreatLogsCommand extends Command
                 ->update($data);
 
             $bar->advance();
-            usleep(1400000); // Rate limit: ~43 req/min (ip-api.com free tier allows 45/min)
+
+            // Rate limit: ~43 req/min (ip-api.com free tier allows 45/min).
+            // Only after a request that was actually sent: a private address
+            // is skipped and a cached answer asks nobody, and pausing for
+            // those made a table of internal traffic take 1.4 s a row to
+            // enrich nothing.
+            if ($this->sentRequest) {
+                usleep(1400000);
+            }
         }
 
         $bar->finish();
@@ -174,6 +186,12 @@ class EnrichThreatLogsCommand extends Command
         return 0;
     }
 
+    /**
+     * Impure: it may send a request, which it records in $sentRequest, and
+     * it writes the cache.
+     *
+     * @phpstan-impure
+     */
     protected function enrichIp(string $ip): array
     {
         $cacheKey = "threat_ip_geo:{$ip}";
@@ -260,6 +278,7 @@ class EnrichThreatLogsCommand extends Command
                 return [];
             }
 
+            $this->sentRequest = true;
             $response = Http::timeout(3)->get(
                 rtrim($this->endpoint(), '/') . "/{$ip}?fields=countryCode,country,city,isp,org"
             );

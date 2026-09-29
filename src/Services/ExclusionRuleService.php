@@ -124,7 +124,7 @@ class ExclusionRuleService
         // outcome worse than making the operator write the rule by hand.
         $path = $this->pathOf((string) $threat->url);
 
-        if ($path === null || mb_strlen($path) > self::MAX_PATH_LENGTH) {
+        if ($path === null || mb_strlen($path) > self::MAX_PATH_LENGTH || $this->isRedacted($path)) {
             return null;
         }
 
@@ -142,6 +142,20 @@ class ExclusionRuleService
         $this->clearCache();
 
         return DB::table('threat_exclusion_rules')->where('id', $id)->first();
+    }
+
+    /**
+     * Whether a stored path had a value masked out of it.
+     *
+     * Stored URLs are redacted, so a mobile number in /orders/9876543210
+     * is kept as /orders/[REDACTED]. A rule built from that path could never
+     * match the real one: the click would report success and change nothing.
+     */
+    private function isRedacted(string $path): bool
+    {
+        $mask = (string) config('threat-detection.redact.mask', '[REDACTED]');
+
+        return $mask !== '' && str_contains($path, $mask);
     }
 
     public function delete(int $ruleId): bool

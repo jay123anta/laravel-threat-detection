@@ -142,6 +142,10 @@ class FalsePositiveRuleScopeTest extends TestCase
         return [
             'a URL parse_url() rejects' => ['http:///orders?q=x'],
             'a path longer than the column' => ['https://app.test/' . str_repeat('a', 300) . '?q=x'],
+            // Stored URLs are redacted, and a rule built from a masked path
+            // could never match the real one: the click would look like it
+            // worked and change nothing.
+            'a path with a redacted value in it' => ['https://app.test/orders/[REDACTED]/view?q=x'],
         ];
     }
 

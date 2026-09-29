@@ -467,6 +467,11 @@ class ThreatDetectionService
      * once per character: a parameter name a million characters long would
      * reach pcre.backtrack_limit. That matters, because redaction fails closed
      * and a regex that gave up would blank the entire row.
+     *
+     * A name may also sit inside brackets, as a nested query parameter's does.
+     * Symfony normalises `user[password]=…` to `user%5Bpassword%5D=…`, and the
+     * `B` of `%5B` read as part of a longer name, so the value was kept in
+     * cleartext. The lookbehinds are fixed-length and add no repetition.
      */
     private function redactSensitiveFields(string $text): string
     {
@@ -486,7 +491,7 @@ class ThreatDetectionService
         // The value runs to the next separator; a percent-encoded '&' inside
         // the value is not a separator, which is why '%26' does not end it.
         return $this->replaceOrMask(
-            '/(?<![A-Za-z0-9_-])((?:[A-Za-z0-9_-]{0,64}[-_])?(?:' . $alternation . '))(=)[^&\s"\\\\]*/i',
+            '/(?:(?<=%5B)|(?<![A-Za-z0-9_-]))((?:[A-Za-z0-9_-]{0,64}[-_])?(?:' . $alternation . '))((?:%5D|\])?=)[^&\s"\\\\]*/i',
             fn (array $m): string => $m[1] . $m[2] . $mask,
             $text,
             $mask
