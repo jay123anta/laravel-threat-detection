@@ -78,7 +78,8 @@ class ExportFail2banCommand extends Command
     private function getBlockableIps()
     {
         $table = config('threat-detection.table_name', 'threat_logs');
-        $cutoff = $this->parseSince($this->option('since'));
+        // A bare --since arrives as null; it falls back like any unreadable value.
+        $cutoff = $this->parseSince((string) $this->option('since'));
         $minHits = (int) $this->option('min-hits');
         $level = $this->option('level');
 

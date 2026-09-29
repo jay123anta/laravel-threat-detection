@@ -102,6 +102,19 @@ class ExportFilterLineTest extends TestCase
         }
     }
 
+    /**
+     * `--since` given with no value arrives as null, and parseSince() takes a
+     * string: the command died with a TypeError instead of falling back to
+     * 24 hours, as it does for any other value it cannot read.
+     */
+    #[Test]
+    #[DataProvider('exports')]
+    public function a_bare_since_falls_back_to_the_default_window(string $command, array $args, string $expectedPrefix): void
+    {
+        $this->assertSame(0, Artisan::call($command, $args + ['--since' => null]));
+        $this->assertStringContainsString('203.0.113.77', Artisan::output());
+    }
+
     /** Positive control: ordinary options are described exactly as before. */
     #[Test]
     public function ordinary_options_are_described_as_given(): void

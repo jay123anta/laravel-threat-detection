@@ -27,7 +27,7 @@ was checked against its source. With everything off, 1,863 of the 1,864 tests
 that shipped with 1.8.0 pass unchanged. The other is the inventory of API
 routes, which exists to fail when one is added, and did for `/ai-threats`.
 
-The suite grew to 2,389 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
+The suite grew to 2,394 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
 and 13.33.0, on MariaDB 10.4 and PostgreSQL 16, and with PCRE JIT disabled —
 where everything passes but the 1 MB timing budgets, which are set for the
 JIT; at the 8 KB the package actually scans, every pattern stays in budget.
@@ -507,6 +507,9 @@ behaviours changed.
   wrote `path_pattern ?? '*'`, so a rule built from a site-root row was
   recorded as covering every path. It now carries a `scope` — `exact path: /…`,
   `glob: …` or `every path` — computed the way the matcher applies it.
+- `export-blocklist` and `export-fail2ban` given a bare `--since` (no value)
+  fell over with a TypeError; they now fall back to 24 hours, as they do for
+  any other value they cannot read.
 - The API reads `per_page`, `limit` and `days` with `input()`. It used
   `Request::get()`, which Symfony 8 removed and Laravel keeps only as a
   deprecated alias that consults request attributes before the query string.

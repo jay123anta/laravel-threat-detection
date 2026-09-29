@@ -343,7 +343,12 @@ class ExportInjectionTest extends TestCase
 
         $this->assertStringContainsString(self::GOOD_IP, $body, 'the known-good address is missing from the export');
 
-        $rows = array_map('str_getcsv', array_filter(explode("\n", trim($body))));
+        // Parsed as the export is written — RFC 4180, no escape character —
+        // which also passes the $escape argument PHP 8.4 requires.
+        $rows = array_map(
+            fn (string $line) => str_getcsv($line, ',', '"', ''),
+            array_filter(explode("\n", trim($body)))
+        );
         array_shift($rows); // header
 
         foreach ($rows as $row) {
