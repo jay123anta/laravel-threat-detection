@@ -27,7 +27,7 @@ was checked against its source. With everything off, 1,863 of the 1,864 tests
 that shipped with 1.8.0 pass unchanged. The other is the inventory of API
 routes, which exists to fail when one is added, and did for `/ai-threats`.
 
-The suite grew to 2,394 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
+The suite grew to 2,400 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
 and 13.33.0, on MariaDB 10.4 and PostgreSQL 16, and with PCRE JIT disabled —
 where everything passes but the 1 MB timing budgets, which are set for the
 JIT; at the 8 KB the package actually scans, every pattern stays in budget.
@@ -457,6 +457,19 @@ behaviours changed.
   again" the rerun read the cached failures, asked nobody and failed the same
   way for a week; `--force` re-applied the cache. Only a resolved answer is
   cached now, and a failure cached by an earlier version counts as a miss.
+- **On a skipped request, an application exception ran the controller
+  twice.** The middleware's early exits — detection off, a whitelisted
+  address, a path outside `only_paths` or inside `skip_paths` — returned
+  `$next($request)` from inside the try that guards detection. When the
+  application threw there, the catch took its exception for a detection
+  failure, logged it as one, and called `$next($request)` again. Laravel's
+  pipeline usually renders exceptions into responses first, but not when no
+  handler is bound or rendering itself fails — and a second run of a
+  controller is a second charge, a second email. `$next` is now called once,
+  outside the try, and the application's exceptions reach their caller.
+- **A failing auth guard lost the detection.** `Auth::id()` runs the
+  application's guard and its user provider; when that threw, the row went
+  with it. The row is written with `user_id` null instead.
 - **An unwritable log file made the package fail requests.** Monolog throws
   when it cannot open its file — an unwritable `storage/logs` is one of the
   commonest deployment mistakes — and the per-detection warning was written

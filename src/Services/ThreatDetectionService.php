@@ -302,7 +302,7 @@ class ThreatDetectionService
         $storedUserAgent = $this->bounded($userAgent);
 
         $now = now();
-        $userId = Auth::id();
+        $userId = $this->signedInUserId();
 
         foreach ($allThreats as [$label, $level, $sourceTag]) {
             if (
@@ -438,6 +438,22 @@ class ThreatDetectionService
         } catch (\Throwable $e) {
             self::logQuietly('error', 'Threat detection: a listener for ' . class_basename($event) . ' failed, and the detection was '
                 . 'recorded without it: ' . $this->storable($e->getMessage()));
+        }
+    }
+
+    /**
+     * Who is signed in, or null when that cannot be found out.
+     *
+     * Asked once per detecting request, and it runs the application's guard
+     * — its user provider, its database. It is metadata on the row; a guard
+     * that throws must not cost the row itself.
+     */
+    private function signedInUserId(): int|string|null
+    {
+        try {
+            return Auth::id();
+        } catch (\Throwable) {
+            return null;
         }
     }
 
@@ -2210,7 +2226,7 @@ class ThreatDetectionService
                 'threat_level' => $level,
                 'confidence_score' => 90,
                 'confidence_label' => 'very_high',
-                'user_id' => Auth::id(),
+                'user_id' => $this->signedInUserId(),
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
