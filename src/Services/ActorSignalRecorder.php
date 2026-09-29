@@ -4,8 +4,8 @@ namespace JayAnta\ThreatDetection\Services;
 
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use JayAnta\ThreatDetection\Support\LogsQuietly;
 
 /**
  * Records attempt-level evidence that threat_logs deliberately cannot hold.
@@ -36,6 +36,8 @@ use Illuminate\Support\Facades\Schema;
  */
 class ActorSignalRecorder
 {
+    use LogsQuietly;
+
     /**
      * Record the distinct normalised payloads behind this request's matches.
      *
@@ -74,7 +76,7 @@ class ActorSignalRecorder
             // recorded and swallowed. This is supplementary evidence, and it
             // must never cost the caller its own logging, let alone the
             // request.
-            Log::error('Threat detection: actor signal write failed: ' . $e->getMessage());
+            self::logQuietly('error', 'Threat detection: actor signal write failed: ' . $e->getMessage());
         }
     }
 
@@ -226,14 +228,14 @@ class ActorSignalRecorder
             // Say once that the rest go unreported, then stay quiet.
             if (!isset(self::$warned['__overflow'])) {
                 self::$warned['__overflow'] = true;
-                Log::warning('Threat detection: further actor-signal warnings in this process are suppressed.');
+                self::logQuietly('warning', 'Threat detection: further actor-signal warnings in this process are suppressed.');
             }
 
             return;
         }
 
         self::$warned[$key] = true;
-        Log::warning($message);
+        self::logQuietly('warning', $message);
     }
 
     /** Tests and Octane reloads need the warn-once flags cleared. */

@@ -2,10 +2,12 @@
 
 namespace JayAnta\ThreatDetection\Services;
 
-use Illuminate\Support\Facades\Log;
+use JayAnta\ThreatDetection\Support\LogsQuietly;
 
 class ProbeDetectorService
 {
+    use LogsQuietly;
+
     /** @var array<string, array{label: string, level: string|null}>|null Exact paths for O(1) lookup */
     private static ?array $exactPaths = null;
 
@@ -209,7 +211,7 @@ class ProbeDetectorService
 
         if (!isset(self::$levelWarned[$where . '|' . $shown])) {
             self::$levelWarned[$where . '|' . $shown] = true;
-            Log::warning("Threat detection: probe level '{$shown}' for {$where} is not high, medium or low; using the fallback.");
+            self::logQuietly('warning', "Threat detection: probe level '{$shown}' for {$where} is not high, medium or low; using the fallback.");
         }
 
         return null;

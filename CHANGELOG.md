@@ -27,7 +27,7 @@ was checked against its source. With everything off, 1,863 of the 1,864 tests
 that shipped with 1.8.0 pass unchanged. The other is the inventory of API
 routes, which exists to fail when one is added, and did for `/ai-threats`.
 
-The suite grew to 2,402 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
+The suite grew to 2,405 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
 and 13.33.0, on MariaDB 10.4 and PostgreSQL 16, and with PCRE JIT disabled —
 where everything passes but the 1 MB timing budgets, which are set for the
 JIT; at the 8 KB the package actually scans, every pattern stays in budget.
@@ -476,7 +476,10 @@ behaviours changed.
   before the batch, so the detection was lost; the middleware's catch then
   logged that and threw again, out of the catch, answering the application's
   request with a 500. A passive detector broke exactly the requests it
-  detected. Every log call on the request path is now one that cannot throw.
+  detected. Every log call on the request path is now one that cannot throw
+  — in the middleware, the detector, the probe tracker, the actor-signal
+  recorder and the ai-guard integration alike; the recorder's, logged from
+  its own catch, had been losing the detection too.
 - **A failing listener lost the detection.** `ThreatDetected` is dispatched
   before the batch is written and `DdosThresholdExceeded` before pattern
   detection, so an application listener that threw took the batch, or the

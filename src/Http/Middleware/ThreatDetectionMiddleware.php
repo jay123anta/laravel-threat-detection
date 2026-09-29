@@ -4,15 +4,17 @@ namespace JayAnta\ThreatDetection\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use JayAnta\ThreatDetection\Integration\AiGuardVerdictListener;
 use JayAnta\ThreatDetection\Services\ProbeDetectorService;
 use JayAnta\ThreatDetection\Services\ThreatDetectionService;
+use JayAnta\ThreatDetection\Support\LogsQuietly;
 use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class ThreatDetectionMiddleware
 {
+    use LogsQuietly;
+
     protected ThreatDetectionService $detector;
 
     protected ProbeDetectorService $probeDetector;
@@ -41,7 +43,7 @@ class ThreatDetectionMiddleware
             // Guarded: if the log cannot be written, logging here would throw
             // out of this catch and fail the request — the one thing this
             // middleware must never do.
-            $this->logQuietly('ThreatDetectionMiddleware Error: ' . $e->getMessage());
+            self::logQuietly('error', 'ThreatDetectionMiddleware Error: ' . $e->getMessage());
         }
 
         return $next($request);
@@ -140,20 +142,11 @@ class ThreatDetectionMiddleware
             try {
                 app(AiGuardVerdictListener::class)->ingestRequest($request);
             } catch (\Throwable $e) {
-                $this->logQuietly('Threat detection: reading the ai-guard verdict failed: ' . $e->getMessage());
+                self::logQuietly('error', 'Threat detection: reading the ai-guard verdict failed: ' . $e->getMessage());
             }
         }
 
         $this->detector->detectAndLogFromRequest($request);
-    }
-
-    private function logQuietly(string $message): void
-    {
-        try {
-            Log::error($message);
-        } catch (\Throwable) {
-            // The request comes first.
-        }
     }
 
     /**

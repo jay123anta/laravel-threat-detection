@@ -3,8 +3,8 @@
 namespace JayAnta\ThreatDetection\Integration;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use JayAnta\ThreatDetection\Services\ActorAttributionStore;
+use JayAnta\ThreatDetection\Support\LogsQuietly;
 
 /**
  * Translates an ai-guard verdict into this package's own vocabulary, and stops
@@ -28,6 +28,8 @@ use JayAnta\ThreatDetection\Services\ActorAttributionStore;
  */
 class AiGuardVerdictListener
 {
+    use LogsQuietly;
+
     public function __construct(private ActorAttributionStore $store) {}
 
     /**
@@ -58,7 +60,7 @@ class AiGuardVerdictListener
                 'identity' => $this->stringOrNull($event->identity ?? null),
             ]);
         } catch (\Throwable $e) {
-            Log::error('Threat detection: an ai-guard verdict could not be read: ' . $e->getMessage());
+            self::logQuietly('error', 'Threat detection: an ai-guard verdict could not be read: ' . $e->getMessage());
         }
     }
 

@@ -3,7 +3,7 @@
 namespace JayAnta\ThreatDetection\Services;
 
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Log;
+use JayAnta\ThreatDetection\Support\LogsQuietly;
 
 /**
  * What a *second source* claimed about an actor's identity, kept for as long
@@ -29,6 +29,8 @@ use Illuminate\Support\Facades\Log;
  */
 class ActorAttributionStore
 {
+    use LogsQuietly;
+
     /**
      * This package's own vocabulary for the two statuses it acts on. The
      * integration translates into these at the boundary, so nothing
@@ -79,7 +81,7 @@ class ActorAttributionStore
             // The same rule as everywhere else in this package: an optional
             // signal must never cost the caller anything, least of all the
             // request.
-            Log::error('Threat detection: actor attribution write failed: ' . $e->getMessage());
+            self::logQuietly('error', 'Threat detection: actor attribution write failed: ' . $e->getMessage());
         }
     }
 
@@ -107,7 +109,7 @@ class ActorAttributionStore
                 'identity' => $this->cleanString($stored['identity'] ?? null),
             ];
         } catch (\Throwable $e) {
-            Log::error('Threat detection: actor attribution read failed: ' . $e->getMessage());
+            self::logQuietly('error', 'Threat detection: actor attribution read failed: ' . $e->getMessage());
 
             return null;
         }

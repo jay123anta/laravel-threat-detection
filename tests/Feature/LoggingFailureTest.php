@@ -6,6 +6,8 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
+use JayAnta\ThreatDetection\Integration\AiGuardVerdictListener;
+use JayAnta\ThreatDetection\Services\ProbeDetectorService;
 use JayAnta\ThreatDetection\Services\ThreatDetectionService;
 use JayAnta\ThreatDetection\Tests\TestCase;
 use Monolog\Handler\AbstractProcessingHandler;
@@ -80,6 +82,65 @@ class LoggingFailureTest extends TestCase
             DB::table('threat_logs')->where('type', 'like', '%SQL Injection UNION%')->count(),
             'an unwritable log lost the detection'
         );
+    }
+
+    /**
+     * The actor-signal recorder logs from its catch. With the log unwritable
+     * that throw escaped the catch, and the recorder runs before the batch is
+     * written — so the detection was lost.
+     */
+    #[Test]
+    public function a_failing_actor_signal_write_does_not_lose_the_detection(): void
+    {
+        config(['threat-detection.actor_signals.enabled' => true, 'threat-detection.actor_signals.table' => 'no_such_table']);
+
+        $this->get('/search?q=' . urlencode(self::SQLI))->assertStatus(200);
+
+        $this->assertGreaterThan(
+            0,
+            DB::table('threat_logs')->where('type', 'like', '%SQL Injection UNION%')->count(),
+            'the actor-signal warning lost the detection'
+        );
+    }
+
+    /** A probe with a level that needs a warning is still recorded. */
+    #[Test]
+    public function a_probe_level_warning_does_not_lose_the_probe(): void
+    {
+        config([
+            'threat-detection.probe_tracking.enabled' => true,
+            'threat-detection.probe_tracking.paths' => ['/secret-panel' => ['label' => 'Secret Panel Probe', 'level' => 'hgih']],
+        ]);
+        ProbeDetectorService::flushCaches();
+        Route::middleware('threat-detect')->get('/secret-panel', fn () => response('OK'));
+
+        $this->get('/secret-panel')->assertStatus(200);
+
+        $this->assertSame(
+            'medium',
+            DB::table('threat_logs')->where('type', '[probe] Secret Panel Probe')->value('threat_level'),
+            'the probe-level warning lost the probe'
+        );
+    }
+
+    /** ai-guard's listener promises nothing escapes it. */
+    #[Test]
+    public function the_ai_guard_listener_contains_its_own_failures(): void
+    {
+        $listener = $this->app->make(AiGuardVerdictListener::class);
+
+        // A payload whose property read throws, so handle() reaches its catch.
+        $event = new class
+        {
+            public function __get(string $name): mixed
+            {
+                throw new \RuntimeException('malformed verdict');
+            }
+        };
+
+        $listener->handle($event);
+
+        $this->assertTrue(true, 'handle() let an exception escape');
     }
 
     /** Even when detection itself fails, the middleware's own error log must not fail the request. */

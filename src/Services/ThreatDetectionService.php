@@ -9,16 +9,18 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use JayAnta\ThreatDetection\Events\DdosThresholdExceeded;
 use JayAnta\ThreatDetection\Events\ThreatDetected;
 use JayAnta\ThreatDetection\Jobs\StoreThreatLog;
 use JayAnta\ThreatDetection\Notifications\ThreatAlertSlack;
+use JayAnta\ThreatDetection\Support\LogsQuietly;
 use Symfony\Component\HttpFoundation\IpUtils;
 
 class ThreatDetectionService
 {
+    use LogsQuietly;
+
     protected int $ddosThreshold;
 
     protected int $ddosWindowSeconds;
@@ -94,28 +96,6 @@ class ThreatDetectionService
         }
 
         return $value;
-    }
-
-    /**
-     * Log, unless the log itself cannot be written.
-     *
-     * Every call in this class is on the request path, and one runs in the
-     * constructor — before the middleware's try. An unwritable log file is a
-     * common deployment mistake and Monolog throws on it: the per-detection
-     * warning, written before the batch, lost the detection, and a bad
-     * setting in the constructor would have failed every request. The row in
-     * the database is the record; the log line is a courtesy.
-     */
-    private static function logQuietly(string $level, string $message): void
-    {
-        try {
-            match ($level) {
-                'error' => Log::error($message),
-                default => Log::warning($message),
-            };
-        } catch (\Throwable) {
-            // Nothing else to tell, and nowhere to tell it.
-        }
     }
 
     private static function warnAboutSetting(string $key, string $message): void
