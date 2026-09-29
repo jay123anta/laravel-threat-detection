@@ -616,7 +616,7 @@ THREAT_DETECTION_QUEUE_CONNECTION=redis
 THREAT_DETECTION_QUEUE_NAME=threat-logs
 ```
 
-This dispatches a `StoreThreatLog` job (3 retries, backoff 10s/30s). Detection still happens in real-time -  only the write is deferred.
+This dispatches a `StoreThreatLog` job (3 retries, backoff 10s/30s). Detection still happens in real-time -  only the write is deferred. If the queue cannot take the job, the rows are written directly instead, with one warning in the log, so a queue outage does not lose detections.
 
 ### Auto-Purge (Retention Policy)
 

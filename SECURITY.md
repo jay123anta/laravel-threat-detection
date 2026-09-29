@@ -60,4 +60,6 @@ A few things specific to this package that are worth knowing before reporting:
   should be reported privately: a request that makes the log write fail, an
   input that switches detection off for the whole request, a way to silence a
   detection for other requests. Those defeat the package rather than one of its
-  patterns — 1.9.0 fixed one (a single invalid byte in the User-Agent).
+  patterns. 1.9.0 fixed several: a single invalid byte or an oversized value in
+  the User-Agent, and an unreachable cache or queue, an unwritable log, a
+  failing listener or auth guard, each of which lost the detection.
