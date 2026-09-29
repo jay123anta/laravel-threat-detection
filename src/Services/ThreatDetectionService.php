@@ -2,6 +2,7 @@
 
 namespace JayAnta\ThreatDetection\Services;
 
+use Illuminate\Contracts\Bus\Dispatcher as BusDispatcher;
 use Illuminate\Http\Request;
 use Illuminate\Notifications\Messages\SlackMessage;
 use Illuminate\Support\Facades\Auth;
@@ -95,6 +96,28 @@ class ThreatDetectionService
         return $value;
     }
 
+    /**
+     * Log, unless the log itself cannot be written.
+     *
+     * Every call in this class is on the request path, and one runs in the
+     * constructor — before the middleware's try. An unwritable log file is a
+     * common deployment mistake and Monolog throws on it: the per-detection
+     * warning, written before the batch, lost the detection, and a bad
+     * setting in the constructor would have failed every request. The row in
+     * the database is the record; the log line is a courtesy.
+     */
+    private static function logQuietly(string $level, string $message): void
+    {
+        try {
+            match ($level) {
+                'error' => Log::error($message),
+                default => Log::warning($message),
+            };
+        } catch (\Throwable) {
+            // Nothing else to tell, and nowhere to tell it.
+        }
+    }
+
     private static function warnAboutSetting(string $key, string $message): void
     {
         if (isset(self::$badSettingWarned[$key])) {
@@ -102,7 +125,7 @@ class ThreatDetectionService
         }
 
         self::$badSettingWarned[$key] = true;
-        Log::warning('Threat detection: ' . $message);
+        self::logQuietly('warning', 'Threat detection: ' . $message);
     }
 
     /**
@@ -336,14 +359,16 @@ class ThreatDetectionService
             // Sanitize log output to prevent log injection via newlines/control chars
             $safeType = str_replace(["\n", "\r", "\t"], ' ', $type);
             $safeUrl = str_replace(["\n", "\r", "\t"], ' ', $storedUrl);
-            Log::warning("[{$level}] Threat Detected: [{$safeType}] from {$ip} ({$safeUrl}) [confidence: {$confidence['score']}%]");
+            self::logQuietly('warning', "[{$level}] Threat Detected: [{$safeType}] from {$ip} ({$safeUrl}) [confidence: {$confidence['score']}%]");
 
             // Dispatch event so users can hook in with custom listeners
-            ThreatDetected::dispatch($logData, $ip, $level);
+            $this->announce(new ThreatDetected($logData, $ip, $level));
         }
 
         // Batch write: one INSERT or one queue job for all threats in this request
         if (!empty($batchLogData)) {
+            $queued = false;
+
             if (config('threat-detection.queue.enabled', false)) {
                 // The webhook URL is a credential and is not put in the job:
                 // it would be written to the queue store, and to failed_jobs
@@ -367,11 +392,18 @@ class ThreatDetectionService
                 }
                 $job->onQueue($queue);
 
-                dispatch($job);
+                $queued = $this->pushToQueue($job);
 
                 // Job is queued (it retries on failure), so mark these as logged.
-                $this->markTypesLogged($ip, array_keys($seenTypes));
-            } else {
+                if ($queued) {
+                    $this->markTypesLogged($ip, array_keys($seenTypes));
+                }
+            }
+
+            // Written here without a queue, and when the queue could not take
+            // the job: the row went nowhere else, so a failed push used to
+            // lose the detection outright.
+            if (!$queued) {
                 // A failing insert throws here and is caught by the middleware;
                 // in that case the types are NOT marked and will be retried.
                 try {
@@ -387,6 +419,50 @@ class ThreatDetectionService
                     $this->sendNotifications($ip, $storedUrl, $batchLogData[0]['type'], $batchLogData[0]['threat_level'], $storedUserAgent);
                 }
             }
+        }
+    }
+
+    /**
+     * Dispatch one of the package's events, isolated from its listeners.
+     *
+     * Listeners are the application's code. ThreatDetected goes out before
+     * the batch is written and DdosThresholdExceeded before pattern
+     * detection runs, so a listener that threw — its own bug, its own
+     * dependency down — used to take the batch, or the request's patterns,
+     * with it. It is logged instead, every time, as the application's error.
+     */
+    private function announce(object $event): void
+    {
+        try {
+            event($event);
+        } catch (\Throwable $e) {
+            self::logQuietly('error', 'Threat detection: a listener for ' . class_basename($event) . ' failed, and the detection was '
+                . 'recorded without it: ' . $this->storable($e->getMessage()));
+        }
+    }
+
+    private static bool $queueFailureWarned = false;
+
+    /**
+     * Hand the write to the queue, or report that it could not be.
+     *
+     * Through the bus dispatcher rather than dispatch(), whose PendingDispatch
+     * pushes from its destructor — outside any try around the call.
+     */
+    private function pushToQueue(StoreThreatLog $job): bool
+    {
+        try {
+            app(BusDispatcher::class)->dispatch($job);
+
+            return true;
+        } catch (\Throwable $e) {
+            if (!self::$queueFailureWarned) {
+                self::$queueFailureWarned = true;
+                self::logQuietly('warning', 'Threat detection: the queue cannot take threat writes, so they are written directly '
+                    . 'until it can: ' . $this->storable($e->getMessage()));
+            }
+
+            return false;
         }
     }
 
@@ -654,7 +730,7 @@ class ThreatDetectionService
         $table = config('threat-detection.table_name', 'threat_logs');
 
         if (preg_match('/(no column named|has no column|unknown column|column not found|no such column)/i', $message)) {
-            Log::error(
+            self::logQuietly('error',
                 "Threat detection: the '{$table}' table is missing a column, so NO threats are being recorded. "
                 . 'Run: php artisan vendor:publish --tag=threat-detection-migrations && php artisan migrate. '
                 . "Original error: {$message}"
@@ -663,7 +739,7 @@ class ThreatDetectionService
             return;
         }
 
-        Log::error(
+        self::logQuietly('error',
             "Threat detection: writing to '{$table}' failed, so threats are not being recorded. "
             . "Original error: {$message}"
         );
@@ -1561,6 +1637,7 @@ class ThreatDetectionService
         // exists for under Octane.
         self::$ddosCacheWarned = false;
         self::$cacheFailureWarned = false;
+        self::$queueFailureWarned = false;
         self::$badSettingWarned = [];
         self::$sensitiveFieldAlternation = null;
         self::$sensitiveFieldNames = null;
@@ -1889,7 +1966,7 @@ class ThreatDetectionService
         }
         self::$patternFailureWarned[$label] = true;
 
-        Log::warning(
+        self::logQuietly('warning',
             "Threat detection: the pattern for '{$label}' could not be evaluated ({$error}). "
             . "The request was reported as '" . self::PATTERN_FAILURE_LABEL . "' rather than passed. "
             . 'A pattern that fails on real traffic backtracks badly and should be rewritten.'
@@ -1923,7 +2000,7 @@ class ThreatDetectionService
             // Fail open on a typo — a misconfigured validator must never
             // silently disable a detection pattern.
             if (!isset(self::$validatorWarned[$validator])) {
-                Log::warning("Threat detection: unknown pattern validator '{$validator}' for '{$label}'; matches are counted unvalidated.");
+                self::logQuietly('warning', "Threat detection: unknown pattern validator '{$validator}' for '{$label}'; matches are counted unvalidated.");
                 self::$validatorWarned[$validator] = true;
             }
 
@@ -2030,7 +2107,7 @@ class ThreatDetectionService
         }
 
         self::$cacheFailureWarned = true;
-        Log::warning('Threat detection: the cache cannot be reached, so deduplication is off and repeated '
+        self::logQuietly('warning', 'Threat detection: the cache cannot be reached, so deduplication is off and repeated '
             . 'detections are each recorded until it is back: ' . $this->storable($e->getMessage()));
     }
 
@@ -2088,7 +2165,7 @@ class ThreatDetectionService
         $driver = config('cache.default');
         if (in_array($driver, ['file', 'database', 'null'])) {
             if (!self::$ddosCacheWarned) {
-                Log::warning("Threat detection: DDoS detection is disabled because cache driver '{$driver}' does not support atomic increment. Use redis or memcached.");
+                self::logQuietly('warning', "Threat detection: DDoS detection is disabled because cache driver '{$driver}' does not support atomic increment. Use redis or memcached.");
                 self::$ddosCacheWarned = true;
             }
 
@@ -2102,7 +2179,7 @@ class ThreatDetectionService
 
             return $count > $this->ddosThreshold;
         } catch (\Throwable $e) {
-            Log::error('Threat detection DDoS check failed: ' . $e->getMessage());
+            self::logQuietly('error', 'Threat detection DDoS check failed: ' . $e->getMessage());
 
             return false;
         }
@@ -2148,14 +2225,14 @@ class ThreatDetectionService
         // row, so a flood notifies listeners once per window rather than once
         // per request — and a listener never fires for a threat that failed to
         // record, which the pre-rebase ordering allowed.
-        DdosThresholdExceeded::dispatch(
+        $this->announce(new DdosThresholdExceeded(
             $ip,
             $this->ddosRequestCount($ip),
             $this->ddosThreshold,
             $this->ddosWindowSeconds
-        );
+        ));
 
-        Log::warning("[$level] DDoS Threat Detected: $ip exceeded threshold.");
+        self::logQuietly('warning', "[$level] DDoS Threat Detected: $ip exceeded threshold.");
     }
 
     private static array $threatLevelCache = [];
@@ -2393,7 +2470,7 @@ class ThreatDetectionService
         self::$validatedCustomPatterns = [];
         foreach ($this->customPatternSource() as $regex => $entry) {
             if (@preg_match($regex, '') === false) {
-                Log::warning("Threat detection: invalid custom pattern skipped: {$regex}");
+                self::logQuietly('warning', "Threat detection: invalid custom pattern skipped: {$regex}");
 
                 continue;
             }
@@ -2403,14 +2480,14 @@ class ThreatDetectionService
             }
 
             if (!is_array($entry) || !is_string($entry['label'] ?? null) || $entry['label'] === '') {
-                Log::warning("Threat detection: custom pattern without a label skipped: {$regex}");
+                self::logQuietly('warning', "Threat detection: custom pattern without a label skipped: {$regex}");
 
                 continue;
             }
 
             $level = $entry['level'] ?? null;
             if ($level !== null && !in_array($level, ['low', 'medium', 'high'], true)) {
-                Log::warning("Threat detection: custom pattern '{$entry['label']}' has unknown level '{$level}'; deriving from threat_levels keywords instead.");
+                self::logQuietly('warning', "Threat detection: custom pattern '{$entry['label']}' has unknown level '{$level}'; deriving from threat_levels keywords instead.");
                 $level = null;
             }
 
@@ -2418,7 +2495,7 @@ class ThreatDetectionService
             if (is_array($entry['contexts'] ?? null) && $entry['contexts'] !== []) {
                 $contexts = array_values(array_intersect($entry['contexts'], self::PATTERN_CONTEXTS));
                 if ($unknown = array_diff($entry['contexts'], self::PATTERN_CONTEXTS)) {
-                    Log::warning("Threat detection: custom pattern '{$entry['label']}' names unknown contexts (" . implode(', ', $unknown) . '); valid contexts are ' . implode('|', self::PATTERN_CONTEXTS) . '.');
+                    self::logQuietly('warning', "Threat detection: custom pattern '{$entry['label']}' names unknown contexts (" . implode(', ', $unknown) . '); valid contexts are ' . implode('|', self::PATTERN_CONTEXTS) . '.');
                 }
                 if ($contexts === []) {
                     $contexts = null;
@@ -2673,7 +2750,7 @@ class ThreatDetectionService
                 Http::post($webhookUrl, $alert->toWebhookPayload());
             }
         } catch (\Throwable $e) {
-            Log::error('Failed to send threat notification: ' . $e->getMessage());
+            self::logQuietly('error', 'Failed to send threat notification: ' . $e->getMessage());
         }
     }
 

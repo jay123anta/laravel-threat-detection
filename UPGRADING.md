@@ -91,6 +91,14 @@ php artisan threat-detection:doctor
 23. **Detection keeps running while the cache is down.** Expect repeated
     rows for one attack during an outage — dedup needs the cache — and one
     warning in the log saying so.
+24. **With queued writes, a queue that cannot take a job is bypassed**: the
+    rows are written directly, and one warning says so.
+25. **A `ThreatDetected` or `DdosThresholdExceeded` listener that throws** is
+    logged as an error; the detection is recorded regardless. Listeners that
+    relied on an exception to stop the write — which was never documented —
+    no longer can.
+26. **A log channel that cannot be written no longer affects requests or
+    detections.**
 
 ### If you published the dashboard view
 

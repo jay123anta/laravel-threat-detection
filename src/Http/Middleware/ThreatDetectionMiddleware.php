@@ -117,17 +117,29 @@ class ThreatDetectionMiddleware
                 try {
                     app(AiGuardVerdictListener::class)->ingestRequest($request);
                 } catch (\Throwable $e) {
-                    Log::error('Threat detection: reading the ai-guard verdict failed: ' . $e->getMessage());
+                    $this->logQuietly('Threat detection: reading the ai-guard verdict failed: ' . $e->getMessage());
                 }
             }
 
             $this->detector->detectAndLogFromRequest($request);
 
         } catch (\Throwable $e) {
-            Log::error('ThreatDetectionMiddleware Error: ' . $e->getMessage());
+            // Guarded: if the log cannot be written, logging here would throw
+            // out of this catch and fail the request — the one thing this
+            // middleware must never do.
+            $this->logQuietly('ThreatDetectionMiddleware Error: ' . $e->getMessage());
         }
 
         return $next($request);
+    }
+
+    private function logQuietly(string $message): void
+    {
+        try {
+            Log::error($message);
+        } catch (\Throwable) {
+            // The request comes first.
+        }
     }
 
     /**
