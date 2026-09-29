@@ -102,6 +102,34 @@ class MalformedHostTest extends TestCase
         $this->assertStringContainsString('bad host', $row->url, 'the refused Host should be kept as evidence');
     }
 
+    /**
+     * The fallback reads the scheme with isSecure(), which consults forwarded
+     * headers and can refuse too. Symfony refuses only once today, and
+     * fullUrl() spends that refusal, so this pins the guard directly.
+     */
+    #[Test]
+    public function a_request_whose_scheme_cannot_be_read_is_still_recorded(): void
+    {
+        $request = new class extends Request
+        {
+            public function isSecure(): bool
+            {
+                throw new \RuntimeException('the scheme cannot be read');
+            }
+        };
+        $request->initialize(['q' => self::INJECTION], [], [], [], [], [
+            'REQUEST_URI' => '/search?q=' . urlencode(self::INJECTION),
+            'QUERY_STRING' => 'q=' . urlencode(self::INJECTION),
+            'REQUEST_METHOD' => 'GET',
+            'REMOTE_ADDR' => '203.0.113.9',
+            'HTTP_HOST' => 'bad host',
+        ]);
+
+        $this->app->make(ThreatDetectionMiddleware::class)->handle($request, fn () => new Response('OK', 200));
+
+        $this->assertStringStartsWith('http://bad host/search?q=', (string) $this->injectionRow()?->url);
+    }
+
     /** Positive control: an ordinary Host is stored exactly as before. */
     #[Test]
     public function an_ordinary_host_is_stored_as_before(): void

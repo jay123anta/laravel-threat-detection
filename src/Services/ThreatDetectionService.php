@@ -154,7 +154,7 @@ class ThreatDetectionService
 
     public function detectAndLogFromRequest(Request $request): void
     {
-        $ip = $request->ip();
+        $ip = $this->clientIp($request);
         $url = $this->storable($this->requestUrl($request));
         // Route path only (never the query string) so api_route_filtering
         // cannot be toggled on/off by an attacker appending ?x=/api/ to the URL.
@@ -436,10 +436,44 @@ class ThreatDetectionService
         try {
             return $request->fullUrl();
         } catch (\Throwable) {
-            return ($request->isSecure() ? 'https' : 'http') . '://'
-                . (string) $request->server->get('HTTP_HOST', '')
-                . $request->getRequestUri();
+            // isSecure() reads forwarded headers too, and can refuse the same
+            // way; the scheme is the least of what this row needs.
+            try {
+                $scheme = $request->isSecure() ? 'https' : 'http';
+            } catch (\Throwable) {
+                $scheme = 'http';
+            }
+
+            return $scheme . '://' . (string) $request->server->get('HTTP_HOST', '') . $request->getRequestUri();
         }
+    }
+
+    /**
+     * The client's address, even when Symfony will not name it.
+     *
+     * When an application trusts both `Forwarded` and `X-Forwarded-For`, a
+     * client that sends the two with different addresses makes ip() throw
+     * ConflictingHeadersException. ip() was the first call in both the
+     * middleware and the detector, so the throw ended detection before
+     * anything was written. The address the connection came from is used
+     * instead: the one fact about the client no header can change.
+     *
+     * Symfony throws only the first time; after that it answers 0.0.0.0,
+     * which is never a client, so that is treated as the same refusal.
+     */
+    public function clientIp(Request $request): string
+    {
+        try {
+            $ip = (string) $request->ip();
+        } catch (\Throwable) {
+            $ip = '';
+        }
+
+        if ($ip === '' || $ip === '0.0.0.0') {
+            return (string) $request->server->get('REMOTE_ADDR', $ip);
+        }
+
+        return $ip;
     }
 
     /**

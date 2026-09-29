@@ -57,7 +57,7 @@ class ThreatDetectionMiddleware
             return;
         }
 
-        $ip = (string) $request->ip();
+        $ip = $this->detector->clientIp($request);
         if ($this->detector->isWhitelisted($ip)) {
             return;
         }

@@ -27,7 +27,7 @@ was checked against its source. With everything off, 1,863 of the 1,864 tests
 that shipped with 1.8.0 pass unchanged. The other is the inventory of API
 routes, which exists to fail when one is added, and did for `/ai-threats`.
 
-The suite grew to 2,411 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
+The suite grew to 2,414 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
 and 13.33.0, on MariaDB 10.4 and PostgreSQL 16, and with PCRE JIT disabled —
 where everything passes but the 1 MB timing budgets, which are set for the
 JIT; at the 8 KB the package actually scans, every pattern stays in budget.
@@ -65,6 +65,13 @@ behaviours changed.
   written, while an application route that builds no URL of its own answered
   normally. The URL is now built from the raw request line when Symfony
   refuses, and the refused Host is kept, escaped, as evidence.
+
+  Forwarded headers could as well. When an application trusts both
+  `Forwarded` and `X-Forwarded-For`, a client sending the two with different
+  addresses makes Symfony's `ip()` throw `ConflictingHeadersException` — and
+  `ip()` was the first call in the middleware and the detector. The address
+  the connection came from is recorded instead; so it is when Symfony, having
+  refused once, answers `0.0.0.0` after.
 
   Length did the same thing. Both columns are TEXT, 65,535 bytes on MySQL,
   and neither value was bounded — so a User-Agent or URL past that size failed
