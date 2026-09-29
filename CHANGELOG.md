@@ -27,7 +27,7 @@ was checked against its source. With everything off, 1,863 of the 1,864 tests
 that shipped with 1.8.0 pass unchanged. The other is the inventory of API
 routes, which exists to fail when one is added, and did for `/ai-threats`.
 
-The suite grew to 2,365 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
+The suite grew to 2,375 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
 and 13.33.0, on MariaDB 10.4 and PostgreSQL 16, and with PCRE JIT disabled —
 where everything passes but the 1 MB timing budgets, which are set for the
 JIT; at the 8 KB the package actually scans, every pattern stays in budget.
@@ -456,6 +456,18 @@ behaviours changed.
   again" the rerun read the cached failures, asked nobody and failed the same
   way for a week; `--force` re-applied the cache. Only a resolved answer is
   cached now, and a failure cached by an earlier version counts as a miss.
+- **The correlation reports loaded every attacking address into memory.**
+  The coordinated-attack, campaign and payload-cluster reports fetched every
+  distinct address or actor behind their top rows in one query, and the
+  coordinated report returned the whole list — so a distributed attack from a
+  hundred thousand addresses loaded that many rows into PHP, and answered with
+  all of them, on the report an operator opens because of that attack. The
+  lists are now samples fetched with a limit (50 addresses, 10 per campaign,
+  200 actors); the counts beside them stay exact.
+- **A non-numeric id answered 500.** The `{id}` routes had no constraint and
+  the actions type the id as `int`, so `/threats/abc` failed with a TypeError
+  before the API's own error handling — a 500, and an error in the log for
+  every probe. The router now answers 404.
 - **A false-positive click on a row with a redacted path did nothing.**
   Stored URLs are redacted, so `/orders/9876543210` is kept as
   `/orders/[REDACTED]`, and a rule built from that path could never match the

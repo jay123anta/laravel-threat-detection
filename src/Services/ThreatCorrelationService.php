@@ -19,6 +19,22 @@ use Illuminate\Support\Facades\Schema;
  */
 class ThreatCorrelationService
 {
+    /*
+     * How many addresses or actors a report lists beside its exact count.
+     *
+     * These reports are read while an attack is under way, and the lists
+     * behind them are as long as the attacker makes them. They were fetched
+     * whole — every distinct address in one query — so a distributed attack
+     * from a hundred thousand addresses loaded that many rows into PHP, and
+     * the coordinated report returned them all. The lists are now samples,
+     * fetched with a limit; the counts stay exact.
+     */
+    private const SAMPLE_ADDRESSES = 50;
+
+    private const SAMPLE_CAMPAIGN_ADDRESSES = 10;
+
+    private const SAMPLE_ACTORS = 200;
+
     public function getIpStatistics(string $ip): array
     {
         $table = config('threat-detection.table_name', 'threat_logs');
@@ -77,20 +93,18 @@ class ThreatCorrelationService
             ->limit(20)
             ->get();
 
-        // Batch-fetch all attacking IPs in a single query to avoid N+1
-        $urls = $coordinatedAttacks->pluck('url')->toArray();
+        // A bounded sample per URL — at most 20 small queries — rather than
+        // every distinct address in one. unique_ips stays the exact count.
         $ipsByUrl = [];
-        if (!empty($urls)) {
-            $allIps = DB::table($table)
-                ->select('url', 'ip_address')
-                ->whereIn('url', $urls)
+        foreach ($coordinatedAttacks as $attack) {
+            $ipsByUrl[$attack->url] = DB::table($table)
+                ->where('url', $attack->url)
                 ->where('created_at', '>=', $timeThreshold)
                 ->distinct()
-                ->get();
-
-            foreach ($allIps as $row) {
-                $ipsByUrl[$row->url][] = $row->ip_address;
-            }
+                ->orderBy('ip_address')
+                ->limit(self::SAMPLE_ADDRESSES)
+                ->pluck('ip_address')
+                ->all();
         }
 
         return $coordinatedAttacks->map(function ($attack) use ($ipsByUrl) {
@@ -126,22 +140,18 @@ class ThreatCorrelationService
             ->limit(15)
             ->get();
 
-        // Batch-fetch sample IPs for all campaigns in a single query
-        $types = $campaigns->pluck('type')->toArray();
+        // A bounded sample per campaign — at most 15 small queries. The
+        // single query this replaced fetched every address and kept ten.
         $ipsByType = [];
-        if (!empty($types)) {
-            $allIps = DB::table($table)
-                ->select('type', 'ip_address')
-                ->whereIn('type', $types)
+        foreach ($campaigns as $campaign) {
+            $ipsByType[$campaign->type] = DB::table($table)
+                ->where('type', $campaign->type)
                 ->where('created_at', '>=', $timeThreshold)
                 ->distinct()
-                ->get();
-
-            foreach ($allIps as $row) {
-                if (!isset($ipsByType[$row->type]) || count($ipsByType[$row->type]) < 10) {
-                    $ipsByType[$row->type][] = $row->ip_address;
-                }
-            }
+                ->orderBy('ip_address')
+                ->limit(self::SAMPLE_CAMPAIGN_ADDRESSES)
+                ->pluck('ip_address')
+                ->all();
         }
 
         return $campaigns->map(function ($campaign) use ($ipsByType) {
@@ -339,24 +349,19 @@ class ThreatCorrelationService
             return [];
         }
 
-        // Which actors each shared fingerprint came from. One extra query
-        // rather than one per fingerprint.
-        $actorsByFingerprint = DB::table($table)
-            ->select('fingerprint', 'actor_key')
-            ->where('created_at', '>=', $since)
-            ->whereIn('fingerprint', $shared->pluck('fingerprint')->all())
-            ->distinct()
-            ->get()
-            ->groupBy('fingerprint');
-
         $clusters = [];
 
         foreach ($shared as $row) {
-            $actors = ($actorsByFingerprint[$row->fingerprint] ?? collect())
-                ->pluck('actor_key')
-                ->unique()
-                ->sort()
-                ->values();
+            // Which actors sent it: a bounded, ordered sample, so the same
+            // set of actors always yields the same sample and still groups.
+            // actor_count comes from the aggregate and stays exact.
+            $actors = DB::table($table)
+                ->where('fingerprint', $row->fingerprint)
+                ->where('created_at', '>=', $since)
+                ->distinct()
+                ->orderBy('actor_key')
+                ->limit(self::SAMPLE_ACTORS)
+                ->pluck('actor_key');
 
             // Group fingerprints by the exact set of actors that sent them, so
             // one campaign spread over five addresses reads as one cluster
@@ -366,11 +371,13 @@ class ThreatCorrelationService
             if (!isset($clusters[$key])) {
                 $clusters[$key] = [
                     'actors' => $actors->all(),
-                    'actor_count' => $actors->count(),
+                    'actor_count' => 0,
                     'fingerprints' => [],
                     'labels' => [],
                 ];
             }
+
+            $clusters[$key]['actor_count'] = max($clusters[$key]['actor_count'], (int) $row->actor_count);
 
             $clusters[$key]['fingerprints'][] = $row->fingerprint;
             $clusters[$key]['labels'][] = $row->label;

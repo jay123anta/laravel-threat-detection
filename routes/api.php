@@ -7,8 +7,10 @@ Route::prefix(config('threat-detection.api.prefix', 'api/threat-detection'))
     ->middleware(config('threat-detection.api.middleware', ['api']))
     ->group(function () {
 
+        // {id} is numeric: the actions type it as int, so anything else
+        // failed with a TypeError — a 500 — instead of a 404.
         Route::get('/threats', [ThreatLogController::class, 'index']);
-        Route::get('/threats/{id}', [ThreatLogController::class, 'show']);
+        Route::get('/threats/{id}', [ThreatLogController::class, 'show'])->whereNumber('id');
 
         Route::get('/stats', [ThreatLogController::class, 'stats']);
         Route::get('/summary', [ThreatLogController::class, 'summary']);
@@ -30,7 +32,7 @@ Route::prefix(config('threat-detection.api.prefix', 'api/threat-detection'))
         // privilege from reading the log. They are checked against
         // api.write_guard ('role' by default) regardless of api.guard.
         Route::middleware('threat-dashboard-auth:api,write')->group(function () {
-            Route::post('/threats/{id}/false-positive', [ThreatLogController::class, 'markFalsePositive']);
-            Route::delete('/exclusion-rules/{id}', [ThreatLogController::class, 'deleteExclusionRule']);
+            Route::post('/threats/{id}/false-positive', [ThreatLogController::class, 'markFalsePositive'])->whereNumber('id');
+            Route::delete('/exclusion-rules/{id}', [ThreatLogController::class, 'deleteExclusionRule'])->whereNumber('id');
         });
     });

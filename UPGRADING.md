@@ -83,6 +83,11 @@ php artisan threat-detection:doctor
     and the like, which were stored in cleartext there.
 20. **A false positive on a row whose path was redacted answers 422**, since
     a rule built from a masked path could never match.
+21. **Correlation lists are samples.** `attacking_ips` holds at most 50
+    addresses and a cluster's `actors` at most 200; `unique_ips` and
+    `actor_count` remain the exact totals.
+22. **A non-numeric id on `/threats/{id}` and the write routes answers 404**
+    instead of 500.
 
 ### If you published the dashboard view
 
