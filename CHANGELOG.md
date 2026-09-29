@@ -27,7 +27,7 @@ was checked against its source. With everything off, 1,863 of the 1,864 tests
 that shipped with 1.8.0 pass unchanged. The other is the inventory of API
 routes, which exists to fail when one is added, and did for `/ai-threats`.
 
-The suite grew to 2,376 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
+The suite grew to 2,380 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
 and 13.33.0, on MariaDB 10.4 and PostgreSQL 16, and with PCRE JIT disabled —
 where everything passes but the 1 MB timing budgets, which are set for the
 JIT; at the 8 KB the package actually scans, every pattern stays in budget.
@@ -457,6 +457,15 @@ behaviours changed.
   again" the rerun read the cached failures, asked nobody and failed the same
   way for a week; `--force` re-applied the cache. Only a resolved answer is
   cached now, and a failure cached by an earlier version counts as a miss.
+- **A cache outage switched detection off.** Three cache calls sat on the
+  request path unguarded — the exclusion rules, the dedup check and the dedup
+  mark. With the cache unreachable (Redis restarting, a network partition) the
+  first of them threw, the middleware swallowed it to stay passive, and no
+  request was recorded until the cache came back; the mark, written after the
+  row and before the alert, cost the alert. Rules are now read from the
+  database when the cache is down, and dedup degrades to "not seen yet", so a
+  repeated attack is recorded more than once rather than not at all. The DDoS
+  counter already survived this.
 - **The correlation reports loaded every attacking address into memory.**
   The coordinated-attack, campaign and payload-cluster reports fetched every
   distinct address or actor behind their top rows in one query, and the

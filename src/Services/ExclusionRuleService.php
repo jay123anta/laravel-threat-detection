@@ -16,18 +16,38 @@ class ExclusionRuleService
     /** The width of threat_exclusion_rules.path_pattern: a plain string() column. */
     private const MAX_PATH_LENGTH = 255;
 
+    /**
+     * The active rules, cached for ten minutes — or read straight from the
+     * database when the cache cannot be reached.
+     *
+     * This sits on the request path. Unguarded, a cache outage threw here,
+     * the middleware swallowed it to stay passive, and nothing was recorded
+     * until the cache came back. Whether a rule applies must not depend on
+     * the cache being up.
+     */
     public function getActiveRules(): array
     {
-        return Cache::remember(self::CACHE_KEY, now()->addMinutes(self::CACHE_TTL_MINUTES), function () {
-            if (!$this->tableExists()) {
-                return [];
-            }
+        try {
+            return Cache::remember(
+                self::CACHE_KEY,
+                now()->addMinutes(self::CACHE_TTL_MINUTES),
+                fn () => $this->loadActiveRules()
+            );
+        } catch (\Throwable) {
+            return $this->loadActiveRules();
+        }
+    }
 
-            return DB::table('threat_exclusion_rules')
-                ->where('is_active', true)
-                ->get()
-                ->toArray();
-        });
+    private function loadActiveRules(): array
+    {
+        if (!$this->tableExists()) {
+            return [];
+        }
+
+        return DB::table('threat_exclusion_rules')
+            ->where('is_active', true)
+            ->get()
+            ->toArray();
     }
 
     public function isExcluded(string $type, string $url): bool
@@ -207,7 +227,14 @@ class ExclusionRuleService
 
     public function clearCache(): void
     {
-        Cache::forget(self::CACHE_KEY);
+        // Rules are read from the database whenever the cache is down, so a
+        // failed forget costs nothing but a stale entry once it is back —
+        // and must not fail the write that just created or deleted a rule.
+        try {
+            Cache::forget(self::CACHE_KEY);
+        } catch (\Throwable $e) {
+            Log::warning('Threat detection: could not clear the exclusion-rule cache: ' . $e->getMessage());
+        }
     }
 
     private function tableExists(): bool

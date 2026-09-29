@@ -88,6 +88,9 @@ php artisan threat-detection:doctor
     `actor_count` remain the exact totals.
 22. **A non-numeric id on `/threats/{id}` and the write routes answers 404**
     instead of 500.
+23. **Detection keeps running while the cache is down.** Expect repeated
+    rows for one attack during an outage — dedup needs the cache — and one
+    warning in the log saying so.
 
 ### If you published the dashboard view
 

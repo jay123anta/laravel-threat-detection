@@ -1560,6 +1560,7 @@ class ThreatDetectionService
         // that would make it newly relevant — which is what flushCaches()
         // exists for under Octane.
         self::$ddosCacheWarned = false;
+        self::$cacheFailureWarned = false;
         self::$badSettingWarned = [];
         self::$sensitiveFieldAlternation = null;
         self::$sensitiveFieldNames = null;
@@ -1992,14 +1993,45 @@ class ThreatDetectionService
         return substr(hash('sha256', $rawPayload), 0, 16);
     }
 
+    /**
+     * Whether this IP and type were recorded in the last five minutes.
+     *
+     * An unreachable cache answers "no". Unguarded, the exception ended
+     * detection for the request — for every request, while the cache was
+     * down. Without dedup a repeated attack is recorded more than once,
+     * which is the direction a detector can afford.
+     */
     private function isRecentlyLogged(string $ip, string $type): bool
     {
-        return Cache::has($this->loggedKey($ip, $type));
+        try {
+            return Cache::has($this->loggedKey($ip, $type));
+        } catch (\Throwable $e) {
+            $this->reportCacheFailure($e);
+
+            return false;
+        }
     }
 
     private function markAsLogged(string $ip, string $type): void
     {
-        Cache::put($this->loggedKey($ip, $type), true, now()->addMinutes(5));
+        try {
+            Cache::put($this->loggedKey($ip, $type), true, now()->addMinutes(5));
+        } catch (\Throwable $e) {
+            $this->reportCacheFailure($e);
+        }
+    }
+
+    private static bool $cacheFailureWarned = false;
+
+    private function reportCacheFailure(\Throwable $e): void
+    {
+        if (self::$cacheFailureWarned) {
+            return;
+        }
+
+        self::$cacheFailureWarned = true;
+        Log::warning('Threat detection: the cache cannot be reached, so deduplication is off and repeated '
+            . 'detections are each recorded until it is back: ' . $this->storable($e->getMessage()));
     }
 
     /**
