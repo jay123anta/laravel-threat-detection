@@ -155,7 +155,7 @@ class ThreatDetectionService
     public function detectAndLogFromRequest(Request $request): void
     {
         $ip = $request->ip();
-        $url = $this->storable($request->fullUrl());
+        $url = $this->storable($this->requestUrl($request));
         // Route path only (never the query string) so api_route_filtering
         // cannot be toggled on/off by an attacker appending ?x=/api/ to the URL.
         $isApiRoute = str_contains('/' . trim($request->path(), '/') . '/', '/api/');
@@ -418,6 +418,27 @@ class ThreatDetectionService
         } catch (\Throwable $e) {
             self::logQuietly('error', 'Threat detection: a listener for ' . class_basename($event) . ' failed, and the detection was '
                 . 'recorded without it: ' . $this->storable($e->getMessage()));
+        }
+    }
+
+    /**
+     * The request's URL, even when Symfony will not build it.
+     *
+     * fullUrl() validates the Host header and throws on an invalid one. It
+     * was the first thing detection did, so a malformed Host ended detection
+     * before anything was written — and an application route that never
+     * builds a URL of its own still answered the request. The raw request
+     * line is used instead, and the refused Host is kept, escaped by the
+     * caller, as evidence.
+     */
+    private function requestUrl(Request $request): string
+    {
+        try {
+            return $request->fullUrl();
+        } catch (\Throwable) {
+            return ($request->isSecure() ? 'https' : 'http') . '://'
+                . (string) $request->server->get('HTTP_HOST', '')
+                . $request->getRequestUri();
         }
     }
 

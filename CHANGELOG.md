@@ -27,7 +27,7 @@ was checked against its source. With everything off, 1,863 of the 1,864 tests
 that shipped with 1.8.0 pass unchanged. The other is the inventory of API
 routes, which exists to fail when one is added, and did for `/ai-threats`.
 
-The suite grew to 2,408 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
+The suite grew to 2,411 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
 and 13.33.0, on MariaDB 10.4 and PostgreSQL 16, and with PCRE JIT disabled —
 where everything passes but the 1 MB timing budgets, which are set for the
 JIT; at the 8 KB the package actually scans, every pattern stays in budget.
@@ -57,6 +57,14 @@ behaviours changed.
 
   The stored URL gets the same treatment. Symfony already normalises a URL
   that arrives through the server, so that half is defence in depth.
+
+  So did the Host header. The stored URL was built with `fullUrl()`, which
+  validates the Host and throws on one it refuses — a malformed one, or, when
+  the application uses `TrustHosts`, any host outside its list. That was the
+  first thing detection did, so the throw ended it before anything was
+  written, while an application route that builds no URL of its own answered
+  normally. The URL is now built from the raw request line when Symfony
+  refuses, and the refused Host is kept, escaped, as evidence.
 
   Length did the same thing. Both columns are TEXT, 65,535 bytes on MySQL,
   and neither value was bounded — so a User-Agent or URL past that size failed
