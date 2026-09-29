@@ -6,7 +6,6 @@ use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Foundation\CachesConfiguration;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Arr;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
 use JayAnta\ThreatDetection\Console\Commands\DoctorCommand;
 use JayAnta\ThreatDetection\Console\Commands\EnrichThreatLogsCommand;
@@ -26,9 +25,12 @@ use JayAnta\ThreatDetection\Services\ExclusionRuleService;
 use JayAnta\ThreatDetection\Services\ProbeDetectorService;
 use JayAnta\ThreatDetection\Services\ThreatCorrelationService;
 use JayAnta\ThreatDetection\Services\ThreatDetectionService;
+use JayAnta\ThreatDetection\Support\LogsQuietly;
 
 class ThreatDetectionServiceProvider extends ServiceProvider
 {
+    use LogsQuietly;
+
     /**
      * Options added *inside* a top-level key that published configs already
      * have. mergeConfigFrom() merges top-level keys only, so a published file
@@ -285,7 +287,7 @@ class ThreatDetectionServiceProvider extends ServiceProvider
              */
             if ($days === null) {
                 if ($this->app->runningInConsole()) {
-                    Log::warning('Threat detection: retention is on but THREAT_DETECTION_RETENTION_DAYS is not a whole '
+                    self::logQuietly('warning', 'Threat detection: retention is on but THREAT_DETECTION_RETENTION_DAYS is not a whole '
                         . 'number of days (1 or more), so no purge is scheduled.');
                 }
 

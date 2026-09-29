@@ -8,11 +8,13 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
-use Illuminate\Support\Facades\Log;
+use JayAnta\ThreatDetection\Support\LogsQuietly;
 use Symfony\Component\HttpFoundation\IpUtils;
 
 class ThreatDashboardAuthMiddleware
 {
+    use LogsQuietly;
+
     /**
      * Handle dashboard/API auth based on configurable guard.
      *
@@ -58,7 +60,7 @@ class ThreatDashboardAuthMiddleware
                 $what = $isWrite
                     ? "{$context} write endpoints (mark false positive, delete exclusion rule) are"
                     : "{$context} is";
-                Log::warning("Threat detection {$what} accessible without authentication. Set {$envVar} in your .env.");
+                self::logQuietly('warning', "Threat detection {$what} accessible without authentication. Set {$envVar} in your .env.");
                 Cache::put($cacheKey, true, now()->addDay());
             }
 
@@ -82,7 +84,7 @@ class ThreatDashboardAuthMiddleware
             // Fail closed: if the user model has no hasRole() we cannot verify
             // the role, so deny rather than silently allow.
             if (!method_exists($user, 'hasRole')) {
-                Log::warning("Threat detection {$context} " . ($isWrite ? 'write_guard' : 'guard')
+                self::logQuietly('warning', "Threat detection {$context} " . ($isWrite ? 'write_guard' : 'guard')
                     . " is 'role' but the authenticated user model has no hasRole() method. Denying access. "
                     . "Install a roles package (e.g. spatie/laravel-permission), or set {$envVar} to 'auth'.");
                 abort(403, 'Insufficient permissions');
@@ -97,7 +99,7 @@ class ThreatDashboardAuthMiddleware
         if ($guard === 'ip') {
             $allowedIps = config("threat-detection.{$context}.allowed_ips", []);
             if (empty($allowedIps)) {
-                Log::warning("Threat detection {$context} guard is 'ip' but no allowed_ips are configured. Denying access rather than granting it to everyone.");
+                self::logQuietly('warning', "Threat detection {$context} guard is 'ip' but no allowed_ips are configured. Denying access rather than granting it to everyone.");
                 abort(403, 'IP not allowed');
             }
             if (!IpUtils::checkIp($request->ip(), $allowedIps)) {
@@ -109,7 +111,7 @@ class ThreatDashboardAuthMiddleware
 
         // Unknown guard value (typo, unsupported mode): fail closed rather than
         // silently granting access to a security dashboard.
-        Log::warning("Threat detection {$context} " . ($isWrite ? 'write_guard' : 'guard')
+        self::logQuietly('warning', "Threat detection {$context} " . ($isWrite ? 'write_guard' : 'guard')
             . " '{$guard}' is not recognised (expected none|auth|role|ip). Denying access.");
         abort(403, 'Unauthorized');
     }

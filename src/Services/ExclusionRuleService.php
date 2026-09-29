@@ -4,11 +4,13 @@ namespace JayAnta\ThreatDetection\Services;
 
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use JayAnta\ThreatDetection\Support\LogsQuietly;
 
 class ExclusionRuleService
 {
+    use LogsQuietly;
+
     private const CACHE_KEY = 'threat_detection:exclusion_rules';
 
     private const CACHE_TTL_MINUTES = 10;
@@ -186,7 +188,7 @@ class ExclusionRuleService
         $this->clearCache();
 
         if ($deleted > 0 && $rule) {
-            Log::info('Threat exclusion rule deleted', [
+            self::logQuietly('info', 'Threat exclusion rule deleted', [
                 'rule_id' => $ruleId,
                 'pattern_label' => $rule->pattern_label,
                 'path_pattern' => $rule->path_pattern,
@@ -233,7 +235,7 @@ class ExclusionRuleService
         try {
             Cache::forget(self::CACHE_KEY);
         } catch (\Throwable $e) {
-            Log::warning('Threat detection: could not clear the exclusion-rule cache: ' . $e->getMessage());
+            self::logQuietly('warning', 'Threat detection: could not clear the exclusion-rule cache: ' . $e->getMessage());
         }
     }
 

@@ -10,13 +10,13 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use JayAnta\ThreatDetection\Notifications\ThreatAlertSlack;
+use JayAnta\ThreatDetection\Support\LogsQuietly;
 
 class StoreThreatLog implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, LogsQuietly, Queueable, SerializesModels;
 
     public int $tries = 3;
 
@@ -37,7 +37,7 @@ class StoreThreatLog implements ShouldQueue
                 $this->sendNotification();
             }
         } catch (\Throwable $e) {
-            Log::error('StoreThreatLog job failed: ' . $e->getMessage());
+            self::logQuietly('error', 'StoreThreatLog job failed: ' . $e->getMessage());
             throw $e;
         }
     }
@@ -62,7 +62,10 @@ class StoreThreatLog implements ShouldQueue
                 Http::post($webhookUrl, $alert->toWebhookPayload());
             }
         } catch (\Throwable $e) {
-            Log::error('StoreThreatLog notification failed: ' . $e->getMessage());
+            // Quietly: the rows are written, and a log that cannot be opened
+            // must not fail the job now — the queue would retry it and write
+            // them again.
+            self::logQuietly('error', 'StoreThreatLog notification failed: ' . $e->getMessage());
         }
     }
 }
