@@ -211,7 +211,7 @@ class ThreatLogController extends Controller
             'date_from' => 'sometimes|date',
             'date_to' => 'sometimes|date',
             'category' => 'sometimes|in:ai,traditional',
-            'keyword' => 'sometimes|nullable|string|max:255',
+            'keyword' => 'sometimes|nullable|string|max:8192',
             'ip' => 'sometimes|nullable|string|max:255',
             'type' => 'sometimes|nullable|string|max:255',
             'country' => 'sometimes|nullable|string|max:255',
@@ -507,7 +507,7 @@ class ThreatLogController extends Controller
 
     public function export(Request $request)
     {
-        $request->validate(['keyword' => 'sometimes|nullable|string|max:255']);
+        $request->validate(['keyword' => 'sometimes|nullable|string|max:8192']);
 
         try {
             $query = DB::table($this->table)

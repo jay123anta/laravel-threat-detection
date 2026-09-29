@@ -10,7 +10,8 @@ use PHPUnit\Framework\Attributes\Test;
 /**
  * Free-text inputs to the API had no shape or size.
  *
- * `keyword` went into three LIKE clauses at any length, over the two TEXT
+ * `keyword` went into three LIKE clauses at any length — it is now bounded
+ * at 8,192 characters, the most a stored value holds — over the two TEXT
  * columns every search already scans in full, and an array in its place
  * answered 500. `reason` was written to the database as given, at any length
  * and of any type. Neither is reachable without passing the API's guard, so
@@ -66,7 +67,7 @@ class ApiInputBoundsTest extends TestCase
     #[Test]
     public function an_over_long_keyword_is_refused(): void
     {
-        $this->getJson(self::API . '/threats?keyword=' . str_repeat('a', 256))->assertStatus(422);
+        $this->getJson(self::API . '/threats?keyword=' . str_repeat('a', 8193))->assertStatus(422);
     }
 
     #[Test]

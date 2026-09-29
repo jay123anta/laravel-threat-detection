@@ -411,7 +411,9 @@ function threatDashboard() {
         },
 
         async getJson(path) {
-            const r = await fetch(API + path, { credentials: 'same-origin' });
+            // Asking for JSON makes a refused request a 422 rather than a
+            // redirect to the home page, whose HTML then failed to parse.
+            const r = await fetch(API + path, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
             return (await r.json()).data;
         },
 
@@ -580,6 +582,7 @@ function threatDashboard() {
                     credentials: 'same-origin',
                     headers: {
                         'Content-Type': 'application/json',
+                        'Accept': 'application/json',
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
                     },
                 });

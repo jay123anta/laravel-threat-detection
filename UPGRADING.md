@@ -52,9 +52,9 @@ php artisan threat-detection:doctor
    with PHP's `fgetcsv()` should pass `escape: ''`.
 8. **`only_paths` also matches the decoded path**, as the router does. If you
    set it, a percent-encoded spelling of a listed route is now scanned too.
-9. **API inputs are validated.** `keyword`, `ip`, `type`, `country` and
-   `cloud_provider` accept strings of up to 255 characters, and a
-   false-positive `reason` up to 1,000; anything else answers 422.
+9. **API inputs are validated.** `keyword` accepts a string of up to 8,192
+   characters; `ip`, `type`, `country` and `cloud_provider` up to 255; a
+   false-positive `reason` up to 1,000. Anything else answers 422.
 10. **More credential names are masked.** A listed `redact.fields` name also
     covers any name ending in `_<name>`, so `X-Partner-Api-Key`,
     `X-Vault-Token` and `stripe_secret` are stored as `[REDACTED]`. If you

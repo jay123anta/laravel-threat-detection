@@ -27,7 +27,7 @@ was checked against its source. With everything off, 1,863 of the 1,864 tests
 that shipped with 1.8.0 pass unchanged. The other is the inventory of API
 routes, which exists to fail when one is added, and did for `/ai-threats`.
 
-The suite grew to 2,405 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
+The suite grew to 2,408 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
 and 13.33.0, on MariaDB 10.4 and PostgreSQL 16, and with PCRE JIT disabled —
 where everything passes but the 1 MB timing budgets, which are set for the
 JIT; at the 8 KB the package actually scans, every pattern stays in budget.
@@ -568,11 +568,14 @@ behaviours changed.
   *wildcard* entry that matched a request produced a probe row with an empty
   label; malformed exact paths were already inert, because `isset()` is false
   for null.
-- The API validates its free-text inputs. `keyword`, `ip`, `type`, `country`
-  and `cloud_provider` must be strings of at most 255 characters, and a
-  false-positive `reason` at most 1,000; anything else answers 422. `keyword`
-  went into three `LIKE` clauses at any length, and an array in its place, or
-  in `reason`, answered 500.
+- The API validates its free-text inputs. `keyword` must be a string of at
+  most 8,192 characters — the most a stored URL holds, so any stored value
+  can be searched for; `ip`, `type`, `country` and `cloud_provider` at most
+  255; a false-positive `reason` at most 1,000. Anything else answers 422.
+  `keyword` went into three `LIKE` clauses at any length, and an array in its
+  place, or in `reason`, answered 500. The dashboard now asks the API for
+  JSON, so a refused request is a 422 it can read rather than a redirect to
+  the home page.
 
 ## [1.8.0] - 2026-09-06
 
