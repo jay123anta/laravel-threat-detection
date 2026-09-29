@@ -114,8 +114,23 @@ class DashboardSectionsTest extends TestCase
     {
         $html = $this->html();
 
-        $this->assertStringContainsString('This creates a permanent exclusion', $html);
+        $this->assertStringContainsString('This creates an exclusion', $html);
         $this->assertStringContainsString('will no longer be logged on', $html);
+    }
+
+    /**
+     * The exclusion is not permanent: `purge` deletes a rule once the row it
+     * was made from is purged. The dialog said "permanent", so an operator
+     * with retention on saw the false positive return months later with
+     * nothing to explain it.
+     */
+    #[Test]
+    public function the_false_positive_dialog_says_how_long_the_exclusion_lasts(): void
+    {
+        $html = $this->html();
+
+        $this->assertStringNotContainsString('permanent exclusion', $html);
+        $this->assertStringContainsString('until this row is purged', $html);
     }
 
     /**

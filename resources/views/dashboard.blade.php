@@ -555,8 +555,10 @@ function threatDashboard() {
         },
 
         // What a false-positive click actually creates, said before the click.
-        // An exclusion is permanent and silences that detection on that path
-        // for every future request, so its scope is not a detail.
+        // An exclusion silences that detection on that path for every request
+        // until it is deleted — or until `purge` removes the row it was made
+        // from, which removes the rule too — so neither its scope nor its
+        // lifetime is a detail.
         exclusionScope(threat) {
             const label = String(threat.type ?? '').replace(/^\[[^\]]*\]\s*/, '');
             let path = '/';
@@ -567,7 +569,8 @@ function threatDashboard() {
         async markFalsePositive(threat) {
             const { label, path } = this.exclusionScope(threat);
             const message = 'Mark this as a false positive?\n\n'
-                + 'This creates a permanent exclusion: "' + label + '" will no longer be logged on ' + path + '.\n'
+                + 'This creates an exclusion: "' + label + '" will no longer be logged on ' + path + '.\n'
+                + 'It lasts until you delete it, or until this row is purged.\n'
                 + 'Other paths are unaffected. Exclusions can be removed from the API.';
             if (!confirm(message)) return;
 

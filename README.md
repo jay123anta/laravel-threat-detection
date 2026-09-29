@@ -719,8 +719,9 @@ campaigns against LLM endpoints have been ordinary scanners, and a three-month
 honeypot deployment found 8 possible AI agents in 8.1 million interactions,[^palisade]
 so the dashboard never labels anyone an AI attacker on behaviour alone.
 
-Marking a row as a false positive says what it creates before it creates it: a
-permanent exclusion for that label, on that path only.
+Marking a row as a false positive says what it creates before it creates it: an
+exclusion for that label, on that path only, which lasts until you delete it or
+until the row it was made from is purged.
 
 [^palisade]: Reworr & Volkov, *LLM Agent Honeypot: Monitoring AI Hacking Agents
 in the Wild*, Palisade Research, 2025. [arXiv:2410.13919](https://arxiv.org/abs/2410.13919)
@@ -1775,7 +1776,13 @@ On these paths, only **high-severity** threats are logged.
 
 Click the **FP** button on any threat in the dashboard to mark it as a false positive. This:
 1. Flags the threat as `is_false_positive = true`
-2. Auto-creates an exclusion rule so similar threats from the same URL/type are suppressed going forward
+2. Auto-creates an exclusion rule so the same detection type on the same path is suppressed from then on
+
+The rule lasts until you delete it, or until `threat-detection:purge` removes the
+row it was made from, which removes the rule with it. With retention on, a false
+positive therefore comes back after the retention period. That is deliberate:
+exclusions accumulate and go stale, and one that outlives its evidence is how a
+detector quietly stops seeing things.
 
 Manage exclusion rules via API:
 ```bash
