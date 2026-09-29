@@ -136,10 +136,27 @@ class EnrichThreatLogsCommand extends Command
                 $enriched++;
             }
 
-            DB::table($table)
-                ->where('ip_address', $ip)
-                ->when(!$force, fn ($q) => $q->whereNull('country_code'))
-                ->update($data);
+            // Only what the lookup learned is written: an unknown value must
+            // not overwrite a known one. Under --force a provider outage used
+            // to write nulls over every row's country, city and ISP, and
+            // reset is_foreign. is_foreign means something only when the
+            // country is known, and is_cloud_ip only when the provider is.
+            $data = array_filter($data, fn ($value) => $value !== null);
+
+            if (!isset($data['country_code'])) {
+                unset($data['is_foreign']);
+            }
+
+            if (!isset($data['cloud_provider'])) {
+                unset($data['is_cloud_ip']);
+            }
+
+            if ($data !== []) {
+                DB::table($table)
+                    ->where('ip_address', $ip)
+                    ->when(!$force, fn ($q) => $q->whereNull('country_code'))
+                    ->update($data);
+            }
 
             $bar->advance();
 

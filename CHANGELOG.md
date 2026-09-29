@@ -27,7 +27,7 @@ was checked against its source. With everything off, 1,863 of the 1,864 tests
 that shipped with 1.8.0 pass unchanged. The other is the inventory of API
 routes, which exists to fail when one is added, and did for `/ai-threats`.
 
-The suite grew to 2,400 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
+The suite grew to 2,402 tests. Verified on Laravel 10.50.3, 11.56.1, 12.69.2
 and 13.33.0, on MariaDB 10.4 and PostgreSQL 16, and with PCRE JIT disabled —
 where everything passes but the 1 MB timing budgets, which are set for the
 JIT; at the 8 KB the package actually scans, every pattern stays in budget.
@@ -511,6 +511,12 @@ behaviours changed.
   real one: the click reported success and the detection kept firing. Such a
   row is now refused with 422, like any other path that cannot be stored
   exactly.
+- **`enrich --force` against a failing provider erased what rows had.** Every
+  lookup's result was written, and a failed lookup's result is every field
+  null — so a forced run during a provider outage, a rate limit or an HTTPS
+  refusal wrote nulls over every row's country, city and ISP and reset
+  `is_foreign`. Only what a lookup learned is written now: an unknown value
+  never overwrites a known one.
 - **`enrich` paused after every address, not after every request.** The
   1.4-second rate-limit pause ran for private addresses it never sends and
   for cached answers it never asks for, so a table of internal traffic took

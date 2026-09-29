@@ -138,6 +138,54 @@ class GeoEnrichmentRetryTest extends TestCase
         $this->assertGreaterThanOrEqual(2.5, microtime(true) - $started, 'two lookups were sent without the pause between them');
     }
 
+    /**
+     * `--force` rewrites rows that are already enriched. With the provider
+     * down, each lookup came back empty and the update wrote that emptiness
+     * over the country, city, ISP and is_foreign the row already had: the
+     * failure was reported, after the data was gone.
+     */
+    #[Test]
+    public function a_forced_run_against_a_failing_provider_keeps_what_rows_already_had(): void
+    {
+        DB::table('threat_logs')->update([
+            'country_code' => 'DE',
+            'country_name' => 'Germany',
+            'city' => 'Berlin',
+            'isp' => 'Hetzner Online',
+            'is_foreign' => true,
+            // Known from the ISP, not from any address prefix, so a failed
+            // lookup cannot re-derive it.
+            'cloud_provider' => 'Hetzner',
+            'is_cloud_ip' => true,
+        ]);
+
+        $this->artisan('threat-detection:enrich', ['--force' => true])->assertExitCode(1);
+
+        $row = DB::table('threat_logs')->first();
+
+        $this->assertSame('DE', $row->country_code, 'a failed forced lookup erased the country');
+        $this->assertSame('Germany', $row->country_name);
+        $this->assertSame('Berlin', $row->city);
+        $this->assertSame('Hetzner Online', $row->isp);
+        $this->assertTrue((bool) $row->is_foreign);
+        $this->assertSame('Hetzner', $row->cloud_provider);
+        $this->assertTrue((bool) $row->is_cloud_ip, 'a failed forced lookup reset is_cloud_ip');
+    }
+
+    /** What a failed lookup still knows — a cloud range by prefix — is still written. */
+    #[Test]
+    public function a_failed_lookup_still_records_a_cloud_range_known_by_prefix(): void
+    {
+        DB::table('threat_logs')->update(['ip_address' => '54.1.2.3']);
+
+        $this->artisan('threat-detection:enrich')->assertExitCode(1);
+
+        $row = DB::table('threat_logs')->first();
+
+        $this->assertSame('AWS', $row->cloud_provider);
+        $this->assertTrue((bool) $row->is_cloud_ip);
+    }
+
     /** Positive control: an answer is still cached, and a forced rerun reuses it. */
     #[Test]
     public function a_successful_answer_is_still_reused(): void
