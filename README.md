@@ -68,15 +68,15 @@ This package is a **passive, application-level IDS** — it watches and records,
 block. It's meant to sit *alongside* a WAF or edge service, not replace one. Each layer sees
 something the others can't:
 
-| | **This package** (app IDS) | **WAF** (mod_security, Cloudflare WAF) | **Edge / CDN** (Cloudflare) |
+| | **This package** (app IDS) | **WAF** (ModSecurity + OWASP CRS, Cloudflare WAF) | **Edge / CDN** (Cloudflare) |
 |---|:---:|:---:|:---:|
 | Blocks malicious requests | ❌ logs only | ✅ | ✅ |
-| Full app context (exact route, decoded payload, authenticated user) | ✅ | ⚠️ partial | ❌ |
+| Full app context (exact URL, decoded payload, authenticated user) | ✅ | ⚠️ partial | ❌ |
 | Built-in dashboard + threat log in your DB | ✅ | ⚠️ varies | ⚠️ edge only |
-| App-specific detections (e.g. Aadhaar / PAN / IFSC PII) | ✅ custom patterns | ❌ | ❌ |
+| App-specific detections (e.g. Aadhaar / PAN / IFSC PII) | ✅ built in + custom | ⚠️ write your own rules | ⚠️ custom rules, plan-dependent |
 | Works offline / no external service | ✅ | ⚠️ depends | ❌ |
-| Stops traffic before it reaches your app | ❌ | ✅ edge | ✅ |
-| Setup | one `composer require` | medium–high | low–medium |
+| Stops traffic before it reaches your server | ❌ | ⚠️ cloud WAF only | ✅ |
+| Setup | `composer require`, migrate, one middleware line | medium–high | low–medium |
 | Cost | free, MIT | varies | free tier + paid |
 
 **The short version:** an edge/WAF is your lock on the door; this is the security camera
