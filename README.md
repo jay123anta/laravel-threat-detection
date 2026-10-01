@@ -1161,10 +1161,10 @@ them converge.
 
 That split is the package's edge, and it is the defence the literature points
 at. Measuring 100 LLM-generated variants of one payload found that "structural
-distances are high while semantic distances remain low — implementations
-diverge widely without changing high-level behavior", defeating signature rules
-and similarity clustering, and concluded that "shifting from syntactic to
-semantic similarity is a promising defensive direction".[^mutation] This package
+distances are high while semantic distances remain low; i.e., implementations
+diverge widely without changing high-level behavior", which helps such payloads
+evade signature rules and similarity clustering, and concluded that "moving from
+syntactic to semantic similarity is a promising defensive direction".[^mutation] This package
 has normalised payloads to a fixed point since v1.3.0; the fingerprint is simply
 taken there.
 
@@ -1254,8 +1254,9 @@ exactly the keys it had before.
 [^awe]: Jaswal & Baghel, *AWE: Adaptive Agents for Dynamic Web Penetration
 Testing*, NDSS LAST-X 2026. [arXiv:2603.00960](https://arxiv.org/abs/2603.00960)
 
-[^mutation]: *The Infinite Mutation Engine? Measuring Polymorphism in
-LLM-Generated Offensive Code* — Universidad Carlos III de Madrid, 2026.
+[^mutation]: Hortea & Tapiador, *The Infinite Mutation Engine? Measuring
+Polymorphism in LLM-Generated Offensive Code*, Universidad Carlos III de Madrid,
+2026.
 [arXiv:2605.03619](https://arxiv.org/abs/2605.03619)
 
 ---
@@ -1398,7 +1399,8 @@ of LLM Agents*, 2026. [arXiv:2607.18659](https://arxiv.org/abs/2607.18659)
 [^shy]: Van Boxem et al., *Shy Guys: A Light-Weight Approach to Detecting Robots
 on Websites*, 2026. [arXiv:2603.28546](https://arxiv.org/abs/2603.28546)
 
-[^rba]: *Can Risk-Based Alerting Mitigate Cybersecurity Alert Fatigue?* 2026.
+[^rba]: Uetz, Bönninghausen, Hackländer-Jansen & Henze, *Can Risk-Based Alerting
+Mitigate Cybersecurity Alert Fatigue?*, Fraunhofer FKIE, 2026.
 [arXiv:2609.02465](https://arxiv.org/abs/2609.02465)
 
 [^phase]: Erdem, *How Reliable Are AI Attackers Against a Fixed Vulnerable
@@ -1407,8 +1409,8 @@ The first exploit followed recon by about 15–30 s, and the authors recommend
 detecting that phase transition over command signatures.
 [arXiv:2605.30096](https://arxiv.org/abs/2605.30096)
 
-[^peak]: *Peak + Accumulation: A Proxy-Level Scoring Formula for Multi-Turn LLM
-Attack Detection*, 2026. [arXiv:2602.11247](https://arxiv.org/abs/2602.11247)
+[^peak]: Corll, *Peak + Accumulation: A Proxy-Level Scoring Formula for Multi-Turn
+LLM Attack Detection*, 2026. [arXiv:2602.11247](https://arxiv.org/abs/2602.11247)
 
 ---
 
