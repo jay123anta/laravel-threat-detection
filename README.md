@@ -39,7 +39,7 @@ geo-enrichment, and fail2ban/blocklist exports. No request is ever blocked. Thin
 security camera, not a lock: it shows you exactly who's probing your routes, how
 often, and with what techniques.
 
-> Extracted from a production app and battle-tested on real traffic. 1,800+ tests, no runtime
+> Extracted from a production app and battle-tested on real traffic. 2,400+ tests, no runtime
 > dependencies beyond Laravel itself, and no internet connection required for detection.
 >
 > Upgrading? See [UPGRADING.md](UPGRADING.md). Contributing? See [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -1838,7 +1838,7 @@ Threats below the confidence threshold for your detection mode are not logged (s
 composer test
 ```
 
-The package includes 1,800+ tests covering detection patterns, middleware behavior, API endpoints, confidence scoring, exclusion rules, DDoS detection, evasion resistance, CVE patterns, LDAP/XPath/SSTI injection, bot/scanner detection, probe tracking, export commands, dashboard auth, safe fields, performance optimizations, and full-cycle HTTP-to-DB verification.
+The package includes 2,400+ tests covering detection patterns, middleware behavior, API endpoints, confidence scoring, exclusion rules, DDoS detection, evasion resistance, CVE patterns, LDAP/XPath/SSTI injection, bot/scanner detection, probe tracking, export commands, dashboard auth, safe fields, performance optimizations, and full-cycle HTTP-to-DB verification.
 
 ---
 
@@ -1850,8 +1850,10 @@ MIT License. See [LICENSE](LICENSE) for details.
 
 Contributions are welcome! Please submit a Pull Request.
 
+If the package is useful to you, a ⭐ on GitHub helps other Laravel developers find it.
+
 ## Credits
 
 - [Jay Anta](https://github.com/jay123anta) -  author & maintainer
-- [David van der Tuijn](https://github.com/davidvandertuijn) -  Laravel 13 support
+- [David van der Tuijn](https://github.com/davidvandertuijn) -  Laravel 13 support, post-match validators (Luhn, Verhoeff) and rich custom patterns
 - [All contributors](https://github.com/jay123anta/laravel-threat-detection/graphs/contributors)
